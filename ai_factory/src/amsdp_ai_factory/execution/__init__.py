@@ -1,0 +1,1 @@
+"""Agent execution subpackage (mock/stub executor for tests)."""

@@ -43,3 +43,8 @@ temp/
 .idea/
 .DS_Store
 Thumbs.db
+
+# AI Factory runtime data (task/run stores, generated workspaces)
+ai_factory/var/
+ai_factory/runs/
+ai_factory/workspaces/

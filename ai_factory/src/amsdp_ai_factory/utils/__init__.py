@@ -1,0 +1,1 @@
+"""Utility subpackage: repository-root discovery and safe logging."""

@@ -1,0 +1,32 @@
+version: '3.9'
+
+services:
+  identity:
+    build: ./backend/identity
+    ports: ["8100:8000"]
+    environment: [AMSDP_JWT_SECRET=dev-synthetic-key-replace-in-prod]
+  organization:
+    build: ./backend/organization
+    ports: ["8101:8001"]
+  patient:
+    build: ./backend/patient
+    ports: ["8102:8002"]
+  doctor:
+    build: ./backend/doctor
+    ports: ["8103:8003"]
+  scheduling:
+    build: ./backend/scheduling
+    ports: ["8104:8004"]
+  appointment:
+    build: ./backend/appointment
+    ports: ["8105:8005"]
+  queuing:
+    build: ./backend/queuing
+    ports: ["8106:8006"]
+  audit:
+    build: ./backend/audit
+    ports: ["8107:8007"]
+  frontend:
+    build: ./frontend
+    ports: ["3100:3000"]
+    depends_on: [identity]

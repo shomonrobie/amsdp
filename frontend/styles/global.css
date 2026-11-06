@@ -1,0 +1,17 @@
+/* AMSDP Frontend — Global Styles */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f5f5f5; color: #333; line-height: 1.5; padding: 1rem; }
+h1, h2 { color: #1a5c7a; }
+a { color: #1a5c7a; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { cursor: pointer; background: #1a5c7a; color: #fff; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; font-size: 1rem; }
+button:hover { background: #134b63; }
+input { width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+label { display: block; margin-bottom: 0.25rem; font-weight: bold; }
+.login-container { max-width: 400px; margin: 4rem auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
+.login-container h2 { font-size: 0.9rem; color: #666; margin-bottom: 1.5rem; }
+.error { color: #d32f2f; margin-top: 1rem; }
+.hidden { display: none; }
+.locale-toggle { margin-top: 1.5rem; font-size: 0.85rem; }
+ul { list-style: none; padding: 0; }
+li { padding: 0.5rem; border-bottom: 1px solid #eee; }

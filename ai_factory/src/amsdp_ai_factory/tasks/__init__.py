@@ -1,0 +1,1 @@
+"""Task subpackage: model, lifecycle, registry, and artifact containment."""

@@ -1,0 +1,1 @@
+"""Tool subpackage: least-privilege tool registry and safe tool implementations."""

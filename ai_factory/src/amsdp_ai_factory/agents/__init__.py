@@ -1,0 +1,1 @@
+"""Agent definitions subpackage: the eleven approved specialists."""

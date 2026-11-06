@@ -1,0 +1,1103 @@
+{
+  "run_id": "RUN-20261105T130533-001",
+  "task_id": "AMSDP-000001",
+  "workflow_id": "WF-01",
+  "workflow_version": "1.0",
+  "model_config_id": "deepseek/deepseek-v4-flash",
+  "provider": "openrouter",
+  "environment": "test",
+  "source_documents": [],
+  "start_commit": null,
+  "agents": [],
+  "stages": [
+    {
+      "stage_id": "wf01_s1",
+      "name": "Product analysis",
+      "status": "failed",
+      "started_at": "2026-11-05T13:05:33.396326Z",
+      "ended_at": "2026-11-05T13:16:23.547061Z",
+      "agents": [],
+      "artifacts": [],
+      "checks": [],
+      "approval_id": null,
+      "error": "live output failed contract validation: 1 validation error for RequirementAnalysis\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Based on my review of th...or later test planning.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid",
+      "retry_count": 2
+    }
+  ],
+  "tool_operations": [
+    {
+      "op_id": "op-1",
+      "name": "doc_reader",
+      "args_summary": "business_rules: 12030 chars",
+      "working_dir": "/home/shomonrobie/amsdp",
+      "started_at": null,
+      "ended_at": null,
+      "exit_code": null,
+      "agent_id": "",
+      "stage_id": "context_loader",
+      "operation": "doc_reader.read",
+      "target": "docs/product/AMSDP_Business_Rules_V1.0.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "docs/product/AMSDP_Business_Rules_V1.0.md",
+          "sha256": "b7140636147dd530fbb0a442d8b85113446c53eb109e0ec2c4169ca436ec4b75"
+        }
+      ]
+    },
+    {
+      "op_id": "op-2",
+      "name": "doc_reader",
+      "args_summary": "mvp_scope: 12030 chars",
+      "working_dir": "/home/shomonrobie/amsdp",
+      "started_at": null,
+      "ended_at": null,
+      "exit_code": null,
+      "agent_id": "",
+      "stage_id": "context_loader",
+      "operation": "doc_reader.read",
+      "target": "docs/product/AMSDP_MVP_SCOPE_V1.0.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "docs/product/AMSDP_MVP_SCOPE_V1.0.md",
+          "sha256": "e24c359d3ec962d3b1658427d5bf6b39709b952fd7c47d5ca49c61be37fa93c6"
+        }
+      ]
+    },
+    {
+      "op_id": "op-3",
+      "name": "doc_reader",
+      "args_summary": "system_architecture: 12030 chars",
+      "working_dir": "/home/shomonrobie/amsdp",
+      "started_at": null,
+      "ended_at": null,
+      "exit_code": null,
+      "agent_id": "",
+      "stage_id": "context_loader",
+      "operation": "doc_reader.read",
+      "target": "docs/architecture/AMSDP_System_Architecture_V1.0.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "docs/architecture/AMSDP_System_Architecture_V1.0.md",
+          "sha256": "f8abc5364de5c144966456520703e3e0405c17f7aaf58f1108a847d1ed022fd2"
+        }
+      ]
+    },
+    {
+      "op_id": "op-4",
+      "name": "doc_reader",
+      "args_summary": "10 roles",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:05:36.917801Z",
+      "ended_at": "2026-11-05T13:05:36.917804Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.list_roles",
+      "target": "",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-5",
+      "name": "doc_reader",
+      "args_summary": "business_rules: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:05:41.533177Z",
+      "ended_at": "2026-11-05T13:05:41.533180Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "business_rules",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "business_rules",
+          "sha256": "9500a9465e4a6d539beb6c24906cf598f6e82884a66cf70adc0a73aee8745a5f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-6",
+      "name": "doc_reader",
+      "args_summary": "mvp_scope: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:05:41.533755Z",
+      "ended_at": "2026-11-05T13:05:41.533757Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "mvp_scope",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "mvp_scope",
+          "sha256": "fa4c49d344b1041579761096b08d8a0f175e71fe0b38451cc7b9a435850ac89f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-7",
+      "name": "doc_reader",
+      "args_summary": "development_workflow: 20030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:05:41.534288Z",
+      "ended_at": "2026-11-05T13:05:41.534290Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "development_workflow",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "development_workflow",
+          "sha256": "b77b7429500206c82ff4736b6b8ca22a885b88649a900a025445d8f44b5db36a"
+        }
+      ]
+    },
+    {
+      "op_id": "op-8",
+      "name": "repo_read",
+      "args_summary": "listed 200 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:05:48.846717Z",
+      "ended_at": "2026-11-05T13:05:48.846721Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": ".",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-9",
+      "name": "repo_read",
+      "args_summary": "16 matches pattern=AMSDP-000001",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:03.890296Z",
+      "ended_at": "2026-11-05T13:06:03.890300Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": ".",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-10",
+      "name": "repo_read",
+      "args_summary": "listed 0 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:08.978146Z",
+      "ended_at": "2026-11-05T13:06:08.978149Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": "var/artifacts",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-11",
+      "name": "repo_read",
+      "args_summary": "read 1882 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:08.978521Z",
+      "ended_at": "2026-11-05T13:06:08.978523Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "var/tasks/AMSDP-000001.json",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "var/tasks/AMSDP-000001.json",
+          "sha256": "0211898dbb5cd7f19c3235a112c887f4389a5886bf3e6ddb5e8514a714c4c2bc"
+        }
+      ]
+    },
+    {
+      "op_id": "op-12",
+      "name": "repo_read",
+      "args_summary": "read 2922 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:08.979041Z",
+      "ended_at": "2026-11-05T13:06:08.979043Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/docs/operations.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/docs/operations.md",
+          "sha256": "b6d5d7b7c48414564a36806ac1b6ccfa11ffaf526bf5a764de9e33f260c67edd"
+        }
+      ]
+    },
+    {
+      "op_id": "op-13",
+      "name": "repo_read",
+      "args_summary": "read 5061 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:13.430355Z",
+      "ended_at": "2026-11-05T13:06:13.430357Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/tests/unit/test_output_contracts.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/tests/unit/test_output_contracts.py",
+          "sha256": "ae1a5044db490848c5cb92515e80555f090be375eb816f92c6339daab6b7c200"
+        }
+      ]
+    },
+    {
+      "op_id": "op-14",
+      "name": "doc_reader",
+      "args_summary": "agent_specification: 20030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:13.430831Z",
+      "ended_at": "2026-11-05T13:06:13.430832Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "agent_specification",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "agent_specification",
+          "sha256": "abe1f768e217bee3a2606b06bf9630d3b30eecece9b8be17a49aee84bb347987"
+        }
+      ]
+    },
+    {
+      "op_id": "op-15",
+      "name": "repo_read",
+      "args_summary": "read 2830 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:13.431095Z",
+      "ended_at": "2026-11-05T13:06:13.431096Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/tests/unit/test_validators.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/tests/unit/test_validators.py",
+          "sha256": "c6fac540820e9146fb1bb7cff3027451015f7fc902964d92fcc3549cd3562113"
+        }
+      ]
+    },
+    {
+      "op_id": "op-16",
+      "name": "repo_read",
+      "args_summary": "4 matches pattern=class ArtifactKind|requirement_analysis",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:17.509993Z",
+      "ended_at": "2026-11-05T13:06:17.509995Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": "ai_factory/src",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-17",
+      "name": "repo_read",
+      "args_summary": "1 matches pattern=class RequirementAnalysis",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:17.510935Z",
+      "ended_at": "2026-11-05T13:06:17.510936Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": "ai_factory/src",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-18",
+      "name": "repo_read",
+      "args_summary": "read 3848 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:21.977292Z",
+      "ended_at": "2026-11-05T13:06:21.977294Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/workflows/definitions/wf01_requirement_to_design.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/workflows/definitions/wf01_requirement_to_design.py",
+          "sha256": "29e7aabd72e145a1e0e4eed26bab3fe22948717d935c48a4dda530f2a9fc1c6f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-19",
+      "name": "repo_read",
+      "args_summary": "read 14197 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:21.977651Z",
+      "ended_at": "2026-11-05T13:06:21.977653Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/contracts/outputs.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/contracts/outputs.py",
+          "sha256": "1b0ec1d3083aeda54ece0e790c78d2c6ff0b36ace4e12a7ee70193acc450e90c"
+        }
+      ]
+    },
+    {
+      "op_id": "op-20",
+      "name": "doc_reader",
+      "args_summary": "mvp_scope: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:36.302226Z",
+      "ended_at": "2026-11-05T13:06:36.302229Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "mvp_scope",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "mvp_scope",
+          "sha256": "fa4c49d344b1041579761096b08d8a0f175e71fe0b38451cc7b9a435850ac89f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-21",
+      "name": "doc_reader",
+      "args_summary": "business_rules: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:36.302472Z",
+      "ended_at": "2026-11-05T13:06:36.302474Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "business_rules",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "business_rules",
+          "sha256": "9500a9465e4a6d539beb6c24906cf598f6e82884a66cf70adc0a73aee8745a5f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-22",
+      "name": "repo_read",
+      "args_summary": "read 7164 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:40.914892Z",
+      "ended_at": "2026-11-05T13:06:40.914894Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/execution/run_context.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/execution/run_context.py",
+          "sha256": "0af497096695000725ee7ac172d2741c420b8370f7e2e607a9a5d30bb84da23c"
+        }
+      ]
+    },
+    {
+      "op_id": "op-23",
+      "name": "repo_read",
+      "args_summary": "22 matches pattern=var/workspaces|requirements/|artifact_writer|workspace",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:40.941647Z",
+      "ended_at": "2026-11-05T13:06:40.941650Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": "ai_factory/src/amsdp_ai_factory",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-24",
+      "name": "repo_read",
+      "args_summary": "read 4949 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:44.881577Z",
+      "ended_at": "2026-11-05T13:06:44.881580Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/tasks/artifact_store.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/tasks/artifact_store.py",
+          "sha256": "5f3b5409e55a429067005be081a0233eedbb3e25555264d639a3be96dc5d63dd"
+        }
+      ]
+    },
+    {
+      "op_id": "op-25",
+      "name": "repo_read",
+      "args_summary": "read 24577 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:44.882096Z",
+      "ended_at": "2026-11-05T13:06:44.882098Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/workflows/engine.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/workflows/engine.py",
+          "sha256": "ab1035413dfe19bb1d7ba61395b22f978352c3fd8539bbd2cd3eed26a1cf18bf"
+        }
+      ]
+    },
+    {
+      "op_id": "op-26",
+      "name": "repo_read",
+      "args_summary": "read 4264 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:06:44.882569Z",
+      "ended_at": "2026-11-05T13:06:44.882571Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/tools/artifact_writer.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/tools/artifact_writer.py",
+          "sha256": "bd1ae034227701039a82cbaab84e2bbc30e2451c550781de5bb168714b6c85a7"
+        }
+      ]
+    },
+    {
+      "op_id": "op-27",
+      "name": "repo_read",
+      "args_summary": "listed 12 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:04.053006Z",
+      "ended_at": "2026-11-05T13:07:04.053009Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": "docs",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-28",
+      "name": "repo_read",
+      "args_summary": "listed 200 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:04.085999Z",
+      "ended_at": "2026-11-05T13:07:04.086003Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": "ai_factory/src",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-29",
+      "name": "repo_read",
+      "args_summary": "3 matches pattern=appointment-service|queue-service|patient-service|organization-service|token-service",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:23.309938Z",
+      "ended_at": "2026-11-05T13:07:23.309940Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": ".",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-30",
+      "name": "repo_read",
+      "args_summary": "read 4363 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:30.985305Z",
+      "ended_at": "2026-11-05T13:07:30.985308Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "docs/demo/AMSDP_Limitations_Report_V1.0.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "docs/demo/AMSDP_Limitations_Report_V1.0.md",
+          "sha256": "0ff4ac6a4baa8235a4999083b9a10fda02bf5b735b173a0f822909b2f1b7ac49"
+        }
+      ]
+    },
+    {
+      "op_id": "op-31",
+      "name": "doc_reader",
+      "args_summary": "system_architecture: 20030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:30.985945Z",
+      "ended_at": "2026-11-05T13:07:30.985948Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "system_architecture",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "system_architecture",
+          "sha256": "a7caf13f9bbef4c69957158006d2addbbfc0bdfa915403c99ce9937e89c7c0bf"
+        }
+      ]
+    },
+    {
+      "op_id": "op-32",
+      "name": "repo_read",
+      "args_summary": "read 4789 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:30.986597Z",
+      "ended_at": "2026-11-05T13:07:30.986600Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "docs/demo/AMSDP_API_Integration_Report_V1.0.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "docs/demo/AMSDP_API_Integration_Report_V1.0.md",
+          "sha256": "3c229871ffc797eec60dd48d7d152880d14d6a7654bafc70e85e798a1fec6318"
+        }
+      ]
+    },
+    {
+      "op_id": "op-33",
+      "name": "repo_read",
+      "args_summary": "read 6915 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:35.284247Z",
+      "ended_at": "2026-11-05T13:07:35.284251Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "README.md",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "README.md",
+          "sha256": "cfde4a257c08924ec1b77a9c56dcf6e71f984986e09ad7c5447647337312b761"
+        }
+      ]
+    },
+    {
+      "op_id": "op-34",
+      "name": "doc_reader",
+      "args_summary": "feature_list: 12030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:07:35.284816Z",
+      "ended_at": "2026-11-05T13:07:35.284818Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "feature_list",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "feature_list",
+          "sha256": "a6784e0cc034d028b5f5a955164f94defd7f4e7cd36ed304cf7f629f771e10cb"
+        }
+      ]
+    },
+    {
+      "op_id": "op-35",
+      "name": "doc_reader",
+      "args_summary": "business_rules: 40030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:30.832238Z",
+      "ended_at": "2026-11-05T13:11:30.832241Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "business_rules",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "business_rules",
+          "sha256": "478bf7e9a11fcc5459f794482c652c4dc35a0d6df5856f58d7a1c67065c70155"
+        }
+      ]
+    },
+    {
+      "op_id": "op-36",
+      "name": "doc_reader",
+      "args_summary": "10 roles",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:30.836773Z",
+      "ended_at": "2026-11-05T13:11:30.836774Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.list_roles",
+      "target": "",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-37",
+      "name": "doc_reader",
+      "args_summary": "mvp_scope: 32551 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:30.838543Z",
+      "ended_at": "2026-11-05T13:11:30.838546Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "mvp_scope",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "mvp_scope",
+          "sha256": "e24c359d3ec962d3b1658427d5bf6b39709b952fd7c47d5ca49c61be37fa93c6"
+        }
+      ]
+    },
+    {
+      "op_id": "op-38",
+      "name": "repo_read",
+      "args_summary": "listed 200 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:32.540423Z",
+      "ended_at": "2026-11-05T13:11:32.540427Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": ".",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-39",
+      "name": "doc_reader",
+      "args_summary": "agent_specification: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:37.276271Z",
+      "ended_at": "2026-11-05T13:11:37.276275Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "agent_specification",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "agent_specification",
+          "sha256": "c3cfc8ced028d40a9d8ae0085e9852e6da63fe1bc5f99406b32fae3b955c5659"
+        }
+      ]
+    },
+    {
+      "op_id": "op-40",
+      "name": "doc_reader",
+      "args_summary": "development_workflow: 40030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:37.276468Z",
+      "ended_at": "2026-11-05T13:11:37.276470Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "development_workflow",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "development_workflow",
+          "sha256": "2d304ddc4fcb16d3f8eeebb77c31ec08e89bf4156191dbdfb51902cbcccf6fbc"
+        }
+      ]
+    },
+    {
+      "op_id": "op-41",
+      "name": "repo_read",
+      "args_summary": "43 matches pattern=WF-01|wf01_s1|AMSDP-000001|requirement_analysis",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:53.485806Z",
+      "ended_at": "2026-11-05T13:11:53.485810Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": ".",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-42",
+      "name": "doc_reader",
+      "args_summary": "factory_architecture: 30030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:59.072872Z",
+      "ended_at": "2026-11-05T13:11:59.072875Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "factory_architecture",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "factory_architecture",
+          "sha256": "9ad3b36a4381e6098503681be3453122be65e981de48a77abd7e369f3c54f8a3"
+        }
+      ]
+    },
+    {
+      "op_id": "op-43",
+      "name": "repo_read",
+      "args_summary": "read 2386 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:59.073449Z",
+      "ended_at": "2026-11-05T13:11:59.073452Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "var/tasks/AMSDP-000001.json",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "var/tasks/AMSDP-000001.json",
+          "sha256": "8507527ca11efc49b1d269d15a6a7bc60f75dab64cbfec4c2e8803ec79ee6c47"
+        }
+      ]
+    },
+    {
+      "op_id": "op-44",
+      "name": "repo_read",
+      "args_summary": "listed 1 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:11:59.074089Z",
+      "ended_at": "2026-11-05T13:11:59.074091Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": "var",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-45",
+      "name": "repo_read",
+      "args_summary": "read 3848 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:04.758349Z",
+      "ended_at": "2026-11-05T13:12:04.758352Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/workflows/definitions/wf01_requirement_to_design.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/workflows/definitions/wf01_requirement_to_design.py",
+          "sha256": "29e7aabd72e145a1e0e4eed26bab3fe22948717d935c48a4dda530f2a9fc1c6f"
+        }
+      ]
+    },
+    {
+      "op_id": "op-46",
+      "name": "repo_read",
+      "args_summary": "read 5061 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:04.758764Z",
+      "ended_at": "2026-11-05T13:12:04.758766Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/tests/unit/test_output_contracts.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/tests/unit/test_output_contracts.py",
+          "sha256": "ae1a5044db490848c5cb92515e80555f090be375eb816f92c6339daab6b7c200"
+        }
+      ]
+    },
+    {
+      "op_id": "op-47",
+      "name": "repo_read",
+      "args_summary": "read 3668 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:04.759215Z",
+      "ended_at": "2026-11-05T13:12:04.759216Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/tests/integration/test_wf01_vertical_slice.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/tests/integration/test_wf01_vertical_slice.py",
+          "sha256": "50a241e47319a3d122b031384cfa4eead97d72631912330cb66085390955067d"
+        }
+      ]
+    },
+    {
+      "op_id": "op-48",
+      "name": "repo_read",
+      "args_summary": "read 14197 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:04.759434Z",
+      "ended_at": "2026-11-05T13:12:04.759436Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/contracts/outputs.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/contracts/outputs.py",
+          "sha256": "1b0ec1d3083aeda54ece0e790c78d2c6ff0b36ace4e12a7ee70193acc450e90c"
+        }
+      ]
+    },
+    {
+      "op_id": "op-49",
+      "name": "doc_reader",
+      "args_summary": "business_rules: 12030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:51.094096Z",
+      "ended_at": "2026-11-05T13:12:51.094099Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "business_rules",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "business_rules",
+          "sha256": "68b3736feb3bc08133da7eebdf4369144d20bbda8efe6c995d61c0a2603b817a"
+        }
+      ]
+    },
+    {
+      "op_id": "op-50",
+      "name": "doc_reader",
+      "args_summary": "mvp_scope: 16030 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:51.094411Z",
+      "ended_at": "2026-11-05T13:12:51.094413Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "doc_reader.read",
+      "target": "mvp_scope",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "mvp_scope",
+          "sha256": "c9a9627304db2b1ea9ded037f54c5c2619075afc0de767f262c19c4614176c32"
+        }
+      ]
+    },
+    {
+      "op_id": "op-51",
+      "name": "repo_read",
+      "args_summary": "listed 0 files",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:56.611218Z",
+      "ended_at": "2026-11-05T13:12:56.611222Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.list_paths",
+      "target": "var/workspaces",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-52",
+      "name": "repo_read",
+      "args_summary": "13 matches pattern=requirement_analysis|required_artifacts|artifact_paths|requirements/",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:12:56.637995Z",
+      "ended_at": "2026-11-05T13:12:56.637998Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.search",
+      "target": "ai_factory/src",
+      "ok": true,
+      "error": "",
+      "evidence_refs": []
+    },
+    {
+      "op_id": "op-53",
+      "name": "repo_read",
+      "args_summary": "read 4101 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:13:01.013653Z",
+      "ended_at": "2026-11-05T13:13:01.013656Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/workflows/models.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/workflows/models.py",
+          "sha256": "41cd730b6208a3dddb25f323b70c6e470b55485724cb88f4492662e838718205"
+        }
+      ]
+    },
+    {
+      "op_id": "op-54",
+      "name": "repo_read",
+      "args_summary": "read 4949 chars",
+      "working_dir": "",
+      "started_at": "2026-11-05T13:13:01.013981Z",
+      "ended_at": "2026-11-05T13:13:01.013983Z",
+      "exit_code": null,
+      "agent_id": "A01",
+      "stage_id": "wf01_s1",
+      "operation": "repo_read.read_text",
+      "target": "ai_factory/src/amsdp_ai_factory/tasks/artifact_store.py",
+      "ok": true,
+      "error": "",
+      "evidence_refs": [
+        {
+          "path": "ai_factory/src/amsdp_ai_factory/tasks/artifact_store.py",
+          "sha256": "5f3b5409e55a429067005be081a0233eedbb3e25555264d639a3be96dc5d63dd"
+        }
+      ]
+    }
+  ],
+  "approvals": [],
+  "artifacts": [],
+  "checks": [
+    {
+      "name": "stage_output",
+      "ok": false,
+      "issues": []
+    },
+    {
+      "name": "stage_output",
+      "ok": false,
+      "issues": []
+    }
+  ],
+  "errors": [
+    "live output failed contract validation: 1 validation error for RequirementAnalysis\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Based on my review of th...or later test planning.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid"
+  ],
+  "status": "failed",
+  "started_at": "2026-11-05T13:05:33.394617Z",
+  "ended_at": "2026-11-05T13:16:23.565360Z"
+}

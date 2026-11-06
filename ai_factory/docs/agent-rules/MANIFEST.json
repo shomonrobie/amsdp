@@ -1,0 +1,16 @@
+{
+  "files": {
+    "README.md": "817e109bc32b25bd6aa351f7cf4f80298ca5a88f4713289df957ce93e5b4348b",
+    "carbontally-agent-governance.md": "8a5f1752cc2d825b6e94be6e8957e87457fdb0ab7fde1e5b58db2e9e20921901",
+    "emissions-provenance.md": "bd861465a69cfb4ccb5580ced4a76fbb296eeeb849208fb4640338dd9787c649",
+    "saas-ai-provider-registry.md": "da3e71bad246a882d47ab063a5cde65054db141062460d4cf91acca98b12dc96",
+    "saas-api-throttling.md": "a3e99d8d3018370ac70c5cb4f4af657de6f8b26bff0cdab8a74baf1a8e312a36",
+    "saas-application-security.md": "9247612e0027ca852bfff3194f69edf93f084191378543d3fbbee816b4846daa",
+    "saas-auth-and-authorisation.md": "a4ffef4bb00e404ed703122980d680eb27174170a146ed1a30f13edbbef3c539",
+    "saas-cicd-workflow.md": "19202d36185801b5b603a3461734005b53a4ef867bd0d11bd2774ddc2c58a792",
+    "saas-frontend-ux.md": "6bb0acc179d83468acc979d0841e53711c1542d16ee9b6ba2676449416c3a9ac",
+    "saas-multitenant-data.md": "85065501590de1060dad4877a274262714fe11c81b5f0533bf98be68ee8f4502",
+    "saas-observability.md": "4d5a8a497ffc31e171f7a6bb1ddfb0ea461d56d3ce7c85c5075df07bdf182985"
+  },
+  "purpose": "SHA-256 of every canonical agent rule. Any change requires an intentional manifest update (audit \u00a78.5)."
+}

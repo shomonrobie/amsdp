@@ -1,0 +1,94 @@
+{
+  "task_id": "AMSDP-000001",
+  "title": "AMSDP Hackathon Gap Assessment",
+  "description": "Evidence-based gap analysis of the AMSDP repository for the Bangladesh eHealth Hackathon, 21 Nov 2026.",
+  "task_type": "assessment",
+  "priority": "normal",
+  "status": "failed",
+  "requester": null,
+  "workflow_id": "WF-01",
+  "crew_id": null,
+  "assigned_agents": [],
+  "service": null,
+  "source_documents": [],
+  "scope": {
+    "included": [],
+    "excluded": []
+  },
+  "inputs": {},
+  "expected_outputs": [],
+  "acceptance_criteria": [],
+  "constraints": [],
+  "prohibited_actions": [],
+  "quality_gates": [],
+  "approval": {
+    "required_before_start": false,
+    "required_before_merge": true,
+    "required_before_deploy": true,
+    "state": "not_requested",
+    "decisions": []
+  },
+  "attempts": [],
+  "artifacts": [],
+  "history": [
+    {
+      "from_status": "proposed",
+      "to_status": "intake_validation",
+      "actor": "orchestrator",
+      "at": "2026-11-05T13:05:33.385918Z",
+      "reason": "start WF-01 Requirement-to-Design"
+    },
+    {
+      "from_status": "intake_validation",
+      "to_status": "context_validation",
+      "actor": "orchestrator",
+      "at": "2026-11-05T13:05:33.388098Z",
+      "reason": "start WF-01 Requirement-to-Design"
+    },
+    {
+      "from_status": "context_validation",
+      "to_status": "ready_for_analysis",
+      "actor": "orchestrator",
+      "at": "2026-11-05T13:05:33.389746Z",
+      "reason": "start WF-01 Requirement-to-Design"
+    },
+    {
+      "from_status": "ready_for_analysis",
+      "to_status": "analysis",
+      "actor": "orchestrator",
+      "at": "2026-11-05T13:05:33.391140Z",
+      "reason": "start WF-01 Requirement-to-Design"
+    },
+    {
+      "from_status": "analysis",
+      "to_status": "failed",
+      "actor": "orchestrator",
+      "at": "2026-11-05T13:16:23.554195Z",
+      "reason": "workflow stage failure"
+    }
+  ],
+  "failure_info": [
+    {
+      "occurred_at": "2026-11-05T13:11:24.292714Z",
+      "stage": "wf01_s1",
+      "category": "test",
+      "error_code": "",
+      "message": "live output failed contract validation: 1 validation error for RequirementAnalysis\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Based on my review of th...he human project owner.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid",
+      "retried": true
+    },
+    {
+      "occurred_at": "2026-11-05T13:16:23.545187Z",
+      "stage": "wf01_s1",
+      "category": "test",
+      "error_code": "",
+      "message": "live output failed contract validation: 1 validation error for RequirementAnalysis\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Based on my review of th...or later test planning.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid",
+      "retried": false
+    }
+  ],
+  "escalation_notes": [
+    "live output failed contract validation: 1 validation error for RequirementAnalysis\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Based on my review of th...or later test planning.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid"
+  ],
+  "blocked_reason": "",
+  "created_at": "2026-11-05T12:53:12.996307Z",
+  "updated_at": "2026-11-05T13:16:23.555892Z"
+}
