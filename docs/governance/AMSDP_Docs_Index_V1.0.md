@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-11) · **Snapshot:** 56 markdown documents, ≈1.97 MiB total (per-file sizes below; recompute with the *Maintenance* command)
+> **Date:** 2026-11-10 (revised 2026-11-12) · **Snapshot:** 57 markdown documents, ≈2.03 MiB total (per-file sizes below; recompute with the *Maintenance* command)
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -64,6 +64,25 @@
 > scan with **0** hits for any live or legacy credential. Evidence and the re-issued Step 2 plan:
 > `audit/AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` §18. Nothing was staged,
 > committed or pushed — `git diff --cached` remains empty.
+> **Revision 9 — 2026-11-12**, task `AMSDP-HACKATHON-MVP-STEP2-COMMIT-PUSH-2026-11-12`:
+> Step 2 executed. The 193-path plan C-1…C-7 was staged group by group, gate-checked (row count
+> with `--no-renames`, **exact** set equality against the documented path list, and a secret scan
+> over added lines only) and committed, then pushed: `hackathon-mvp` carries **7** commits on top
+> of `eb87cac` — `261e1f4`, `8ab01d0`, `1448612`, `3cff475`, `e240bc5`, `7f39b4d`, `a0d6ded` —
+> and the branch now exists on `origin` with its upstream set. Staged = 0; the 14 documented
+> excluded paths remain uncommitted; 193 unique paths changed (+44,027 / −2,240).
+> `audit/AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` is registered — the snapshot grows
+> from 56 to **57** documents. It records the per-commit hashes, the three defects found in the
+> *verification tooling* (not in the plan), the §18.8.10 end-state assertions, the post-push
+> verification — `HEAD`, the local `origin/hackathon-mvp` ref and the remote's own
+> `ls-remote` advertisement all report `a0d6ded` — and the updated R-1…R-7 register.
+> **This revision and that record are committed as C-8** — message
+> `docs(audit): record MVP commit and push execution`, exactly two authorised paths, created after the push. A commit
+> cannot record its own hash, so verify it with `git log -1 --format=%H -- docs/audit/…Execution_Record_V1.0.md`.
+> One document on disk is **not** registered here: `docs/chatgpt/AMSDP_Project_Handover_2026-11-12.md`, which appeared
+> 2026-11-12 13:22 outside this task in a folder that is not among the §11 subfolders. It is left in place and
+> **unregistered** rather than silently adopted (§11: uncertain-ownership files are reported, not migrated), so the
+> on-disk count is 58 against the **57** registered above — an open item, not an index claim.
 
 
 ---
@@ -198,6 +217,7 @@ side.
 | `AMSDP_PreCommit_Remediation_Report_V1.0.md` | 27,298 | Remediating blockers B-1…B-7: how each credential is supplied now, the ignore rules, the image rename, the new findings B-8…B-10 and the owner decisions still open | — |
 | `AMSDP_Final_PrePush_Readiness_Report_V1.0.md` | 40,986 | Immediately before the first push: rotation evidence (D-1, closed), the two mixed-ownership files (D-2), the tracked AI-Factory artefacts (D-3), the twelve image assets, the six-commit plan and gates G-1…G-5 | — |
 | `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 58,648 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
+| `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 17,583 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
 
 ---
 
