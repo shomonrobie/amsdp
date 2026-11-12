@@ -1,44 +1,112 @@
-"""AMSDP Audit Service — centralized event recording."""
+"""AMSDP Audit Service — read-only, tenant-scoped access to the audit trail.
 
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+Audit rows are written by the service that performs the action, inside that
+action's own transaction (``common.audit.record_audit``), so the trail is
+append-only and atomic with the change it describes.
+
+Sequence 4 hardening (WP3/WP8)
+------------------------------
+This module used to be the M1 in-memory stub: it accepted ``POST /api/v1/audit``
+from any anonymous caller and served every organization's events to anyone who
+knew an id. It now:
+
+* exposes **no write endpoint** — an HTTP caller can never forge or rewrite an
+  audit row; the trail is written only by the service performing the action;
+* requires ``audit.read`` and derives the tenant from the authenticated token;
+* answers a foreign organization with a **non-disclosing 404**, never 403;
+* scopes branch-bound users to their own branch;
+* reads the persistent ``audit_events`` table instead of a process-local dict.
+"""
+
 from typing import Optional
-from datetime import datetime
-import uuid
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+
+from common.auth import AuthContext, require_permission
+from common.database import SessionFactory
+from common.models import AuditEvent
+from common.health import install_health
 
 app = FastAPI(title="AMSDP Audit Service")
-_audit_db: dict[str, list[dict]] = {}
+install_health(app, "audit")
 
-class AuditEvent(BaseModel):
-    service: str
-    organization_id: str
-    action: str
-    target_type: str
-    target_id: str
-    actor_id: str
-    actor_role: str
-    before: Optional[dict] = None
-    after: Optional[dict] = None
-    reason: str = ""
+#: Hard ceiling per query so one call can never dump the whole trail.
+MAX_EVENTS = 500
 
-@app.post("/api/v1/audit", status_code=201)
-def record_event(data: AuditEvent):
-    event = {**data.dict(), "event_id": str(uuid.uuid4()),
-             "timestamp": str(datetime.utcnow())}
-    _audit_db.setdefault(data.target_id, []).append(event)
-    return {"event_id": event["event_id"]}
 
-@app.get("/api/v1/audit/{target_id}")
-def get_events(target_id: str, action: str = Query(None), actor: str = Query(None)):
-    events = _audit_db.get(target_id, [])
-    if action: events = [e for e in events if e["action"] == action]
-    if actor: events = [e for e in events if e["actor_id"] == actor]
-    return sorted(events, key=lambda x: x["timestamp"], reverse=True)
+def _row_to_dict(e: AuditEvent) -> dict:
+    """Stable wire shape — the keys the M1 contract already published."""
+    return {
+        "event_id": e.id,
+        "id": e.id,
+        "service": e.service,
+        "organization_id": e.organization_id,
+        "branch_id": e.branch_id or "",
+        "action": e.action,
+        "target_type": e.target_type,
+        "target_id": e.target_id,
+        "actor_id": e.actor_id,
+        "actor_role": e.actor_role or "",
+        "before": e.before,
+        "after": e.after,
+        "reason": e.reason or "",
+        "timestamp": e.timestamp.isoformat() if e.timestamp else "",
+    }
+
+
+def _scoped_org(auth: AuthContext, org_id: str) -> None:
+    """Non-disclosing tenant gate: a foreign organization is 404, never 403."""
+    if auth.is_super_admin or auth.organization_id == org_id:
+        return
+    raise HTTPException(404, "organization not found")
+
+
+def _apply_branch_scope(query, auth: AuthContext):
+    """Branch-bound users only ever see their own branch's events."""
+    if auth.is_super_admin or auth.is_org_admin:
+        return query
+    if auth.branch_id:
+        return query.filter(AuditEvent.branch_id == auth.branch_id)
+    return query
+
 
 @app.get("/api/v1/audit/organization/{org_id}")
-def get_org_events(org_id: str):
-    events = []
-    for evts in _audit_db.values():
-        for e in evts:
-            if e["organization_id"] == org_id: events.append(e)
-    return sorted(events, key=lambda x: x["timestamp"], reverse=True)
+def get_org_events(org_id: str,
+                   auth: AuthContext = Depends(require_permission("audit.read"))):
+    """Events recorded for one organization, newest first."""
+    _scoped_org(auth, org_id)
+    session = SessionFactory()
+    try:
+        q = _apply_branch_scope(
+            session.query(AuditEvent).filter(AuditEvent.organization_id == org_id),
+            auth)
+        return [_row_to_dict(e) for e in
+                q.order_by(AuditEvent.timestamp.desc()).limit(MAX_EVENTS).all()]
+    finally:
+        session.close()
+
+
+@app.get("/api/v1/audit/{target_id}")
+def get_events(target_id: str, action: Optional[str] = Query(None),
+               actor: Optional[str] = Query(None),
+               auth: AuthContext = Depends(require_permission("audit.read"))):
+    """Events for one target inside the caller's own organization.
+
+    An unknown target and a target owned by another tenant are indistinguishable:
+    both return an empty list, so this endpoint is not an existence oracle.
+    """
+    session = SessionFactory()
+    try:
+        q = _apply_branch_scope(
+            session.query(AuditEvent).filter(
+                AuditEvent.target_id == target_id,
+                AuditEvent.organization_id == auth.organization_id),
+            auth)
+        if action:
+            q = q.filter(AuditEvent.action == action)
+        if actor:
+            q = q.filter(AuditEvent.actor_id == actor)
+        return [_row_to_dict(e) for e in
+                q.order_by(AuditEvent.timestamp.desc()).limit(MAX_EVENTS).all()]
+    finally:
+        session.close()

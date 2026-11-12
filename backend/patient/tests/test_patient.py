@@ -1,130 +1,195 @@
-"""Tests for Patient Service — BR §10–§11."""
+"""Tests for the Patient Service — BR §10–§11.
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+**Rewritten for Sequence 4 finding LEGACY-TESTS-P1.**  The quarantined module
+imported ``patient.main._patients_db`` (gone) and passed ``organization_id`` in
+the body (the service now derives the tenant from the token).
 
-from patient.main import app, _patients_db
+One legacy expectation is deliberately *not* restored: ``POST
+/api/v1/patients/merge`` does not exist and must not.  BR §11 note 4 and MVP
+scope §"Patient identity" state that a merge workflow is a later-phase
+capability; the MVP warns about possible duplicates and never merges silently.
+:func:`TestDuplicateHandling.test_no_silent_merge_route` pins that decision, so
+re-introducing merge without the approved workflow fails here first.
+"""
+
+import pytest
 from fastapi.testclient import TestClient
 
-client = TestClient(app)
+from amsdp_test_support import (db_session, ensure_branch, ensure_org,
+                               ensure_user, headers, load_app, purge_org)
+from common.models import Patient
+
+ORG = "legacy-pat-org"
+BR = "legacy-pat-br"
+OTHER_ORG = "legacy-pat-other"
+OTHER_BR = "legacy-pat-other-br"
+RECP = "legacy_pat_recp"
+OTHER_RECP = "legacy_pat_other_recp"
 
 
-def setup_module():
-    _patients_db.clear()
+@pytest.fixture(scope="module")
+def client():
+    return TestClient(load_app("patient"))
+
+
+@pytest.fixture(autouse=True)
+def _world(client):
+    purge_org(ORG)
+    purge_org(OTHER_ORG)
+    ensure_org(ORG)
+    ensure_org(OTHER_ORG)
+    ensure_branch(BR, ORG)
+    ensure_branch(OTHER_BR, OTHER_ORG)
+    ensure_user(RECP, "receptionist", ORG, BR)
+    ensure_user(OTHER_RECP, "receptionist", OTHER_ORG, OTHER_BR)
+    yield
+    # Teardown: no business rows left behind; reference rows stay (audit).
+    purge_org(ORG)
+    purge_org(OTHER_ORG)
+
+
+def _register(client, name="Jamila Begum", mobile="01711111111",
+              user=RECP, **extra):
+    body = {"name": name, "mobile": mobile}
+    body.update(extra)
+    return client.post("/api/v1/patients", headers=headers(user), json=body)
 
 
 class TestPatientRegistration:
-    def test_register_patient(self):
-        resp = client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "Jamila Begum",
-            "mobile": "01711111111",
-        })
-        assert resp.status_code == 201
-        data = resp.json()["patient"]
-        assert data["name"] == "Jamila Begum"
-        assert data["organization_id"] == "org-1"
+    def test_register_patient(self, client):
+        r = _register(client)
+        assert r.status_code == 201, r.text
+        patient = r.json()["patient"]
+        assert patient["name"] == "Jamila Begum"
+        # The tenant comes from the token; the body cannot choose it.
+        assert patient["organization_id"] == ORG
+        assert r.json()["duplicates"] == []
+        with db_session() as s:
+            row = s.query(Patient).filter(Patient.id == patient["id"]).first()
+            assert row is not None and row.mobile == "01711111111"
 
-    def test_register_without_name_422(self):
-        resp = client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "", "mobile": "",
-        })
-        assert resp.status_code == 422
+    def test_register_without_name_and_mobile_422(self, client):
+        r = _register(client, name="", mobile="")
+        assert r.status_code == 422
+        with db_session() as s:
+            assert s.query(Patient).filter(
+                Patient.organization_id == ORG).count() == 0
 
-    def test_duplicate_mobile_warns(self):
-        _patients_db.clear()
-        client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "A", "mobile": "01711111111",
-        })
-        resp = client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "B", "mobile": "01711111111",
-        })
-        assert resp.status_code == 201
-        assert len(resp.json()["duplicates"]) == 1
+    def test_register_with_date_of_birth_records_dob_as_age_source(self, client):
+        patient = _register(client, date_of_birth="1990-05-10").json()["patient"]
+        assert patient["age_source"] == "dob"
+        assert patient["age_from_dob"] is not None
+        assert patient["age_from_dob"] >= 35
 
-    def test_cross_org_duplicate_no_warning(self):
-        _patients_db.clear()
-        client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "A", "mobile": "01711111111",
-        })
-        resp = client.post("/api/v1/patients", json={
-            "organization_id": "org-2", "name": "B", "mobile": "01711111111",
-        })
-        assert resp.status_code == 201
-        assert len(resp.json()["duplicates"]) == 0
+    def test_register_rejects_a_future_date_of_birth(self, client):
+        r = _register(client, date_of_birth="2999-01-01")
+        assert r.status_code == 422
+
+
+class TestDuplicateHandling:
+    def test_duplicate_mobile_warns(self, client):
+        first = _register(client, name="A").json()["patient"]
+        r = _register(client, name="B")
+        assert r.status_code == 201, r.text
+        duplicates = r.json()["duplicates"]
+        assert len(duplicates) == 1
+        assert duplicates[0]["patient_id"] == first["id"]
+
+    def test_cross_org_duplicate_is_not_a_warning(self, client):
+        """Duplicate detection is tenant-local: another clinic's patient list
+        is never disclosed as 'a duplicate'."""
+        _register(client, name="A")
+        r = _register(client, name="B", user=OTHER_RECP)
+        assert r.status_code == 201, r.text
+        assert r.json()["duplicates"] == []
+
+    def test_no_silent_merge_route(self, client):
+        """BR §11 / MVP scope: merging is a later-phase workflow, not MVP.
+
+        ``/api/v1/patients/merge`` matches only the read route
+        (``GET /api/v1/patients/{patient_id}``), so a POST is refused as a
+        method mismatch — no merge handler exists to call.
+        """
+        r = client.post("/api/v1/patients/merge", headers=headers(RECP), json={
+            "primary_patient_id": "a", "duplicate_patient_id": "b",
+            "reason": "same person"})
+        assert r.status_code == 405
 
 
 class TestPatientSearch:
-    @classmethod
-    def setup_class(cls):
-        _patients_db.clear()
-        client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "Jamila Begum",
-            "mobile": "01711111111",
-        })
-        client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "Rahim Molla",
-            "mobile": "01722222222",
-        })
-        client.post("/api/v1/patients", json={
-            "organization_id": "org-2", "name": "Karim Molla",
-            "mobile": "01733333333",
-        })
+    def test_search_by_name(self, client):
+        _register(client, name="Jamila Begum", mobile="01711111111")
+        _register(client, name="Rahim Molla", mobile="01722222222")
+        r = client.get("/api/v1/patients", params={"q": "Jamila"},
+                       headers=headers(RECP))
+        assert r.status_code == 200
+        assert r.json()["total"] == 1
+        assert r.json()["items"][0]["name"] == "Jamila Begum"
 
-    def test_search_by_name(self):
-        resp = client.get("/api/v1/patients?organization_id=org-1&q=Jamila")
-        assert resp.status_code == 200
-        assert resp.json()["total"] == 1
+    def test_search_by_mobile(self, client):
+        _register(client, name="Jamila Begum", mobile="01711111111")
+        _register(client, name="Rahim Molla", mobile="01722222222")
+        r = client.get("/api/v1/patients", params={"q": "0172222"},
+                       headers=headers(RECP))
+        assert [p["name"] for p in r.json()["items"]] == ["Rahim Molla"]
 
-    def test_search_cross_org_isolated(self):
-        resp = client.get("/api/v1/patients?organization_id=org-2&q=Molla")
-        assert resp.status_code == 200
-        assert resp.json()["total"] == 1
-        assert resp.json()["items"][0]["name"] == "Karim Molla"
+    def test_search_is_tenant_isolated(self, client):
+        _register(client, name="Karim Molla", mobile="01733333333")
+        _register(client, name="Karim Other", mobile="01744444444",
+                  user=OTHER_RECP)
+        mine = client.get("/api/v1/patients", params={"q": "Karim"},
+                          headers=headers(RECP)).json()
+        assert mine["total"] == 1
+        assert mine["items"][0]["name"] == "Karim Molla"
+        theirs = client.get("/api/v1/patients", params={"q": "Karim"},
+                            headers=headers(OTHER_RECP)).json()
+        assert theirs["total"] == 1
+        assert theirs["items"][0]["name"] == "Karim Other"
 
-    def test_search_all_in_org(self):
-        resp = client.get("/api/v1/patients?organization_id=org-1")
-        assert resp.status_code == 200
-        assert resp.json()["total"] == 2
+    def test_pagination_metadata(self, client):
+        for i in range(3):
+            _register(client, name=f"Patient {i}", mobile=f"0170000000{i}")
+        r = client.get("/api/v1/patients", params={"limit": 2},
+                       headers=headers(RECP))
+        assert r.json()["total"] == 3
+        assert len(r.json()["items"]) == 2
+        assert r.json()["page"] == 1
 
 
-class TestPatientMerge:
-    @classmethod
-    def setup_class(cls):
-        _patients_db.clear()
-        r1 = client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "Dupli A", "mobile": "01711111111",
-        })
-        r2 = client.post("/api/v1/patients", json={
-            "organization_id": "org-1", "name": "Dupli B", "mobile": "01711111111",
-        })
-        cls.p1 = r1.json()["patient"]["id"]
-        cls.p2 = r2.json()["patient"]["id"]
+class TestPatientReadUpdate:
+    def test_get_patient(self, client):
+        patient_id = _register(client).json()["patient"]["id"]
+        r = client.get(f"/api/v1/patients/{patient_id}", headers=headers(RECP))
+        assert r.status_code == 200
+        assert r.json()["id"] == patient_id
 
-    def test_merge_patients(self):
-        resp = client.post("/api/v1/patients/merge", json={
-            "primary_patient_id": self.p1,
-            "duplicate_patient_id": self.p2,
-            "reason": "same patient",
-        })
-        assert resp.status_code == 200
-        assert resp.json()["merged"] is True
+    def test_get_missing_patient_404(self, client):
+        r = client.get("/api/v1/patients/nonexistent", headers=headers(RECP))
+        assert r.status_code == 404
 
-    def test_merge_not_found(self):
-        resp = client.post("/api/v1/patients/merge", json={
-            "primary_patient_id": "nonexistent",
-            "duplicate_patient_id": "nonexistent2",
-            "reason": "test",
-        })
-        assert resp.status_code == 404
+    def test_foreign_tenant_patient_is_a_404(self, client):
+        patient_id = _register(client).json()["patient"]["id"]
+        r = client.get(f"/api/v1/patients/{patient_id}",
+                       headers=headers(OTHER_RECP))
+        assert r.status_code == 404
 
-    def test_merge_cross_org_422(self):
-        r3 = client.post("/api/v1/patients", json={
-            "organization_id": "org-2", "name": "Other", "mobile": "01799999999",
-        })
-        other_id = r3.json()["patient"]["id"]
-        resp = client.post("/api/v1/patients/merge", json={
-            "primary_patient_id": self.p1,
-            "duplicate_patient_id": other_id,
-            "reason": "attempt cross-org",
-        })
-        assert resp.status_code == 422
+    def test_update_patient(self, client):
+        patient_id = _register(client).json()["patient"]["id"]
+        r = client.patch(f"/api/v1/patients/{patient_id}",
+                         headers=headers(RECP),
+                         json={"name": "Jamila Akter", "address": "Mirpur"})
+        assert r.status_code == 200, r.text
+        assert r.json()["name"] == "Jamila Akter"
+        assert r.json()["address"] == "Mirpur"
+        with db_session() as s:
+            assert s.query(Patient).filter(
+                Patient.id == patient_id).first().name == "Jamila Akter"
+
+    def test_foreign_tenant_patient_cannot_be_updated(self, client):
+        patient_id = _register(client).json()["patient"]["id"]
+        r = client.patch(f"/api/v1/patients/{patient_id}",
+                         headers=headers(OTHER_RECP), json={"name": "Hijacked"})
+        assert r.status_code == 404
+        with db_session() as s:
+            assert s.query(Patient).filter(
+                Patient.id == patient_id).first().name == "Jamila Begum"

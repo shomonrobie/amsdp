@@ -1,0 +1,168 @@
+"""M6 Dashboard + Audit API tests — real DB aggregates."""
+
+import sys, os, uuid, bcrypt
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "identity"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "appointment"))
+
+import pytest, jwt
+from datetime import datetime, timedelta, timezone
+from fastapi.testclient import TestClient
+from common.database import SessionFactory
+from common.models import (Organization, Branch, StaffUser, Doctor,
+                           Patient, Appointment, QueueEntry, AuditEvent,
+                           TrackingToken)
+from common.audit import record_audit
+from identity.models import _SECRET, _ALGO
+
+
+def _ensure():
+    s = SessionFactory()
+    try:
+        if not s.query(Organization).filter(Organization.code == "M6-ORG").first():
+            s.add(Organization(id="m6-org", name="M6 Org", code="M6-ORG"))
+        if not s.query(Branch).filter(Branch.id == "m6-branch").first():
+            s.add(Branch(id="m6-branch", organization_id="m6-org", name="Main", code="M6-BR"))
+        if not s.query(Doctor).filter(Doctor.id == "m6-doc").first():
+            s.add(Doctor(id="m6-doc", organization_id="m6-org", name="Dr M6", mobile="01799990000"))
+        s.commit()
+    finally:
+        s.close()
+
+_ensure()
+
+
+def _user(username, role):
+    s = SessionFactory()
+    try:
+        u = s.query(StaffUser).filter(StaffUser.username == username).first()
+        if not u:
+            pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id="m6-org",
+                          branch_id="m6-branch", username=username, password_hash=pw,
+                          display_name=username, role=role, status="active")
+            s.add(u); s.commit()
+        return u
+    finally:
+        s.close()
+
+
+def _token(user, org="m6-org"):
+    return jwt.encode({"sub": user.id, "org": org, "branch": "m6-branch",
+        "role": user.role, "exp": int((datetime.now(timezone.utc)+timedelta(hours=1)).timestamp())},
+        _SECRET, algorithm=_ALGO)
+
+
+@pytest.fixture(scope="module")
+def admin():
+    return _user("m6_admin", "org_admin")
+
+
+@pytest.fixture(autouse=True)
+def clean():
+    # Scoped to this module's org and deleted in FK-safe order: the previous
+    # org-blind ``query(Appointment).delete()`` aborted the whole module with a
+    # ForeignKeyViolation whenever another suite had already issued a PQT
+    # tracking token for one of its fixture appointments.
+    s = SessionFactory()
+    try:
+        appt_ids = [r[0] for r in s.query(Appointment.id).filter(
+            Appointment.organization_id == "m6-org").all()]
+        if appt_ids:
+            s.query(TrackingToken).filter(
+                TrackingToken.appointment_id.in_(appt_ids)).delete(
+                    synchronize_session=False)
+        for model in (QueueEntry, Appointment, AuditEvent):
+            s.query(model).filter(
+                model.organization_id == "m6-org").delete(
+                    synchronize_session=False)
+        s.commit()
+    finally:
+        s.close()
+    yield
+
+
+from appointment.main import app
+client = TestClient(app)
+
+from common.timeutil import operational_today
+
+_today = operational_today()   # the dashboard counts the facility-local day
+
+
+def _mk_appt_today(s, patient_id, status="COMPLETED", booking="phone"):
+    a = Appointment(id=str(uuid.uuid4()), organization_id="m6-org", branch_id="m6-branch",
+                    patient_id=patient_id, doctor_id="m6-doc",
+                    appointment_date=_today, start_time="10:00", status=status,
+                    status_history=[], booking_source=booking, token_number="T-M6-1")
+    s.add(a); s.commit(); return a
+
+
+class TestDashboardToday:
+    def test_today_counts_active_and_completed(self, admin):
+        s = SessionFactory()
+        p = Patient(id=str(uuid.uuid4()), organization_id="m6-org", name="P", mobile="01711111111")
+        s.add(p); s.commit()
+        _mk_appt_today(s, p.id, status="BOOKED", booking="phone")
+        _mk_appt_today(s, p.id, status="COMPLETED", booking="phone")
+        _mk_appt_today(s, p.id, status="COMPLETED", booking="walk_in")
+        s.close()
+        r = client.get("/api/v1/dashboard/today", headers=_auth(_token(admin)))
+        assert r.status_code == 200
+        d = r.json()
+        assert d["total"] == 3
+        assert d["scheduled"] == 1
+        assert d["completed"] == 2
+        assert d["walk_ins"] == 1
+
+    def test_today_no_token(self):
+        assert client.get("/api/v1/dashboard/today").status_code == 401
+
+    def test_today_cross_org_empty(self, admin):
+        r = client.get("/api/v1/dashboard/today", headers=_auth(_token(admin, org="other-org")))
+        assert r.status_code == 200 and r.json()["total"] == 0
+
+
+class TestDashboardPeriod:
+    def test_period_totals_and_rates(self, admin):
+        s = SessionFactory()
+        p = Patient(id=str(uuid.uuid4()), organization_id="m6-org", name="P", mobile="01711111111")
+        s.add(p); s.commit()
+        for _ in range(3):
+            _mk_appt_today(s, p.id, status="COMPLETED")
+        _mk_appt_today(s, p.id, status="NO_SHOW")
+        s.close()
+        frm = (_today - timedelta(days=30)).isoformat()
+        r = client.get(f"/api/v1/dashboard/period?from_date={frm}&to_date={_today.isoformat()}",
+                       headers=_auth(_token(admin)))
+        assert r.status_code == 200
+        d = r.json()
+        assert d["total"] == 4
+        assert d["completed"] == 3
+        assert d["no_show"] == 1
+        assert d["no_show_rate"] == 25.0
+
+
+class TestDashboardAudit:
+    def test_audit_search_and_filters(self, admin):
+        s = SessionFactory()
+        for i, action in enumerate(["queue.checkin", "queue.reorder", "queue.complete_consultation"]):
+            record_audit(s, service="queuing", org_id="m6-org", branch_id="m6-branch",
+                         action=action, target_type="queue_entry", target_id=f"e{i}",
+                         actor_id=admin.id, actor_role=admin.role,
+                         after={"position": i + 1})
+        s.commit(); s.close()
+        r = client.get("/api/v1/dashboard/audit?action=queue.reorder",
+                       headers=_auth(_token(admin)))
+        assert r.status_code == 200
+        assert len(r.json()) == 1
+
+    def test_audit_cross_org_isolated(self, admin):
+        s = SessionFactory()
+        record_audit(s, service="queuing", org_id="m6-org", action="queue.enqueue",
+                     target_type="queue_entry", target_id="x",
+                     actor_id=admin.id, actor_role="org_admin")
+        s.commit(); s.close()
+        r = client.get("/api/v1/dashboard/audit", headers=_auth(_token(admin, org="other-org")))
+        assert r.status_code == 200 and r.json() == []
+def _auth(h): return {"Authorization": f"Bearer {h}"}
