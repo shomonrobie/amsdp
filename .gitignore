@@ -38,6 +38,22 @@ coverage/
 tmp/
 temp/
 
+# nohup output (`nohup ... &` in backend/ or at the repo root)
+nohup.out
+
+# Local runtime stores and scratch output at the repository root
+# (task/workspace stores, backup dumps; AI Factory equivalents are ignored below)
+# Note: runs/RUN-20261105T130533-001.json and var/tasks/AMSDP-000001.json are
+# already tracked in history.  Ignore rules apply to new, untracked files only —
+# they neither remove nor untrack anything.
+/runs/
+/var/
+/backups/
+
+# One-off investigation scripts at the repository root (not product code)
+/tree.py
+/verify_llm_routing.py
+
 # IDE and OS
 .vscode/
 .idea/

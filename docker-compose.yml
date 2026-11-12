@@ -1,32 +1,152 @@
-version: '3.9'
+# AMSDP — PostgreSQL + eight backend services + frontend.
+#
+# Topology (unchanged): the frontend is the only public entry point.  It proxies
+# every /api/v1/* prefix to the owning service (frontend/next.config.js), so the
+# browser never talks to a backend origin directly — which is why this stack
+# needs **no aggregate backend app** and **no CORS middleware**.  See
+# ai_factory/docs/AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md.
+#
+# Post-Sequence-4 hardening:
+#   * every service has a liveness (/health) and readiness (/health/ready) probe,
+#     and compose gates the start order on the database being healthy;
+#   * every service receives the same AMSDP_JWT_SECRET — a service that validated
+#     tokens with a different secret would 401 every authenticated call;
+#   * the audit service now builds from the same context as the rest (it was
+#     unstartable: wrong build context, no common/ package, no DB driver).
+
+x-backend-env: &backend-env
+  AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp}
+  # Shared signing key for every service (all of them validate the same JWTs).
+  # The default is the development value common/auth.py already falls back to.
+  # Before exposing this stack, set AMSDP_JWT_SECRET (and AMSDP_ENV=production)
+  # in the environment or in an untracked .env file — never commit a real key.
+  AMSDP_JWT_SECRET: ${AMSDP_JWT_SECRET:-dev-synthetic-key-replace-in-prod}
+
+x-db-gate: &db-gate
+  db:
+    condition: service_healthy
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
 
 services:
+  db:
+    image: postgres:16-alpine
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_USER: amsdp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}
+      POSTGRES_DB: amsdp
+    volumes:
+      - amsdp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amsdp -d amsdp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   identity:
-    build: ./backend/identity
-    ports: ["8100:8000"]
-    environment: [AMSDP_JWT_SECRET=dev-synthetic-key-replace-in-prod]
+    build:
+      context: ./backend
+      dockerfile: identity/Dockerfile
+    ports: ["8110:8000"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+
   organization:
-    build: ./backend/organization
-    ports: ["8101:8001"]
+    build:
+      context: ./backend
+      dockerfile: organization/Dockerfile
+    ports: ["8111:8001"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready', timeout=3)"]
+
   patient:
-    build: ./backend/patient
-    ports: ["8102:8002"]
+    build:
+      context: ./backend
+      dockerfile: patient/Dockerfile
+    ports: ["8112:8002"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/ready', timeout=3)"]
+
   doctor:
-    build: ./backend/doctor
-    ports: ["8103:8003"]
+    build:
+      context: ./backend
+      dockerfile: doctor/Dockerfile
+    ports: ["8113:8003"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/ready', timeout=3)"]
+
   scheduling:
-    build: ./backend/scheduling
-    ports: ["8104:8004"]
+    build:
+      context: ./backend
+      dockerfile: scheduling/Dockerfile
+    ports: ["8114:8004"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health/ready', timeout=3)"]
+
   appointment:
-    build: ./backend/appointment
-    ports: ["8105:8005"]
+    build:
+      context: ./backend
+      dockerfile: appointment/Dockerfile
+    ports: ["8115:8005"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health/ready', timeout=3)"]
+
   queuing:
-    build: ./backend/queuing
-    ports: ["8106:8006"]
+    build:
+      context: ./backend
+      dockerfile: queuing/Dockerfile
+    ports: ["8116:8006"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health/ready', timeout=3)"]
+
   audit:
-    build: ./backend/audit
-    ports: ["8107:8007"]
+    build:
+      context: ./backend
+      dockerfile: audit/Dockerfile
+    ports: ["8117:8007"]
+    environment: *backend-env
+    depends_on: *db-gate
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/health/ready', timeout=3)"]
+
   frontend:
     build: ./frontend
     ports: ["3100:3000"]
-    depends_on: [identity]
+    depends_on:
+      identity:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+
+volumes:
+  amsdp_pg_data:
+
