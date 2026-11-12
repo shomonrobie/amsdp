@@ -34,7 +34,7 @@
 
 | Limitation | Detail |
 |-----------|--------|
-| **No patient registration form** | Patients page only supports search. |
+| **Patient registration is staff-only** | The Patients page provides a **Register** dialog to the roles that hold `patient.create` — `receptionist`, `branch_admin`, `org_admin`, `super_admin` — and `POST /api/v1/patients` offers the same capability; `doctor` and `assistant` see search only, because the backend denies them `patient.create`. |
 | **No appointment booking UI** | Appointments page lists only; no create. |
 | **No schedule creation UI** | Schedules page lists only; no create/edit. |
 | **No queue actions UI** | Queue page shows list but no call/arrive/serve buttons. |
@@ -51,7 +51,7 @@
 | **No real duplicate detection** | Patient merge uses exact mobile match only. |
 | **No appointment conflict detection** | Double-booking not prevented. |
 | **No queue timeout handling** | No auto-skip for no-shows. |
-| **No notification system** | No SMS/email integration. |
+| **Notifications are not delivered in the demo** | Only a `mock` provider is configured — real WhatsApp/SMS delivery is blocked pending product-owner approval — and the outbox is drained by a worker that is **not** a docker-compose service (`cd backend && python3 -m common.notifications.worker --once`). **Demo fallback:** staff issue a tracking link with `POST /api/v1/appointments/{id}/tracking-token` (QR image at `/api/v1/track/{token}/qr`) and share `/track/{token}` with the patient manually over SMS/WhatsApp. |
 | **No reporting/analytics** | No utilization or volume dashboards. |
 | **No WebSocket for real-time queue** | Manual refresh required. |
 | **No health check endpoints** | No `/health` or `/ready`. |
