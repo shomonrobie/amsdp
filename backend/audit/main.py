@@ -22,7 +22,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 
-from common.auth import AuthContext, require_permission
+from common.auth import AuthContext, record_platform_access, require_permission
 from common.database import SessionFactory
 from common.models import AuditEvent
 from common.health import install_health
@@ -55,10 +55,18 @@ def _row_to_dict(e: AuditEvent) -> dict:
 
 
 def _scoped_org(auth: AuthContext, org_id: str) -> None:
-    """Non-disclosing tenant gate: a foreign organization is 404, never 403."""
-    if auth.is_super_admin or auth.organization_id == org_id:
+    """Non-disclosing tenant gate: a foreign organization is 404, never 403.
+
+    Owner decision Q-1: reading another tenant's trail is a *platform*
+    capability (``platform.cross_org``), not an accident of a role string, and
+    every such read is recorded in the target organization's own trail so the
+    tenant can see that platform support looked at it.
+    """
+    if auth.organization_id == org_id:
         return
-    raise HTTPException(404, "organization not found")
+    if not auth.can_cross_org:
+        raise HTTPException(404, "organization not found")
+    record_platform_access(auth, org_id, service="audit")
 
 
 def _apply_branch_scope(query, auth: AuthContext):

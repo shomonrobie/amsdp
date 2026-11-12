@@ -1,8 +1,23 @@
 """AMSDP Shared Security — Authentication, RBAC, tenant/branch isolation.
 
 FastAPI dependencies for endpoint protection.
+
+Platform administration (owner decision Q-1, 2026-11-12)
+-------------------------------------------------------
+The platform administrator is no longer a hard-coded bypass.  Its authority is
+expressed as two capabilities in ``common.permissions`` — ``platform.admin`` and
+``platform.cross_org`` — and every shared decision point below resolves through
+them:
+
+* :attr:`AuthContext.is_super_admin` derives from ``platform.admin`` instead of
+  comparing the role string, so the role checks already spread across the
+  services can no longer outrun the matrix.
+* :func:`require_org_access` / :func:`require_branch_access` allow a caller
+  outside its own tenant **only** when it holds ``platform.cross_org``, and each
+  such access is recorded in the audit trail (:func:`record_platform_access`).
 """
 
+import logging
 import os
 from typing import Optional
 
@@ -10,8 +25,15 @@ from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 
+from .audit import record_audit
 from .database import SessionFactory
-from .models import StaffUser
+from .models import Branch, StaffUser
+
+logger = logging.getLogger(__name__)
+
+#: Capability names reserved for platform administration (``common.permissions``).
+PLATFORM_ADMIN = "platform.admin"
+PLATFORM_CROSS_ORG = "platform.cross_org"
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +86,24 @@ class AuthContext:
 
     @property
     def is_super_admin(self) -> bool:
-        return self.role == "super_admin"
+        """Platform administrator, derived from the explicit capability matrix.
+
+        Q-1: this used to compare ``self.role == "super_admin"``.  It now asks
+        the matrix, so the capability is enumerable, testable and revocable in
+        one place instead of being hard-coded in every service.
+        """
+        from .permissions import check as perm_check
+        return perm_check(PLATFORM_ADMIN, self.role)
+
+    @property
+    def can_cross_org(self) -> bool:
+        """May this caller act outside its own organization? (Q-1)
+
+        Only the platform administrator's ``platform.cross_org`` capability
+        answers yes; no tenant-level role does.
+        """
+        from .permissions import check as perm_check
+        return perm_check(PLATFORM_CROSS_ORG, self.role)
 
     @property
     def is_org_admin(self) -> bool:
@@ -162,10 +201,72 @@ def require_permission(resource: str):
     return _dependency
 
 
-def require_org_access(target_org_id: str):
+def _organization_of_branch(branch_id: str) -> Optional[str]:
+    """Owning organization of *branch_id*, or ``None`` when it cannot be read.
+
+    Used only to attribute a platform access event to the tenant it touched, so
+    it must never raise: an audit-attribution lookup may not break the request.
+    """
+    session = SessionFactory()
+    try:
+        row = session.query(Branch).filter(Branch.id == branch_id).first()
+        return row.organization_id if row else None
+    except Exception:                                    # pragma: no cover
+        return None
+    finally:
+        session.close()
+
+
+def record_platform_access(auth: "AuthContext", target_org_id: str, *,
+                          target_type: str = "organization",
+                          target_id: Optional[str] = None,
+                          branch_id: Optional[str] = None,
+                          service: str = "platform") -> None:
+    """Record one platform administrator cross-organization access (Q-1 §6).
+
+    The row is written into the **target** organization's trail, so the tenant
+    that owns the data can see that platform support touched it; the caller's own
+    organization is preserved in ``after``.  Best effort: a failure to record is
+    logged and never turned into an error, because the caller has already been
+    authorized and the response must not change.
+    """
+    org_id = target_org_id or _organization_of_branch(branch_id or "")
+    if not org_id:
+        logger.warning(
+            "platform access not recorded: no target organization for %s %s",
+            target_type, target_id or branch_id or "?")
+        return
+    session = SessionFactory()
+    try:
+        record_audit(
+            session, service=service, org_id=org_id,
+            branch_id=branch_id or "",
+            action="platform.cross_org.access",
+            target_type=target_type,
+            target_id=target_id or branch_id or org_id,
+            actor_id=auth.user_id, actor_role=auth.role,
+            after={"capability": PLATFORM_CROSS_ORG,
+                   "actor_organization_id": auth.organization_id,
+                   "target_organization_id": org_id},
+            reason="platform administrator cross-organization access",
+        )
+        session.commit()
+    except Exception:                                    # pragma: no cover
+        session.rollback()
+        logger.warning(
+            "platform access audit row could not be written for %s %s",
+            target_type, target_id or branch_id or org_id)
+    finally:
+        session.close()
+
+
+def require_org_access(target_org_id: str, service: str = "platform"):
     """Dependency factory: refuse unless the user may act on target_org_id.
 
-    super_admin may access any org.  All other roles must match.
+    The caller's own organization is the only one it may act on.  A different
+    organization is allowed **only** for a caller holding the platform
+    ``platform.cross_org`` capability (owner decision Q-1), and that access is
+    written to the target organization's audit trail.
 
     Sequence 4 (WP3/WP8): a foreign organization is a **non-disclosing 404**,
     never 403.  ``.clinerules`` §3 forbids 403 here because it would confirm
@@ -174,19 +275,22 @@ def require_org_access(target_org_id: str):
     PQT, DQDS) already answer 404; this helper now matches them.
     """
     def _dependency(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
-        if auth.is_super_admin:
+        if auth.organization_id == target_org_id:
             return auth
-        if auth.organization_id != target_org_id:
+        if not auth.can_cross_org:
             raise HTTPException(404, "not found")
+        record_platform_access(auth, target_org_id, service=service)
         return auth
     return _dependency
 
 
-def require_branch_access(target_branch_id: Optional[str]):
+def require_branch_access(target_branch_id: Optional[str], service: str = "platform"):
     """Dependency factory: refuse unless the user may act on target_branch.
 
-    super_admin and org_admin can access any branch in their org.
-    Branch-scoped users must match their token branch to target.
+    org_admin can access any branch in their org.  Branch-scoped users must match
+    their token branch to target.  A caller from outside the branch is allowed
+    **only** with the platform ``platform.cross_org`` capability (Q-1), and that
+    access is audited.
 
     A **mismatched** branch is a non-disclosing 404 (never 403), for the same
     reason as :func:`require_org_access`.  A missing ``target_branch_id`` for a
@@ -194,10 +298,15 @@ def require_branch_access(target_branch_id: Optional[str]):
     the caller's own token — so it stays a 403 ("branch scope required").
     """
     def _dependency(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
-        if auth.is_super_admin or auth.is_org_admin:
+        if auth.is_org_admin:
             return auth
         if target_branch_id and auth.branch_id != target_branch_id:
-            raise HTTPException(404, "not found")
+            if not auth.can_cross_org:
+                raise HTTPException(404, "not found")
+            record_platform_access(auth, "", target_type="branch",
+                                   target_id=target_branch_id,
+                                   branch_id=target_branch_id, service=service)
+            return auth
         if not target_branch_id and auth.branch_id:
             raise HTTPException(403, "branch scope required")
         return auth

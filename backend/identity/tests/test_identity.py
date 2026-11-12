@@ -177,8 +177,13 @@ class TestValidateToken:
 
 
 class TestPermissions:
-    def test_super_admin_has_all(self):
-        assert perm_check("anything.at.all", "super_admin") is True
+    def test_super_admin_has_the_platform_capabilities(self):
+        # Q-1: the platform administrator's grant is an enumerated list, not a
+        # wildcard, so it is asserted capability by capability.
+        assert perm_check("platform.admin", "super_admin") is True
+        assert perm_check("staff.manage", "super_admin") is True
+    def test_super_admin_does_not_have_an_unknown_permission(self):
+        assert perm_check("anything.at.all", "super_admin") is False
     def test_receptionist_can_create_patient(self):
         assert perm_check("patient.create", "receptionist") is True
     def test_receptionist_cannot_manage_org(self):
