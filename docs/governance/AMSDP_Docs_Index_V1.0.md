@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-12) · **Snapshot:** 57 markdown documents, ≈2.03 MiB total (per-file sizes below; recompute with the *Maintenance* command)
+> **Date:** 2026-11-10 (revised 2026-11-13) · **Snapshot:** 60 markdown documents, ≈2.09 MiB total (per-file sizes below; recompute with the *Maintenance* command)
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -83,7 +83,38 @@
 > 2026-11-12 13:22 outside this task in a folder that is not among the §11 subfolders. It is left in place and
 > **unregistered** rather than silently adopted (§11: uncertain-ownership files are reported, not migrated), so the
 > on-disk count is 58 against the **57** registered above — an open item, not an index claim.
+> **Revision 10 — 2026-11-12**, task `AMSDP-PROJECT-CONTEXT-REPORT-2026-11-12`:
+> `audit/AMSDP_Project_Context_Report_V1.0.md` registered — an evidence-graded repository picture
+> written for the external (ChatGPT) collaborator: §3.3/§3.4 verify the migration chain and the
+> architecture against the tree (AR-1…AR-6), §4 the 14-table data model, §5 a per-capability matrix
+> carrying an explicit status vocabulary, §6 the frontend rewrite seam **and the defect it produces
+> (F-1: the PQT page fetches `/api/v1/track/…` while only `/track/…` is rewritten, so the page 404s)**,
+> §7 risks P1-1…P3-4, §9 the document-vs-tree conflicts C-1…C-6, §10 a ranked reading list, §11 the
+> re-verification protocol and owner questions Q-1…Q-6. The snapshot grows from 57 to **58**
+> documents. The report re-runs nothing: every capability row is `TESTED` (reported), `IMPLEMENTED`
+> (static) or `ABSENT`, and nothing is claimed as `VERIFIED`. `docs/chatgpt/AMSDP_Project_Handover_2026-11-12.md` **remains
+> unregistered** — it is still an uncertain-ownership file in a folder outside §11, so the on-disk
+> count is 59 against the 58 registered here (open item, not an index claim). Two owner-controlled
+> documents carry uncommitted edits (`AMSDP_Master_Feature_List_V2.0_Draft.md` +118/−11,
+> `architecture/AMSDP_System_Architecture_V1.0.md` +63/−11); they were **read only** and are flagged in
+> the report's §9.3. Nothing was staged, committed or pushed.
 
+
+> **Revision 11 — 2026-11-13**, task `AMSDP-OWNER-DECISIONS-Q1-Q6-2026-11-13`:
+> the six owner decisions taken 2026-11-12 in answer to the context report's §11 questions
+> are now recorded and implemented. Two new documents are registered — a **decision record**
+> `decisions/AMSDP_Owner_Decisions_Q1_Q6_V1.0.md` (the first entry in `decisions/`, which
+> this index previously listed as empty) and `implementation/AMSDP_Owner_Decisions_Implementation_Report_V1.0.md`
+> (scope, evidence, `TESTED`/`VERIFIED` grading, deviations, open items). The snapshot grows
+> from 58 to **60** documents. Implementation: an explicit platform-administration capability
+> set replaced the `super_admin` wildcard and every cross-organization access is audited
+> (Q-1); a shared middleware records denied requests 403/404/422 in all eight services
+> (Q-2); the demo limitations report gained the corrected registration row and the manual
+> tracking-link fallback (Q-3, Q-4); `.github/workflows/ci.yml` plus
+> `backend/requirements-dev.txt` add the first pipeline, **unexecuted** and reported as
+> `IMPLEMENTED`, not `VERIFIED` (Q-5); the two owner-controlled documents were preserved
+> verbatim (Q-6). Backend suite 289 → **318 passed**; frontend build ✓ and 43 tests ✓.
+> Nothing was pushed; the `docs/chatgpt/` open item of Revision 10 is unchanged.
 
 ---
 
@@ -115,7 +146,7 @@ side.
 | `deployment/` | How is it deployed and hardened? | Docker, compose, ports, environments, cloud architecture |
 | `demo/` | How is it demonstrated? | Demo scripts, credentials, known limitations, API integration status |
 | `governance/` | What rules bind the agent? | Rule changes, routing, document policy, evidence standards |
-| `decisions/` | What was decided and why? | Any ADR-style decision record (currently empty) |
+| `decisions/` | What was decided and why? | Any ADR-style decision record (Q-1…Q-6 recorded, see below) |
 | `operations/` | How is it run day to day? | Runbooks, incident/response procedures (created when first needed) |
 | `testing/` | What is the test strategy/evidence? | Test plans, coverage reports, verification logs (created when first needed) |
 
@@ -185,6 +216,14 @@ side.
 
 ---
 
+## `decisions/` — what was decided and why
+
+| File | Size | Read when | Owner |
+|---|---:|---|---|
+| `AMSDP_Owner_Decisions_Q1_Q6_V1.0.md` | 9,599 | You need the authority behind the platform-administration boundary, denial auditing, the notification-worker acceptance, the limitations-report correction, the CI pipeline, or the handling of owner-controlled documents | — |
+
+---
+
 ## `implementation/` — what was built and tested
 
 | File | Size | Read when | Owner |
@@ -200,6 +239,7 @@ side.
 | `AMSDP_Frontend_Visual_Quality_Investigation.md` | 3,442 | Frontend visual regressions or styling standards | — |
 | `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` | 25,336 | Patient-name entry, the BanglaNameSense dataset/matcher/component, or any reuse in doctor/staff forms | — |
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
+| `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 20,350 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
 
 ---
 
@@ -218,6 +258,7 @@ side.
 | `AMSDP_Final_PrePush_Readiness_Report_V1.0.md` | 40,986 | Immediately before the first push: rotation evidence (D-1, closed), the two mixed-ownership files (D-2), the tracked AI-Factory artefacts (D-3), the twelve image assets, the six-commit plan and gates G-1…G-5 | — |
 | `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 58,648 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
 | `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 17,583 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
+| `AMSDP_Project_Context_Report_V1.0.md` | 60,177 | **Briefing an external collaborator, or needing an evidence-graded picture of what the tree actually contains** — per-capability status with `path:line` citations, the architecture reality check AR-1…AR-6, the defect register F-1/F-2, the risk register P1-1…P3-4, the document-vs-tree conflicts C-1…C-6, a ranked reading list, and the re-verification protocol. Read this before quoting any readiness claim | — |
 
 ---
 

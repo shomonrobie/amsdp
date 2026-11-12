@@ -344,17 +344,54 @@ administration controls.
 It must invoke other services through their contracts and must not
 bypass their business rules or directly modify their databases.
 
-### 5.11 Notification Service --- later capability
+### 5.11 Notification Service --- required capability (PQV 2026-11-08)
 
-The service boundary may be reserved, but SMS, WhatsApp, email and
-automated reminders are not Phase 1 requirements.
+Patient notifications via **WhatsApp and SMS** are required,
+organization-configurable channels (product decision
+`AMSDP-PRODUCT-DECISION-PQV-2026-11-08`). Actual provider delivery is
+provider-dependent; appointment creation must never block on messaging;
+manual link sharing is the fallback.
 
-When implemented later, it should: - Use approved external providers. -
-Avoid unnecessary patient data in message content. - Respect facility
-configuration and applicable consent/legal requirements. - Track
-delivery attempts and outcomes. - Consume versioned events or explicit
-requests. - Keep provider-specific logic out of Appointment and Queue
-services.
+Design direction:
+
+- Keep provider-specific logic out of Appointment and Queue services (a
+  notification boundary/outbox consuming domain events or explicit
+  requests).
+- Organization-scoped channel configuration: enable/disable WhatsApp and
+  SMS, select from platform-approved providers, per-channel
+  enabled/configured/operational state, org-scoped templates within
+  platform limits.
+- **Secure provider credentials:** encrypted at rest on the backend,
+  org-scoped, never in frontend bundles, logs, error responses, or source
+  control.
+- WhatsApp tracking messages include the appointment-specific PQT tracking
+  URL; SMS supports the tracking URL where applicable.
+- Track request/delivery outcomes (append-only audit); never silently
+  claim delivery.
+- Platform Super Admin remains the owner of the provider registry, plan
+  limits and defaults; organization admins configure within those bounds
+  and never see another organization's settings or secrets.
+
+### 5.11.1 Two-stage notifications and reminder scheduling (2026-11-08)
+
+- **Stage 1 — Appointment Confirmation:** emitted by Appointment Service
+  immediately after a successful booking (via notification boundary/outbox).
+- **Stage 2 — Pre-Visit Reminder ("Queue Turn Protection"):** a scheduler
+  fires a configurable number of minutes (default **10**; options **5/10**)
+  before the patient's expected visiting time. It must:
+  - recompute against the **current queue state** (respect repo reorder,
+    walk-ins and repositioning that shift the estimated turn),
+  - apply **cooldown/dedup** so repeated estimate changes do not stack
+    multiple reminders, and
+  - state in the message that estimates can change.
+- **Delivery honesty:** outcome recorded (requested/delivered/failed/
+  undelivered); "sent" never becomes "delivered"; no automatic queue
+  action from delivery state.
+- **Missed-turn repositioning** (proposed, **NOT APPROVED FOR MVP**,
+  2026-11-08): queue-side, staff-confirmed, audit-recorded, concurrency-safe
+  reorder to end of eligible queue; interacts with no-show/grace policy per
+  a future Business Rules amendment — see PQV decision §K. No repositioning
+  is implemented or auto-triggered.
 
 ## 6. Service communication
 
@@ -809,6 +846,21 @@ response and recovery.
 Phase 1 does not include EMR/EHR, diagnoses, prescriptions, clinical
 notes, vitals or payment credentials. Do not introduce these fields as
 speculative future-proofing.
+
+### 13.1 PQV security additions (2026-11-08)
+
+Per product decision `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`:
+
+- **DQDS feeds** are org/branch-scoped, read-only, token-only (no PII).
+- **PQT tracking tokens** are cryptographically unguessable, stored
+  hashed where practical, revoked on consultation start/cancellation/
+  reschedule, never reactivated; tracking responses are no-cache.
+- **Provider credentials** for WhatsApp/SMS are encrypted at rest,
+  org-scoped, and never exposed to the frontend, logs, or errors;
+  organization admins can never read another org's settings or secrets.
+- **Rate limiting** applies to login, patient creation, and public
+  tracking endpoints (429 with headers).
+- Configuration changes and notification events are audited append-only.
 
 A production privacy/security/legal review for Bangladesh and the
 selected hosting/provider environment is required before processing real

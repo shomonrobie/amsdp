@@ -30,6 +30,13 @@ AMSDP.
 flexible and reliable without requiring a facility to replace its
 existing hospital or clinic management software.
 
+> **Positioning (2026-11-08):** AMSDP's central patient-facing value is
+> reducing **unnecessary physical waiting** and better managing
+> waiting-area occupancy through real-time queue visibility and patient
+> communication — "**Less Waiting. Less Crowding. Better Healthcare
+> Experiences.**" See `docs/product/AMSDP_Product_Positioning_V1.0.md`
+> and decision `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`.
+
 ## 2. Product Positioning
 
 AMSDP is an **Appointment Management System**, not a complete Hospital
@@ -609,15 +616,13 @@ clinic, receptionist, doctor assistant or other facility staff. AMSDP
 does not provide a patient portal or require patient interaction with
 the platform.
 
-### 14.2 Communication features --- PENDING
+### 14.2 Communication features --- RESOLVED BY PQV DECISION 2026-11-08
 
-Possible future operational support: - Copyable appointment details for
-staff to communicate by phone or message. - Printable appointment slip
-or serial token. - Optional staff-triggered SMS reminder integration.
-
-These are not assumed to be part of the first release. They require
-separate approval and should not introduce a patient-facing AMSDP
-account or portal.
+Patient **notifications via WhatsApp AND SMS** are required, organization-configurable
+channels. Actual delivery depends on provider availability; manual link sharing is the
+fallback. See `docs/product/AMSDP_PQV_Patient_Queue_Visibility_Decision_V1.0.md`
+(decision `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`) and §25 of this document. These
+channels are **not** a patient-facing AMSDP account or portal.
 
 ## 15. External Advance-Payment Confirmation
 
@@ -789,7 +794,10 @@ without turning the core application into a full HMS.
     locations.
 7.  Branch and multi-location configuration details.
 8.  Whether appointment slips or printable serial tokens are required.
-9.  Whether staff-triggered SMS reminders are required.
+9.  ~~Whether staff-triggered SMS reminders are required.~~ **RESOLVED by PQV
+    Decision `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`**: WhatsApp AND SMS are
+    required, organization-configurable channels (see §25); manual sharing is the
+    fallback when provider integration is unavailable.
 10. Subscription expiry, suspension, export and retention behavior.
 11. Data correction and duplicate patient-record merge permissions.
 12. Exact appointment status transitions.
@@ -824,10 +832,17 @@ without turning the core application into a full HMS.
 
 ### Phase 3 --- Optional extensions
 
-Only after the core system is adopted and validated: - Staff-triggered
-SMS reminders. - External system integrations. - Additional operational
+Only after the core system is adopted and validated: - Additional external
+provider integrations and channels beyond WhatsApp/SMS. - Advanced
+multi-display DQDS management. - Richer notification event matrix.
+- External system integrations. - Additional operational
 reports. - Other appointment-related extensions approved by subscribers
 and AMSDP.
+
+> **Note:** SMS and WhatsApp are **not** Phase 3-optional per PQV Decision
+> `AMSDP-PRODUCT-DECISION-PQV-2026-11-08` — they are required,
+> organization-configurable channels (delivery still depends on provider
+> availability). See §25.
 
 ## 24. Product Definition Summary
 
@@ -847,3 +862,95 @@ with no cross-organization patient, doctor or appointment data sharing.
 The product should remain focused, fast, mobile-friendly, configurable
 and easy for receptionists and assistants to use throughout a busy
 working day.
+
+## 25. PQV Decision Addendum (2026-11-08)
+
+This addendum records features approved by product decision
+`AMSDP-PRODUCT-DECISION-PQV-2026-11-08`
+(`docs/product/AMSDP_PQV_Patient_Queue_Visibility_Decision_V1.0.md`).
+It is authoritative for the items below; the rest of this document remains
+a draft to be reconciled by the product owner.
+
+### 25.1 MVP/P0 (no external provider dependency)
+
+- **Digital Doctor Queue Display (DQDS)** — public, read-only waiting-room
+  display; token-based visibility only; no patient PII; org/branch-scoped
+  feeds.
+- **Personal Queue Tracking (PQT)** — appointment-specific private tracking
+  page via cryptographically unguessable tracking token (hash-at-rest) and
+  printed QR code; shows only the patient's own appointment: token,
+  doctor/branch, currently-serving token, patients ahead, estimated wait
+  time (labelled estimate), status.
+- Secure tracking links and printed QR codes.
+- Tracking-token expiry and revocation (on consultation start,
+  cancellation, reschedule); revoked tokens never reactivated.
+- No-cache responses for private tracking pages.
+- Rate limiting for public tracking endpoints (plus login and patient
+  creation).
+- Live queue position / patients-ahead and return-before-turn guidance.
+- Privacy and tenant-isolation requirements for all public/patient
+  surfaces.
+
+### 25.2 Capabilities requiring external provider accounts or paid services
+
+- **WhatsApp delivery** — requires a platform-supported WhatsApp Business
+  Provider/API account; template approval; provider costs where applicable.
+- **SMS delivery** — requires a platform-supported SMS provider (sender ID,
+  credits/costs where applicable).
+- Consent/opt-in and delivery-tracking are provider-dependent; AMSDP
+  records operational request/delivery outcomes but never silently claims
+  delivery.
+
+### 25.3 Organization-admin configuration (both channels)
+
+Organization admin enables/disables WhatsApp and SMS, and configures
+provider settings (subject to platform-supported providers); per-channel
+**enabled / configured / operational** indication; secrets stored securely
+on the backend and never exposed to the frontend; configuration is
+organization-scoped with strict tenant isolation. Platform Super Admin
+governance remains central (provider registry, plan limits, defaults).
+
+### 25.4 Later-phase enhancements
+
+Advanced multi-display DQDS management; richer notification event matrix;
+additional channels (e.g., email) if ever approved.
+
+### 25.5 Preserved exclusions
+
+PQV does **not** change the following exclusions: patient accounts,
+patient self-service registration/login/open booking, mandatory patient
+mobile application, patient messaging portal, telemedicine, payment
+gateways, EMR/EHR/clinical records. PQT uses a capability token — it is
+**not** a patient portal or account.
+
+### 25.6 Two-Stage Patient Notifications (2026-11-08 added)
+
+- **Notification 1 — Appointment Confirmation:** immediately after a
+  successful booking; content includes confirmation, date/visiting time,
+  doctor and facility/branch, queue token or reference, PQT tracking
+  link, and relevant instructions.
+- **Notification 2 — Pre-Visit Reminder ("Queue Turn Protection"):**
+  configurable lead time before expected visiting time; default **10
+  minutes**; practical options **5 and 10 minutes**; tells the patient the
+  turn is approaching, encourages return, includes the tracking link, and
+  states estimates can change. Scheduler must consider queue changes and
+  avoid duplicate/excessive reminders.
+- **Delivery honesty:** never claim delivery unless the provider confirms;
+  undelivered/unread messages never trigger automatic repositioning or
+  no-show.
+- **Classification:** **APPROVED P0 product scope** (product-owner, 2026-11-08);
+  **provider-dependent** for actual delivery; **not implemented**. Approved behaviour:
+  queue-change-aware scheduling, cooldown/deduplication, reminder cancellation on
+  cancel/reschedule/consultation-started, no return reminder after check-in, no delivery
+  claim unless provider confirms, booking functional without messaging.
+
+### 25.7 Missed-Turn Recovery & Queue Repositioning (2026-11-08, proposed)
+
+- Staff-confirmed deferral of an absent patient to the end of the
+  eligible active queue after the next patient enters the room; preserves
+  original appointment/token/queue history; audits previous/new position,
+  actor, timestamp, reason; no automatic repositioning or NO_SHOW; patient
+  never loses the appointment solely for choosing remote waiting.
+- **Classification: NOT APPROVED FOR MVP** (product-owner, 2026-11-08); proposed/later-phase;
+  not implemented. A future proposal must address Business Rules §§20–21, grace periods,
+  late arrivals, queue-state semantics, emergency/priority handling and audit events.
