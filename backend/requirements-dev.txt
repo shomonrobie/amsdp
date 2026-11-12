@@ -1,0 +1,10 @@
+# Test-only dependencies for the backend suite (local + CI, owner decision Q-5).
+#
+# Runtime dependencies stay in each service's own requirements.txt — this file
+# adds nothing a service needs at runtime, so it is never installed into a
+# service image.  Minimums follow the style of the service files.
+#
+#   python -m pip install -r backend/requirements-dev.txt
+#
+pytest>=9.0
+httpx>=0.28
