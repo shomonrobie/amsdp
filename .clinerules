@@ -1,0 +1,138 @@
+# AMSDP — Project Agent Core Rules
+
+> This file contains the root governance instructions for the AMSDP workspace.
+> All code execution, architecture, and workspace management must align here.
+> This file is the **always-loaded router**: the persistent mechanism that
+> automatically triggers governance and skill selection for every task.
+
+## 1. Precedence — resolve conflicts in this order
+
+1. **System and safety constraints** — verified runtime state, hardware runtime context (4GB VRAM / 16GB RAM), host limits. Within this level, AMSDP's verified ordering applies: verified runtime state → LLM availability routing → hardware runtime context → generic SaaS convention.
+2. **Explicit project-owner instructions and approved AMSDP business rules** — `docs/product/AMSDP_Business_Rules_V1.0.md`, `docs/product/AMSDP_MVP_SCOPE_V1.0.md`, frozen system design requirements.
+3. **AMSDP project governance** — this file and `docs/governance/AMSDP_Engineering_Governance_Assessment.md`.
+4. **Applicable engineering rules** — the agent-rules files in `ai_factory/docs/agent-rules/`, applied **only as adapted** in the governance assessment §3. Do not blindly apply CarbonTally-specific requirements.
+5. **Selected specialized skills** — see §5 Skills Registry (none installed today).
+6. **General agent defaults** — LLM availability routing fallback, generic SaaS convention.
+
+If two requirements conflict, **identify the conflict and request clarification** when it affects business behaviour, security, or scope. Never silently override approved AMSDP business rules.
+
+## 2. Automatic Task Routing — Governance & Skill Selection (mandatory, every task)
+
+**Before implementation:**
+1. Parse the task; identify the engineering domain(s) using the §4 routing table.
+2. Select the governing documents for each identified domain.
+3. **Read `docs/governance/AMSDP_Docs_Index_V1.0.md`** and load the AMSDP documents it maps to those domains (§12). This is mandatory and unsolicited — never wait for the owner to point at a document or a folder.
+4. Discover applicable skills (§5); if one is available, read its instructions FIRST.
+5. Check for conflicts with §1 precedence, §3 non-negotiables, and approved business rules.
+6. Read the required instructions before writing code.
+7. Identify dependencies and risks; confirm the task is within authorization.
+
+**During implementation:**
+8. Follow the selected rules and skills; reuse existing architecture and components.
+9. Avoid unnecessary dependencies and duplicated implementations; preserve unrelated work.
+
+**After implementation:**
+10. Run the relevant tests; verify actual functionality.
+11. Report governance and skill compliance (§6) in every implementation report, and write the report to the §11 location — choosing the folder yourself.
+
+## 3. Non-Negotiables (AMSDP Specific)
+
+- Never log or expose secrets, environment tokens, JWT material, private keys, or API credentials.
+- The user interface is never the fallback safety boundary; hidden or disabled elements do not equal real authorization.
+- Always enforce access server-side: the principal's org/branch is derived from the authenticated token, never trusted from the request body.
+- Cross-tenant or cross-branch access fails closed and returns **404** (non-disclosing), never 403.
+- The tenant key is `organization_id` — never introduce a second tenant column.
+- Audit events are append-only and persistent; never delete, truncate, or rewrite the audit trail.
+- Denials are recorded (audited), never silently swallowed.
+- Every schema change ships as a forward-only, idempotent Alembic migration; no ad-hoc production schema modification.
+- Never claim a capability that is not verified: no invented skill usage, no invented CI gates, no unrun tests.
+- Do not use a skill, tool, or library merely because it was discovered; only what is actually available and applicable.
+
+## 4. Domain → Governance & Skill Routing Table
+
+| If the task involves… | Read and apply (AMSDP governance) | Skill slot |
+|---|---|---|
+| Frontend UI, components, pages, forms, tables, dialogs, a11y, responsive | `saas-frontend-ux.md` (as adapted in Assessment §3), AMSDP UI/UX assessment, shared components (`frontend/components/`), `frontend/lib/i18n.js` | none installed → governance docs |
+| Backend API / service endpoints | `saas-application-security.md` (adapted), Business Rules Parts II–X | none installed → governance docs |
+| Authentication, login, sessions, RBAC, permissions | `saas-auth-and-authorisation.md` (adapted), Business Rules §7–8, `backend/common/permissions.py`, M2 security report | none installed → governance docs |
+| Multi-tenant data, org/branch isolation | `saas-multitenant-data.md` (adapted), Business Rules §4–6, `backend/common/auth.py` scope checks | none installed → governance docs |
+| Database schema, migrations, indexes, data integrity | `saas-multitenant-data.md` §4–5, `saas-cicd-workflow.md` §3 (adapted), Alembic chain, `backend/common/models.py` | none installed → governance docs |
+| Dashboard / analytics / metrics | `saas-frontend-ux.md` + `saas-observability.md` (adapted), dashboard aggregate endpoints, Business Rules §8 | none installed → governance docs |
+| Queue / scheduling / workflow transitions / tokens | Business Rules Parts V–VII, `saas-api-throttling.md` (concurrency, adapted), M4/M5 implementation reports | none installed → governance docs |
+| Audit / data integrity / reporting | `saas-observability.md` (adapted, redaction + denial recording), `backend/common/audit.py`, Business Rules Part X | none installed → governance docs |
+| Docker, deployment, ports, infrastructure | `saas-cicd-workflow.md` (adapted, git safety + honest CI state), `docker-compose.yml`, M6 constraints | none installed → governance docs |
+| LLM / AI tooling, agent execution routing | §8 LLM Execution Routing Policy, AILI architecture docs | none installed → governance docs |
+| Documentation: reading project docs, writing reports, doc placement or migration | §12 (reading) and §11 (writing), `docs/governance/AMSDP_Docs_Index_V1.0.md`, `docs/governance/AMSDP_Docs_Inventory_and_Migration_Manifest_V1.0.md` | none installed → governance docs |
+
+If the task spans multiple domains, apply every listed row. When a row has no installed skill, use the listed governance documents and **say so in the compliance report** — never pretend a skill was used.
+
+## 5. Skills Registry (available skills and their locations)
+
+- **Installed skill packages: NONE.** Verified: no `.clinerules/skills/`, `.claude/skills/`, or repo `skills/` directories, and no Cline skill configuration in this workspace.
+- **Available knowledge artefacts that serve as skill material:** product documents (`docs/product/`), architecture documents (`docs/architecture/`), milestone implementation reports (`docs/implementation/AMSDP_M*`, `docs/implementation/AMSDP_SEQ_*`), the governance assessment and skill-routing architecture (`docs/governance/AMSDP_Engineering_Governance_Assessment.md`, `docs/governance/AMSDP_Skill_Routing_Architecture.md`).
+- If an applicable skill is unavailable: report that fact, use the relevant project governance documents, and proceed.
+- **Installing any new formal skill requires project-owner approval** (see Skill Routing Architecture §6 for the onboarding path).
+
+## 6. Compliance Reporting (all future milestone reports)
+
+Every implementation report must contain a **Governance and Skill Compliance** section:
+- Applicable governance documents (per §4 table) and selected skills.
+- Evidence that their instructions were followed.
+- Tests and verification performed, with real results.
+- Deviations, exceptions, and unresolved issues.
+- Skills unavailable or not applicable.
+
+## 7. Evidence Standard
+
+- IMPLEMENTED = code exists and is reachable.
+- TESTED = named tests pass in this tree.
+- VERIFIED = a second, independent artefact confirms it (browser run, live API call, DB read).
+- ACCEPTED = the project owner has signed it.
+- A green suite does not make something VERIFIED; documentation does not prove implementation.
+
+## 8. LLM Execution Routing Policy
+
+- **Local Model Priority:** For all simple or isolated tasks (e.g., boilerplate generation, single-file edits, minor functions, styling tweaks), you **must** prioritize using the locally running model (`qwen2.5-coder:1.5b` at `http://localhost:11434`) if it is active.
+- **Frontier Escalation:** Only switch to or request a Frontier LLM profile (DeepSeek / OpenRouter) when handling multi-file architecture changes, deep database debugging, or complex algorithmic design.
+
+## 9. Agent Execution Boundaries & Local Hardware Safety
+
+- **Write Code Only:** Focus strictly on writing clean, production-ready code. Do not execute scripts, spin up servers, or run test suites in the terminal unless explicitly requested by the user.
+- **Task Triage Limitation:** When working via the local model context, limit edits to isolated tasks (e.g., writing individual functions, updating localized styles, creating unit test objects, or single-file refactors).
+- **Yield Protocol:** If a task requires modifying more than 2 files simultaneously, dealing with massive codebase refactor loops, or debugging long terminal stack traces, stop execution immediately and prompt the user to flip the profile to the Frontier LLM.
+- **Context Preservation:** Keep logs and terminal reads small. Avoid dump commands that flood the conversation history, as large contexts fill up the remaining 1.8 GB VRAM headroom and slow down execution speeds.
+- **No Git Disruptions:** Never run destructive Git adjustments (`git reset --hard`, `git clean -fd`, `git stash`, `git checkout .`) to tidy up the tree; roll back with `git revert`. Before staging an edited file, check it is not already carrying someone else's uncommitted work (`git diff <file>`).
+
+## 10. Project Governance Document Index
+
+- Business Rules (authoritative): `docs/product/AMSDP_Business_Rules_V1.0.md`
+- MVP scope: `docs/product/AMSDP_MVP_SCOPE_V1.0.md`
+- Governance assessment (authoritative routing detail): `docs/governance/AMSDP_Engineering_Governance_Assessment.md`
+- Skill routing architecture: `docs/governance/AMSDP_Skill_Routing_Architecture.md`
+- **Documentation navigation index (read first, every task):** `docs/governance/AMSDP_Docs_Index_V1.0.md`
+- Documentation migration manifest: `docs/governance/AMSDP_Docs_Inventory_and_Migration_Manifest_V1.0.md`
+- CarbonTally agent-rules (adapt only, never copy): `ai_factory/docs/agent-rules/`
+
+## 11. Documentation Output Location Policy (single authoritative docs tree)
+
+- **One authoritative location.** Every AMSDP document, report, assessment, runbook, plan, manifest or evidence record an agent creates must be written under `/home/shomonrobie/amsdp/docs/`, in the subfolder that matches its subject: `audit/`, `architecture/`, `product/`, `governance/`, `implementation/`, `testing/`, `deployment/`, `security/`, `operations/`, plus the existing `demo/` and `decisions/`. Reuse an existing subfolder in preference to creating a new one; never create a near-duplicate folder (e.g. `docs/reports/` alongside `docs/audit/`).
+- **`ai_factory/docs/` accepts no new AMSDP reports.** After the 2026-11-10 migration it holds only the agent-rules library (`agent-rules/`, path-bound by `workflows/engine.py` and `tests/unit/test_agent_rules.py` — never relocate it) and AI-Factory/AILI subsystem documentation. Do not write new AMSDP documents there, and do not treat it, `/tmp`, the repository root or any other directory as a fallback output location.
+- **The AI Factory / AILI documents already in `ai_factory/docs/` stay there (owner decision O-1, 2026-11-10).** The 11 `AILI_*.md` reports and the AI-Factory reference documents (`architecture.md`, `operations.md`, `permissions.md`, `workflows.md`) document the AI Factory/AILI subsystem, not AMSDP product deliverables. Do not move, rename, delete or rewrite them, and do not add them to `docs/`. They are registered as intentionally out-of-tree in `docs/governance/AMSDP_Docs_Index_V1.0.md`. Reading them is normal and expected for AI Factory/AILI work; treating them as AMSDP report locations is not.
+- **Never overwrite, never delete.** Check the destination filename before writing; if it already exists, stop and report the collision instead of overwriting. Historical versions are preserved — never delete, consolidate away or "clean up" an earlier version of a document.
+- **Filenames** follow `AMSDP_<Topic>_<Version>.md` (or the exact existing name when a document is migrated). A rename is permitted only when it is recorded in the migration manifest.
+- **Migrations are recorded acts.** Moving or renaming an existing document requires: destination collision check, byte-for-byte content preservation (SHA-256 before/after), and an entry in a manifest under `docs/governance/` giving original path, destination path, date and reason. Content must not be rewritten during a move. Files whose ownership or purpose is uncertain are not migrated — they are reported and left in place.
+- **Owner-controlled documents are read-only.** They may be read and cited, but never modified, moved, renamed or overwritten without explicit Product Owner approval for that specific act: `docs/AMSDP_Master_Feature_List_V2.0_Draft.md`, `docs/AMSDP_Master_Feature_List_V2.1_Consolidated_Draft.md`, `docs/AMSDP_Master_Feature_List_V2.2_Consolidated_Draft.md`, `docs/AMSDP_Master_Feature_List_V2.3_Consolidated_Draft.md`; `docs/AMSDP_Business_Rules_V1.1.md` and `docs/product/AMSDP_Business_Rules_V1.0.md`; `docs/AMSDP_MVP_SCOPE_V1.1.md` and `docs/product/AMSDP_MVP_SCOPE_V1.0.md`; `docs/product/` product decisions and positioning; `docs/architecture/AMSDP_System_Architecture_V1.0.md`; `docs/AMSDP_Complete_ASCII_UI_UX_Blueprint.md`; the hackathon concept note; `docs/demo/AMSDP_Limitations_Report_V1.0.md` and `docs/demo/AMSDP_Demo_Credentials_V1.0.md`. The same principle extends to any other document the Product Owner subsequently declares authoritative.
+- This section is additional to §1–§10. It relaxes none of them: §1 precedence, §3 non-negotiables, §6 compliance reporting, §7 evidence standard, §9 execution boundaries and the agent-rules library all continue to apply unchanged. Every report must state where it was written and, if it involved a migration, cite the manifest entry.
+
+## 12. Documentation Reading & Retrieval Policy (consult `docs/` before acting)
+
+- **Read before you plan, on your own initiative.** Every task begins by reading `docs/governance/AMSDP_Docs_Index_V1.0.md` — the single navigation index for the AMSDP document set. Use its *Read when* column to load the documents relevant to the identified domains. This is step 3 of §2. The project owner must never have to ask for it; if the index is missing or unreadable, say so and fall back to §4 routing plus a directory listing.
+- **Locate documents by pattern, not by guess.** The AMSDP document set is `docs/` plus its subject subfolders (`audit/`, `architecture/`, `product/`, `governance/`, `implementation/`, `testing/`, `deployment/`, `security/`, `operations/`, `demo/`, `decisions/`). Filenames are `AMSDP_<Topic>_<Version>.md`. When the index and the tree disagree, the tree is the truth and the index is a defect to be fixed.
+- **The index is a map, not the territory.** Cite the path you actually opened in this session. Never describe a document's contents you have not read, and never rely on remembered paths, remembered versions or remembered claims.
+- **Read-only means read-and-cite, not never-read.** Product Owner-controlled documents (§11) must be read whenever relevant; only modification, movement or renaming is forbidden.
+- **Source-of-truth order while reading:** verified runtime state → approved owner documents → AMSDP governance records → implementation/milestone reports → architectural intent. When two documents conflict, report the conflict; do not silently pick one (§1).
+- **Context discipline (§9).** Read the index, then only the specific documents and sections needed. For very large documents (e.g. `docs/AMSDP_Complete_ASCII_UI_UX_Blueprint.md`, ~320 KB) use targeted search instead of loading the whole file, and never paste a large document into the conversation.
+- **Secrets never travel.** `docs/demo/AMSDP_Demo_Credentials_V1.0.md` may be read to operate a demo, but no credential from it may be quoted into a report, log, commit message or reply (§3).
+- **Keep the index current.** Creating, moving, renaming or retiring a document obligates an index update in the same task — plus a manifest entry for any move (§11). An unindexed document is an incomplete task.
+- **Never ask the owner where to put a report or which document to read.** The folder follows §11 and the document follows §12. If a placement is genuinely ambiguous, choose the closest existing subfolder, state the rule you applied in the report, and raise it as an open item — do not block and do not ask in every prompt.
+

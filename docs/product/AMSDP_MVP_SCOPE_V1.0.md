@@ -832,3 +832,43 @@ Use these documents together:
 
 **MVP guiding principle:** Build a small product that genuinely works,
 not a large product that mostly exists on paper.
+
+## 16. PQV Scope Addendum (8 November 2026)
+
+Per product decision `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`
+(`docs/product/AMSDP_PQV_Patient_Queue_Visibility_Decision_V1.0.md`), and
+recorded under the scope-change process in §13:
+
+1. **Public Doctor Queue Display (DQDS)** and **Personal Queue Tracking
+   (PQT)** are **Phase 1 (MVP) capabilities**, not later-phase options.
+   - PQT requires a cryptographically unguessable tracking token
+     (hash-at-rest), appointment-specific tracking page and QR code,
+     revocation on consultation start / cancellation / reschedule
+     (tokens never reactivated), no-cache responses, and rate limiting of
+     public tracking endpoints.
+   - DQDS is public, read-only, token-based, PII-free, and strictly
+     org/branch-scoped.
+2. **Patient notifications via WhatsApp AND SMS** are required,
+   organization-configurable channels. Delivery depends on external
+   provider availability; AMSDP must not block appointment creation on
+   messaging; manual link sharing is the fallback.
+3. The six canonical roles and the existing RBAC matrix are **unchanged**.
+4. The following remain **excluded**: patient accounts, patient portal,
+   patient self-service booking, mandatory mobile application, payments,
+   EMR/EHR/clinical records.
+5. Features in this addendum are **documented requirements only** — not yet
+   implemented. This addendum adjusts MVP Scope §14's "automated messaging
+   … deferred" statement for the channel requirement only; pre-visit
+   intake and other deferred items remain deferred.
+6. **Two-Stage Patient Notifications** are **APPROVED P0 product scope**
+   (product-owner, 2026-11-08): appointment confirmation immediately after
+   booking + configurable pre-visit reminder (default 10 minutes; 5/10
+   minutes practical options); queue-change-aware scheduling;
+   cooldown/deduplication; pending reminders cancelled on cancel,
+   reschedule or consultation start; no return reminder after check-in; no
+   delivery claim unless provider confirms; booking functional without
+   messaging. **Provider-dependent for delivery; not implemented.**
+   **Missed-Turn Recovery & Queue Repositioning remains NOT APPROVED FOR MVP**
+   (proposal for a later phase; requires a future product decision and
+   Business Rules amendments — §§20–21, grace periods, late arrivals,
+   queue-state semantics, emergency/priority handling and audit events).

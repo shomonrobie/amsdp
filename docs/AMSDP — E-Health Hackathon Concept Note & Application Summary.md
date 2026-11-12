@@ -13,7 +13,7 @@ Patients in Bangladesh often face long and unpredictable waiting times when visi
 
 Receptionists and doctors' assistants must coordinate scheduled appointments, serial numbers, walk-in patients, cancellations and changes—often without a single, reliable view of the day's patient queue.
 
-This creates avoidable administrative workload, scheduling conflicts, confusion and a poor patient experience.
+This creates avoidable administrative workload, scheduling conflicts, confusion and a poor patient experience. It also means patients and their attendants often sit for hours in crowded waiting areas without knowing how much longer they must wait—closely related congestion and comfort problems for facilities and patients alike.
 
 #### The Proposed Solution
 
@@ -38,6 +38,60 @@ Rather than attempting to become a complete hospital management or electronic me
 
 It is designed around the realities of Bangladesh, where facilities differ in how they issue serials, allocate appointment times and accommodate walk-in patients. The system therefore supports configurable workflows instead of imposing one universal appointment model.
 
+#### Positioning and Patient-Facing Value
+
+> **AMSDP — Less Waiting. Less Crowding. Better Healthcare Experiences.**
+
+AMSDP is not merely an appointment and queue management system. Its central patient-facing
+value is **reducing unnecessary physical waiting** and helping facilities **manage
+waiting-area congestion** through real-time queue visibility and patient communication:
+
+- **For patients:** with a personal tracking link or printed QR code, they need not remain
+  inside a crowded waiting area for the whole estimated wait. When appropriate, they can
+  wait nearby (e.g., a café or tea stall), monitor their queue remotely, and return before
+  their expected turn.
+- **For facilities:** better visibility and coordination of appointments, walk-ins and
+  queues help manage patient flow and reduce unnecessary waiting-area occupancy.
+
+The approved boundaries are preserved: a **public DQDS** screen for the waiting room
+(token-only, no PII) and a **private PQT** page per appointment (capability token, no
+account/portal/app); **WhatsApp and SMS** as organization-admin-configurable channels with
+manual link-sharing fallback. AMSDP does **not** claim to eliminate waiting or guarantee
+consultation times. Full detail: `docs/product/AMSDP_Product_Positioning_V1.0.md`.
+
+**Primary public message**
+
+> "Patients do not need to remain inside a crowded hospital waiting area throughout their
+> entire estimated wait. They can monitor their personal queue remotely and return as their
+> turn approaches, when appropriate and safe."
+
+#### Patient Notifications and Turn Protection (two-stage)
+
+1. **Appointment confirmation** is offered immediately after a successful booking
+   (date, visiting time, doctor and facility/branch, queue token or reference, and the
+   patient's personal tracking link).
+2. **Pre-visit reminder ("Queue Turn Protection")** is offered a configurable number of
+   minutes before the expected visiting time (default **10 minutes**; **5/10 minutes**
+   practical options), telling the patient their turn is approaching, encouraging return,
+   and noting that queue estimates can change.
+
+WhatsApp and SMS remain organization-admin-configurable channels; reminders are scheduled
+with queue changes in mind to avoid duplicates; pending reminders are cancelled on
+cancellation, rescheduling or consultation start; no return reminder is sent after
+check-in; delivery is only ever claimed when the provider confirms it; booking stays
+functional without messaging. **Two-Stage Notifications are APPROVED P0 product scope
+(2026-11-08), are not yet implemented, and depend on provider availability.**
+
+#### Missed-Turn Recovery and Queue Repositioning (proposed — NOT APPROVED FOR MVP)
+
+For patients who do not return when their turn is called, staff may, after following
+facility procedure and confirming the missed turn, defer the patient to the end of the
+eligible active queue — preserving the original appointment, token and queue history, with
+the previous/new position, actor, timestamp and reason audited. No automatic repositioning
+or NO_SHOW occurs from an undelivered or unread message. This is a **proposed capability
+that requires a product decision and Business Rules amendments**; it is not MVP scope and
+not implemented.
+
 #### Target Users and Beneficiaries
 
 - Hospitals and clinics.
@@ -56,8 +110,23 @@ AMSDP aims to:
 4. Reduce avoidable scheduling conflicts and duplicate bookings.
 5. Give facilities useful operational information for improving their services.
 6. Improve the patient experience through more organized appointment handling.
+7. Reduce **unnecessary** physical waiting and better manage waiting-area occupancy.
 
-These outcomes will need to be evaluated through practical testing and facility pilots.
+These outcomes are **expected benefits and hypotheses** — they will need to be evaluated
+through practical testing and facility pilots. No impact statistics are claimed as verified.
+Proposed pilot metrics (e.g., physical waiting-area time, waiting-area occupancy, tracking
+adoption, return-before-turn rate, missed turns, appointment-to-consultation time) and the
+expected-vs-pilot-target-vs-verified distinction are defined in
+`docs/product/AMSDP_Product_Positioning_V1.0.md` §7.
+
+#### Patient Journey and Safety Summary
+
+Booking (staff-mediated) → tracking link + QR issued on eligibility → remote monitoring of the
+patient's own position → return-before-turn guidance → tracking revoked when the
+consultation starts. Remote waiting is an **option, never an obligation**: facilities can
+mark patients as not eligible to leave the waiting area; estimates are recomputed and never
+guaranteed; a return buffer is shown; manual link sharing works even without WhatsApp/SMS or
+a smartphone. Full journey: `docs/product/AMSDP_Product_Positioning_V1.0.md` §6–§8.
 
 #### Feasibility and Implementation
 
@@ -98,7 +167,13 @@ More organized appointment operations, reduced manual coordination, improved que
 AMSDP is planned as a subscription-based SaaS platform. Individual chambers, clinics and hospitals can operate separate facility workspaces. Its lightweight design and configurable workflows are intended to support adoption by facilities with different operational capacities.
 
 **Current Development Stage**  
-The product concept, scope and core workflows have been defined. The next development step is to build a prototype/MVP and validate the appointment and queue workflows with real facility users.
+The product concept, scope and core workflows have been defined. The staff-side MVP
+(organization/branch, staff, doctor, patient, scheduling, appointment, queue, dashboard and
+audit) is implemented and verified locally (milestones M1–M7). The patient-facing
+capabilities described in this note — **DQDS, Personal Queue Tracking, and WhatsApp/SMS
+notification channels** — are **P0-approved requirements that are not yet implemented**
+(see `AMSDP-PRODUCT-DECISION-PQV-2026-11-08`). The next step is to validate workflows with
+real facility users and to pilot the patient-facing capabilities.
 
 **Long-Term Vision**  
 To make appointment and patient-flow management more organized and accessible across Bangladesh's diverse healthcare facilities, while keeping the platform focused, practical and capable of future integration with the broader digital health ecosystem.
