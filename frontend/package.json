@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs",
+    "validate:dataset": "node scripts/validate-bangla-name-sense.mjs"
   },
   "dependencies": {
     "next": "^14.0.0",

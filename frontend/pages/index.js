@@ -42,7 +42,7 @@ export default function Login(){
       </form>
       <p id="lerr" style={{display:'none',color:'#d32f2f'}}></p>
       <div style={{marginTop:'1.5rem',textAlign:'center'}}><a href="#" onClick={tg} style={{color:'#1a5c7a'}}>{T('t')}</a></div>
-      <div style={{marginTop:'0.75rem',fontSize:'0.75rem',color:'#888',textAlign:'center'}}>Demo: <b>admin / admin123</b> (super_admin)</div>
+      <div style={{marginTop:'0.75rem',fontSize:'0.75rem',color:'#888',textAlign:'center'}}>Demo: <b>admin</b> · password in <code>.env</code> (<code>AMSDP_DEMO_PASSWORD_ADMIN</code>)</div>
     </div>
   );
 }
