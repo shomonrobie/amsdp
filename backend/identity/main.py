@@ -22,11 +22,14 @@ from common.auth import AuthContext, get_current_user, require_permission
 from common.audit import record_audit
 from common import login_throttle
 from common.health import install_health
+from common.denial_audit import install_denial_audit
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AMSDP Identity & Access Service")
 install_health(app, "identity")
+# Q-2: every 403/404/422 answered by this service is written to the audit trail.
+install_denial_audit(app, "identity")
 
 
 

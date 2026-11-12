@@ -16,9 +16,12 @@ from common.auth import (
 )
 from common.audit import record_audit
 from common.health import install_health
+from common.denial_audit import install_denial_audit
 
 app = FastAPI(title="AMSDP Organization Service")
 install_health(app, "organization")
+# Q-2: every 403/404/422 answered by this service is written to the audit trail.
+install_denial_audit(app, "organization")
 
 # Sequence 3 — organization notification settings (BR §35–§36, PQV §D).
 try:

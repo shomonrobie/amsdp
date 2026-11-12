@@ -20,6 +20,7 @@ from common.queue_tokens import allocate_daily_token, token_for
 from common.timeutil import operational_today
 from common.log_redaction import install_token_redaction
 from common.health import install_health
+from common.denial_audit import install_denial_audit
 
 try:
     from .dashboard import router as dashboard_router
@@ -32,6 +33,8 @@ except ImportError:
 
 app = FastAPI(title="AMSDP Appointment Service")
 install_health(app, "appointment")
+# Q-2: every 403/404/422 answered by this service is written to the audit trail.
+install_denial_audit(app, "appointment")
 app.include_router(dashboard_router)
 app.include_router(tracking_router)
 

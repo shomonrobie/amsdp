@@ -11,9 +11,12 @@ from common.database import SessionFactory
 from common.models import Doctor, DoctorBranch, Branch
 from common.auth import AuthContext, require_permission, get_current_user
 from common.health import install_health
+from common.denial_audit import install_denial_audit
 
 app = FastAPI(title="AMSDP Doctor Service")
 install_health(app, "doctor")
+# Q-2: every 403/404/422 answered by this service is written to the audit trail.
+install_denial_audit(app, "doctor")
 
 
 class DoctorCreate(BaseModel):

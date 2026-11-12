@@ -26,9 +26,13 @@ from common.auth import AuthContext, record_platform_access, require_permission
 from common.database import SessionFactory
 from common.models import AuditEvent
 from common.health import install_health
+from common.denial_audit import install_denial_audit
 
 app = FastAPI(title="AMSDP Audit Service")
 install_health(app, "audit")
+# Q-2: every 403/404/422 answered by this service is written to the audit trail.
+# The trail is append-only, so a refused read is recorded, never dropped.
+install_denial_audit(app, "audit")
 
 #: Hard ceiling per query so one call can never dump the whole trail.
 MAX_EVENTS = 500
