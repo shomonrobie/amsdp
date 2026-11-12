@@ -69,6 +69,7 @@ def build_agent(
         allow_delegation=False,
         llm=llm,
         tools=list(tools) if tools else [],
+        max_iter=60,
     )
 
 

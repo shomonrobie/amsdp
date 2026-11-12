@@ -32,7 +32,7 @@ class StaticAnalysisTests(TempRepoCase):
 
     def test_hardcoded_password_detected(self):
         code = self.repo_root / "config.py"
-        code.write_text('password = "admin123"\n', encoding="utf-8")
+        code.write_text('password = "EXAMPLE-NOT-A-REAL-SECRET"\n', encoding="utf-8")
         result = self.tool.run()
         self.assertIn("hardcoded_password", result.output)
 

@@ -200,7 +200,21 @@ class CrewAIExecutor:
         )
         task = build_stage_task(agent, request)
         crew = build_single_stage_crew(agent, task)
-        output_holder = crew.kickoff()
+        try:
+            output_holder = crew.kickoff()
+        except Exception as exc:
+            # Phase 4 regression: CrewAI's native structured-output validation
+            # can raise before returning a CrewOutput (e.g. ConverterError from
+            # handle_partial_json, or agent-executor iteration-exhaustion).
+            # Catch here so the engine's retry/failure path runs cleanly.
+            return ExecutionResult(
+                ok=False,
+                task_id=request.task_id,
+                stage_id=request.stage_id,
+                agent_id=request.agent_id,
+                error=f"live execution failed: crew.kickoff() raised: {exc}",
+                tool_operations=collector.records(),
+            )
 
         payload = getattr(output_holder, "pydantic", None)
         if payload is None:
