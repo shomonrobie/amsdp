@@ -82,9 +82,19 @@ jobs:
 
       # The suite runs against a real schema, so apply the forward-only chain
       # exactly as deployment does instead of letting models create tables.
+      #
+      # `alembic` (the console script), never `python -m alembic`: this job runs
+      # from backend/, where the migrations directory backend/alembic/ has no
+      # __init__.py and is therefore importable as a *namespace package* named
+      # `alembic`.  That directory wins the name lookup whenever the installed
+      # package is absent, and `-m` then fails with
+      #   No module named alembic.__main__; 'alembic' is a package and cannot be
+      #   directly executed
+      # which is exactly how the first pipeline run failed.  The console script
+      # resolves the installed package and is what the project's runbooks use.
       - name: Apply migrations
         working-directory: backend
-        run: python -m alembic upgrade head
+        run: alembic upgrade head
 
       - name: Run backend tests
         working-directory: backend

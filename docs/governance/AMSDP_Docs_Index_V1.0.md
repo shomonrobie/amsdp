@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-13) · **Snapshot:** 60 markdown documents, ≈2.09 MiB total (per-file sizes below; recompute with the *Maintenance* command)
+> **Date:** 2026-11-10 (revised 2026-11-13) · **Snapshot:** 61 markdown documents, ≈2.18 MiB total (per-file sizes below; recompute with the *Maintenance* command)
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -115,6 +115,22 @@
 > `IMPLEMENTED`, not `VERIFIED` (Q-5); the two owner-controlled documents were preserved
 > verbatim (Q-6). Backend suite 289 → **318 passed**; frontend build ✓ and 43 tests ✓.
 > Nothing was pushed; the `docs/chatgpt/` open item of Revision 10 is unchanged.
+
+> **Revision 12 — 2026-11-13**, task `AMSDP-CI-FIRST-RUN-FAILURE-2026-11-13`:
+> the first execution of the pipeline added by Revision 11 (run `43352469508`) failed both
+> jobs, and both causes are now diagnosed and reproduced locally. One new document is
+> registered: `implementation/AMSDP_CI_First_Run_Failure_Investigation_V1.0.md`. The
+> snapshot grows from 60 to **61** documents. Backend: the `alembic` **CLI was declared in
+> no requirements file**, and `python -m alembic` is unresolvable from `working-directory:
+> backend` because `backend/alembic/` (no `__init__.py`) shadows the distribution as a
+> namespace package — `.github/workflows/ci.yml` now calls the console script
+> (`alembic upgrade head`) and `backend/requirements-dev.txt` declares `alembic>=1.13`.
+> Frontend: the committed `frontend/pages/patients.js` is the pre-refactor page, so three
+> assertions in `tests/banglanamesense-integration.test.mjs` fail; the fix is the owner's
+> uncommitted page refactor and was **not** committed by this task. Verified locally: the
+> chain applies to a pristine database and the backend suite passes **318** on that
+> chain-created schema; the frontend suite is **43/43** with the owner's page. Neither job
+> is green *on a runner* yet, and nothing was pushed — see the report's §7 and §9.
 
 ---
 
@@ -239,7 +255,8 @@ side.
 | `AMSDP_Frontend_Visual_Quality_Investigation.md` | 3,442 | Frontend visual regressions or styling standards | — |
 | `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` | 25,336 | Patient-name entry, the BanglaNameSense dataset/matcher/component, or any reuse in doctor/staff forms | — |
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
-| `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 20,350 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
+| `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 22,388 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
+| `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` | 25,424 | Diagnosing why the CI pipeline fails, `alembic`/`python -m` invocation questions, or the frontend test failures in `banglanamesense-integration.test.mjs` | — |
 
 ---
 

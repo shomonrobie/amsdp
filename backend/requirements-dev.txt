@@ -1,10 +1,17 @@
-# Test-only dependencies for the backend suite (local + CI, owner decision Q-5).
+# Test and migration tooling for the backend (local + CI, owner decision Q-5).
 #
-# Runtime dependencies stay in each service's own requirements.txt — this file
-# adds nothing a service needs at runtime, so it is never installed into a
+# Runtime dependencies stay in each service's own requirements.txt — nothing here
+# is imported by a service at runtime, so this file is never installed into a
 # service image.  Minimums follow the style of the service files.
 #
 #   python -m pip install -r backend/requirements-dev.txt
 #
+# alembic is the migration CLI.  No service imports it, but the pipeline applies
+# the chain before running the suite (`alembic upgrade head`) and a developer
+# following the runbooks needs it too; leaving it undeclared is what made the
+# first CI run fail.  Call it as the console script, never `python -m alembic`
+# from backend/: the migrations directory backend/alembic/ is a namespace package
+# that shadows the installed name.
+alembic>=1.13
 pytest>=9.0
 httpx>=0.28

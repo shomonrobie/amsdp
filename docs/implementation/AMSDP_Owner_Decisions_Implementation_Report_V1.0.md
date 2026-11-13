@@ -165,6 +165,18 @@ explicitly outside Q-4 and is recorded as open item O-3 in §9.
   deterministic;
 - runs `python -m pytest -q`.
 
+> **Correction (2026-11-13)** — the migration step as first written called
+> `python -m alembic upgrade head`, and that form cannot work from
+> `working-directory: backend`: `backend/alembic/` has no `__init__.py`, so Python
+> resolves the name to that namespace package and reports
+> `No module named alembic.__main__; 'alembic' is a package and cannot be directly
+> executed`. On top of that, `alembic` was declared in **no** requirements file.
+> The step is now `alembic upgrade head` (console script) and
+> `backend/requirements-dev.txt` declares `alembic>=1.13`. Full analysis:
+> `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` §3. The paragraph above is
+> preserved as written; only the command form has changed.
+
+
 **`frontend` — build and unit tests**
 - `node:22`, matching `frontend/Dockerfile` (`node:22-alpine`);
 - `npm ci` against the committed `frontend/package-lock.json`,
@@ -247,6 +259,18 @@ services rather than only inside the new tests.
   `pull_request`, `workflow_dispatch`) and by running its two payloads locally —
   but **CI has never executed**. It is IMPLEMENTED, not VERIFIED. The first push
   will be its first real run.
+
+> **Correction (2026-11-13)** — it has now executed: run `43352469508` on push to
+> `hackathon-mvp` (commit `ff92558`) failed **both** jobs, so CI is no longer
+> "never executed" — it is executed and failing, for two diagnosed causes. The
+> backend cause was this report's own step and requirement file and is fixed; the
+> frontend cause is the committed `frontend/pages/patients.js`, which is O-3.
+> Both are reproduced locally and graded in
+> `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` §7; a green run on a runner
+> is still owed. The two items below on clean-environment `pip install` and
+> `alembic upgrade head` on an empty database were both executed on 2026-11-13
+> during that investigation (§6.3 there) and are no longer outstanding.
+
 - **`pip install` in a clean environment.** The suite was run against the existing
   virtualenv; the requirement files themselves were not re-resolved from scratch.
 - **`alembic upgrade head` on an empty database.** Only `alembic current`
@@ -329,6 +353,10 @@ PostgreSQL). No destructive git command was used, and nothing was pushed.
 
 - **O-1 (blocks VERIFIED).** The CI pipeline has never executed. Its first run will
   be on the first push, which this task does not perform.
+  **Status 2026-11-13 — superseded, not closed.** It executed and failed (run
+  `43352469508`); the backend cause is fixed in the workflow and the requirement
+  file, the frontend cause is O-3 below, and a green run on a runner remains owed.
+  See `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md`.
 - **O-2.** `docs/demo/AMSDP_Limitations_Report_V1.0.md` is still stale about
   storage, migrations and health endpoints (§1, §4 row "No health check
   endpoints"). Q-4 authorized only the registration correction; a wider refresh
