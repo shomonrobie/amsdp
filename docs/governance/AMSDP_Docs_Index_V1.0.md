@@ -151,6 +151,32 @@
 > Nothing was staged, committed or pushed; the pre-existing `frontend/styles/global.css`
 > modification and the untracked `_tools/`, `docker-compose.demo.yml` were not touched.
 
+> **Revision 14 — 2026-11-14**, task `AMSDP-V25-RECONCILIATION-PROPOSAL-2026-11-14` (continued):
+> one new document is registered —
+> `audit/AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` — which
+> **supersedes V1.0 as the current review copy**; V1.0 stays on disk unmodified and is retained
+> for history. V1.1 corrects all three V1.0 decision records: **D-01** is the two permitted
+> informational Yes/No payment answers and settles *nothing* about storage, nullability,
+> placement, permissions or migration (V1.0 wrongly required nullable columns and an Alembic
+> migration); **D-02** is the `.clinerules` §1/§10 authority-reference correction (V1.0 wrongly
+> made it the Missed-Turn Recovery approval and wrongly extended the change to §11); **D-03** is
+> the authorisation to prepare this reconciliation material (V1.0 wrongly made it the
+> BanglaNameSense Phase 1 decision). The Missed-Turn Recovery MVP/P0 approval of 2026-11-09 and
+> BanglaNameSense's advisory Phase 1 status are recorded in V1.1 §3.4 as separate restated
+> decisions (R-1, R-2), not attributed to D-02/D-03. V1.1 also withdraws one incorrect V1.0
+> finding (there is no V2.5 §22/§25.7 cross-reference drift) and drops the patch that would have
+> rewritten the historical `docs/product/AMSDP_Business_Rules_Revision_Proposal_V1.0_DRAFT.md`.
+> The set is now 6 patches / 35 edits / 30 hunks / 34,079 bytes, every one proved with
+> `git apply --check` (rc=0) against HEAD `c5fc646`. The snapshot grows from 62 to **63**
+> documents. Still **read-only**: no governed document, code file, schema, migration, endpoint,
+> component or test was modified; no test suite was run, because no code changed. Remaining
+> blocking items are the owner's: **U-3/U-4** (D-01 storage, permission, interface and audit
+> design — they do not block the proposal text), **U-5** (status of the superseded Business Rules
+> revision draft), **U-6** (permission to apply the `.clinerules` patch, which is an owner act
+> under §11) and **U-7** (final C-09 wording). **U-1 and U-2 are closed.** Nothing was staged,
+> committed or pushed; `frontend/styles/global.css`, `_tools/` and `docker-compose.demo.yml`
+> were not touched.
+
 
 ---
 
@@ -296,7 +322,8 @@ side.
 | `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 58,648 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
 | `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 17,583 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
 | `AMSDP_Project_Context_Report_V1.0.md` | 60,177 | **Briefing an external collaborator, or needing an evidence-graded picture of what the tree actually contains** — per-capability status with `path:line` citations, the architecture reality check AR-1…AR-6, the defect register F-1/F-2, the risk register P1-1…P3-4, the document-vs-tree conflicts C-1…C-6, a ranked reading list, and the re-verification protocol. Read this before quoting any readiness claim | — |
-| `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` correction** — the D-01…D-03 decision records, the C-01…C-09 matrix with exact replacement wording, the eight verified patches in Appendix A, the near-misses that were checked and left alone, and the blocking open items U-1…U-7. Proposal only: nothing in it is applied and no capability in it is implemented | — |
+| `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **History only — superseded by the V1.1 proposal below.** V1.0's §3 misdescribes D-01/D-02/D-03 and is not to be used for the decision records; read it only to see what changed between versions | — |
+| `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` | 115,496 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` / decision-register correction** — the corrected D-01…D-03 records (two permitted payment answers; `.clinerules` §1/§10 authority references; authorisation to prepare this material), the restated decisions R-1…R-4, the evidence-checked capability status table, the C-01…C-09 matrix with exact replacement wording, the six verified patches and the combined patch in Appendix A, the near-misses checked and left alone, and the open items U-1…U-7 (U-1/U-2 closed). Proposal only: nothing in it is applied and no capability in it is implemented | — |
 
 ---
 
