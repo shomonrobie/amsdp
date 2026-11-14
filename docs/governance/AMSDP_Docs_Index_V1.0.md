@@ -132,6 +132,26 @@
 > chain-created schema; the frontend suite is **43/43** with the owner's page. Neither job
 > is green *on a runner* yet, and nothing was pushed — see the report's §7 and §9.
 
+> **Revision 13 — 2026-11-14**, task `AMSDP-V25-RECONCILIATION-PROPOSAL-2026-11-14`:
+> one new document is registered —
+> `audit/AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` — a
+> **read-only proposal**: the 2026-11-13 owner decisions D-01 (two informational payment
+> indicators), D-02 (Missed-Turn Recovery remains approved MVP/P0) and D-03 (BanglaNameSense
+> is advisory Phase 1 scope) recorded as register-ready text, plus a reconciliation matrix
+> C-01…C-09 covering Business Rules V1.1, MVP Scope V1.1, Master Feature List V2.5, the PQV
+> decision, the decision register and `.clinerules`. The snapshot grows from 61 to **62**
+> documents. **Nothing was applied**: no governed document, schema, endpoint, component or
+> test changed, and this task's only edit to an existing file is this index entry plus this
+> revision line. Each proposed replacement was located by exact single-occurrence match and
+> proved to apply with `git apply --check` (rc=0 for all eight patches and for the combined
+> 45,809-byte patch). The proposal carries blocking open items — **U-1** (the decision
+> records are reconstructed from their effects, because no upstream decision artefact exists)
+> and **U-2** (the MTR reconciliation direction follows the later 2026-11-09 approval and
+> must be inverted if the owner intended a demotion) — and reviews nothing as implemented.
+> Nothing was staged, committed or pushed; the pre-existing `frontend/styles/global.css`
+> modification and the untracked `_tools/`, `docker-compose.demo.yml` were not touched.
+
+
 ---
 
 ## How to use this index
@@ -276,6 +296,7 @@ side.
 | `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 58,648 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
 | `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 17,583 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
 | `AMSDP_Project_Context_Report_V1.0.md` | 60,177 | **Briefing an external collaborator, or needing an evidence-graded picture of what the tree actually contains** — per-capability status with `path:line` citations, the architecture reality check AR-1…AR-6, the defect register F-1/F-2, the risk register P1-1…P3-4, the document-vs-tree conflicts C-1…C-6, a ranked reading list, and the re-verification protocol. Read this before quoting any readiness claim | — |
+| `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` correction** — the D-01…D-03 decision records, the C-01…C-09 matrix with exact replacement wording, the eight verified patches in Appendix A, the near-misses that were checked and left alone, and the blocking open items U-1…U-7. Proposal only: nothing in it is applied and no capability in it is implemented | — |
 
 ---
 
