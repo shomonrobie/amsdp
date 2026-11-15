@@ -40,7 +40,8 @@ from common.auth import _ALGO, _SECRET                            # noqa: E402
 from common.database import SessionFactory                        # noqa: E402
 from common.models import (Appointment, Branch, Doctor, DoctorBranch,  # noqa: E402
                            Notification, Organization, Patient, QueueEntry,
-                           Schedule, StaffUser, TrackingToken)
+                           QueueSequence, Schedule, ScheduleSession, StaffUser,
+                           TrackingToken)
 
 #: Password used by every user this module creates.
 PASSWORD = "testpass123"
@@ -200,6 +201,14 @@ def purge_org(org_id: str) -> None:
         s.query(QueueEntry).filter(
             QueueEntry.organization_id == org_id).delete(
             synchronize_session=False)
+        doctor_ids = [row[0] for row in s.query(Doctor.id).filter(
+            Doctor.organization_id == org_id).all()]
+        if doctor_ids:
+            # The per-(doctor, date) token/position counters are business rows:
+            # left behind, a re-run of the same flow would start at position 2.
+            s.query(QueueSequence).filter(
+                QueueSequence.doctor_id.in_(doctor_ids)).delete(
+                synchronize_session=False)
         if appointment_ids:
             s.query(TrackingToken).filter(
                 TrackingToken.appointment_id.in_(appointment_ids)).delete(
@@ -207,11 +216,13 @@ def purge_org(org_id: str) -> None:
         s.query(Appointment).filter(
             Appointment.organization_id == org_id).delete(
             synchronize_session=False)
+        # Sessions reference schedules, so they go first (AMSDP-FACILITY-DOCTOR-01).
+        s.query(ScheduleSession).filter(
+            ScheduleSession.organization_id == org_id).delete(
+            synchronize_session=False)
         s.query(Schedule).filter(
             Schedule.organization_id == org_id).delete(
             synchronize_session=False)
-        doctor_ids = [row[0] for row in s.query(Doctor.id).filter(
-            Doctor.organization_id == org_id).all()]
         if doctor_ids:
             s.query(DoctorBranch).filter(
                 DoctorBranch.doctor_id.in_(doctor_ids)).delete(

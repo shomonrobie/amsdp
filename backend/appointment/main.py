@@ -12,7 +12,9 @@ from datetime import date, datetime, timezone
 from sqlalchemy import text
 
 from common.database import SessionFactory
-from common.models import Appointment, Schedule, Patient, QueueEntry, Organization
+from common.models import (Appointment, Schedule, ScheduleSession, Patient,
+                           QueueEntry, Organization)
+
 from common.auth import AuthContext, require_permission, get_current_user
 from common.config import reserved_for_capacity
 from common.audit import record_audit
@@ -141,6 +143,12 @@ class WalkInCreate(BaseModel):
     placement: str = "end_of_queue"  # walk-in policy
 
 
+def _location_label(a) -> str:
+    """Human-readable chamber snapshot, e.g. ``2nd Floor / Cardiology / 204``."""
+    parts = [p for p in (a.floor_name, a.department_name, a.room_name) if p]
+    return " / ".join(parts)
+
+
 def _appt_to_dict(a):
     return {"id": a.id, "organization_id": a.organization_id,
         "branch_id": a.branch_id, "patient_id": a.patient_id,
@@ -156,7 +164,19 @@ def _appt_to_dict(a):
         "rescheduled_from": a.rescheduled_from,
         "rescheduled_to": a.rescheduled_to,
         "reschedule_reason": a.reschedule_reason,
+        # --- Chamber snapshot (AMSDP-FACILITY-DOCTOR-01) --------------------
+        # The *_name columns are snapshots written at booking time; the *_id
+        # columns are provenance only.  Neither is ever re-derived from the
+        # live facility tree, so a reprinted slip keeps its history.
+        "session_id": a.session_id or "",
+        "schedule_id": a.schedule_id or "",
+        "floor_id": a.floor_id or "", "floor_name": a.floor_name or "",
+        "department_id": a.department_id or "",
+        "department_name": a.department_name or "",
+        "room_id": a.room_id or "", "room_name": a.room_name or "",
+        "location_label": _location_label(a),
         "created_at": str(a.created_at) if a.created_at else "",
+
     }
 
 
@@ -187,6 +207,88 @@ def _scoped_appointment(auth, appointment_id: str):
 def _serial_token(doc_id: str, serial: int) -> str:
     """Booking-time display token — delegates to the one formatting authority."""
     return token_for(doc_id, serial)
+
+
+# ---------------------------------------------------------------------------
+# Location resolution (AMSDP-FACILITY-DOCTOR-01)
+# ---------------------------------------------------------------------------
+
+def _date_covered(row, day) -> bool:
+    """True when the row's effective window contains ``day``."""
+    if row.effective_from and row.effective_from > day:
+        return False
+    if row.effective_to and row.effective_to < day:
+        return False
+    return True
+
+
+def _resolve_location(session, *, doctor_id: str, organization_id: str,
+                      branch_id, appointment_date, start_time):
+    """Resolve the session — therefore the chamber — a booking lands in.
+
+    Returns ``(schedule, clinic_session)``.  ``clinic_session`` is ``None`` for
+    a doctor with a schedule but no facility session at that hour; those
+    bookings keep the pre-feature behaviour and simply carry no chamber.
+
+    When the doctor *does* hold an active session that weekday, a time outside
+    every session is refused: a booking must never exist without a chamber the
+    receptionist can send the patient to.
+    """
+    weekday = appointment_date.weekday()          # 0 = Monday, as in models
+    slot = start_time or ""
+
+    schedule_rows = session.query(Schedule).filter(
+        Schedule.doctor_id == doctor_id,
+        Schedule.organization_id == organization_id).all()
+    schedule = None
+    for row in (schedule_rows if not branch_id
+                else [r for r in schedule_rows if r.branch_id == branch_id]):
+        if row.status in (None, "", "active") and _date_covered(row, appointment_date):
+            schedule = row
+            break
+    if schedule is None:
+        for row in schedule_rows:
+            if row.status in (None, "", "active") and _date_covered(row, appointment_date):
+                schedule = row
+                break
+
+    query = session.query(ScheduleSession).filter(
+        ScheduleSession.organization_id == organization_id,
+        ScheduleSession.doctor_id == doctor_id,
+        ScheduleSession.day_of_week == weekday,
+        ScheduleSession.status == "active")
+    if branch_id:
+        query = query.filter(ScheduleSession.branch_id == branch_id)
+    covering = [row for row in query.all() if _date_covered(row, appointment_date)]
+    matched = [row for row in covering if slot and row.start_time <= slot < row.end_time]
+    if covering and slot and not matched:
+        raise HTTPException(
+            422, "no clinic session covers this time — book inside the "
+                 "doctor's session window")
+    clinic = matched[0] if matched else None
+    if clinic is not None and clinic.schedule is not None:
+        schedule = clinic.schedule
+    return schedule, clinic
+
+
+def _apply_location(appt, schedule, clinic) -> None:
+    """Copy the chamber onto the appointment as a permanent snapshot.
+
+    Deliberately denormalised: a slip reprinted after the facility has been
+    reorganised must still name the room the patient was sent to.
+    """
+    if clinic is not None:
+        appt.session_id = clinic.id
+        appt.schedule_id = clinic.schedule_id
+        appt.floor_id = clinic.floor_id
+        appt.floor_name = clinic.floor.name if clinic.floor else None
+        appt.department_id = clinic.department_id
+        appt.department_name = clinic.department.name if clinic.department else None
+        appt.room_id = clinic.room_id
+        appt.room_name = clinic.room.name if clinic.room else None
+    elif schedule is not None:
+        appt.schedule_id = schedule.id
+
 
 # ---------------------------------------------------------------------------
 # Appointment creation (with capacity enforcement)
@@ -223,12 +325,16 @@ def create_appointment(
                 "CONFIRMED","CHECKED_IN","IN_QUEUE"]),
         ).count()
 
-        # Check schedule capacity
-        schedule = session.query(Schedule).filter(
-            Schedule.doctor_id == data.doctor_id,
-            Schedule.organization_id == auth.organization_id,
-        ).first()
+        # Resolve the schedule and the clinic session.  The session is the
+        # authority on *where* this doctor sits at this hour, so it is resolved
+        # before the capacity check: a time outside every session is refused
+        # early rather than silently booked into no chamber.
+        schedule, clinic = _resolve_location(
+            session, doctor_id=data.doctor_id,
+            organization_id=auth.organization_id, branch_id=auth.branch_id,
+            appointment_date=apt_date, start_time=data.start_time)
         max_capacity = 1  # default per slot
+
         if schedule and schedule.slot_templates:
             for t in schedule.slot_templates:
                 if data.start_time and t["start_time"] <= data.start_time < t["end_time"]:
@@ -252,9 +358,14 @@ def create_appointment(
             Appointment.appointment_date == apt_date,
         ).count() + 1
 
+        # The appointment's branch follows the resolved session/schedule when
+        # there is one, so a doctor working two branches is filed correctly.
+        branch_for_appt = (clinic.branch_id if clinic is not None
+                           else (schedule.branch_id if schedule is not None
+                                 else (auth.branch_id or "")))
         appt = Appointment(id=str(uuid.uuid4()),
             organization_id=auth.organization_id,
-            branch_id=auth.branch_id or "",
+            branch_id=branch_for_appt,
             patient_id=data.patient_id, doctor_id=data.doctor_id,
             appointment_date=apt_date, start_time=data.start_time,
             serial_number=serial, appointment_type=data.appointment_type,
@@ -263,13 +374,18 @@ def create_appointment(
             token_number=_serial_token(data.doctor_id, serial),
             notes=data.notes, created_by=auth.user_id,
         )
+        _apply_location(appt, schedule, clinic)
         session.add(appt)
         record_audit(session, service="appointment", org_id=auth.organization_id,
             action="appointment.created", target_type="appointment", target_id=appt.id,
-            actor_id=auth.user_id, actor_role=auth.role, branch_id=auth.branch_id or "",
+            actor_id=auth.user_id, actor_role=auth.role, branch_id=branch_for_appt,
             after={"patient_id": data.patient_id, "doctor_id": data.doctor_id,
                    "appointment_date": data.appointment_date, "start_time": data.start_time,
-                   "status": "BOOKED", "booking_source": data.booking_source})
+                   "status": "BOOKED", "booking_source": data.booking_source,
+                   "session_id": appt.session_id or "",
+                   "room_id": appt.room_id or "",
+                   "location": _location_label(appt)})
+
         session.commit()
         # Sequence 3 — N1 confirmation + N2 reminder planning (best effort).
         _notify("on_appointment_booked", appt.id)
@@ -288,6 +404,7 @@ def create_appointment(
 def list_appointments(
     patient_id: str = Query(None), doctor_id: str = Query(None),
     date: str = Query(None), status: str = Query(None),
+    date_from: str = Query(None), date_to: str = Query(None),
     auth: AuthContext = Depends(get_current_user),
 ):
     session = SessionFactory()
@@ -300,6 +417,17 @@ def list_appointments(
             try: q = q.filter(Appointment.appointment_date == datetime.strptime(date, "%Y-%m-%d").date())
             except: pass
         if status: q = q.filter(Appointment.status == status)
+        # Inclusive calendar window, used by the week/day booking grid.
+        # Malformed bounds answer 422 instead of being ignored: a typo must never
+        # widen the result to "every appointment in the organization".
+        if date_from:
+            try: window_start = datetime.strptime(date_from, "%Y-%m-%d").date()
+            except ValueError: raise HTTPException(422, "invalid date_from, use YYYY-MM-DD")
+            q = q.filter(Appointment.appointment_date >= window_start)
+        if date_to:
+            try: window_end = datetime.strptime(date_to, "%Y-%m-%d").date()
+            except ValueError: raise HTTPException(422, "invalid date_to, use YYYY-MM-DD")
+            q = q.filter(Appointment.appointment_date <= window_end)
         return [_appt_to_dict(a) for a in q.order_by(Appointment.appointment_date.desc(), Appointment.start_time).all()]
     finally:
         session.close()
@@ -399,8 +527,18 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
         h.append({"from":prev_status,"to":"RESCHEDULED","reason":data.reason,
             "actor":auth.user_id,"at":str(datetime.now(timezone.utc))})
         orig.status_history = h
-        new_a = Appointment(id=str(uuid.uuid4()),
+        # The new booking carries its own chamber snapshot: the room may well
+        # differ from the original (other weekday, other branch).
+        new_schedule, new_clinic = _resolve_location(
+            session, doctor_id=orig.doctor_id,
             organization_id=orig.organization_id, branch_id=orig.branch_id,
+            appointment_date=nd,
+            start_time=data.new_start_time or orig.start_time)
+        new_branch = (new_clinic.branch_id if new_clinic is not None
+                      else (new_schedule.branch_id if new_schedule is not None
+                            else orig.branch_id))
+        new_a = Appointment(id=str(uuid.uuid4()),
+            organization_id=orig.organization_id, branch_id=new_branch,
             patient_id=orig.patient_id, doctor_id=orig.doctor_id,
             appointment_date=nd, start_time=data.new_start_time or orig.start_time,
             serial_number=serial, booking_source=orig.booking_source, status="BOOKED",
@@ -408,7 +546,9 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
             token_number=_serial_token(orig.doctor_id, serial),
             rescheduled_from=appointment_id, reschedule_reason=data.reason,
             created_by=auth.user_id)
+        _apply_location(new_a, new_schedule, new_clinic)
         session.add(new_a); session.flush()
+
         orig.rescheduled_to = new_a.id
         record_audit(session, service="appointment", org_id=orig.organization_id,
             action="appointment.rescheduled", target_type="appointment",
@@ -532,20 +672,42 @@ def register_walk_in(data: WalkInCreate,
         count = session.query(Appointment).filter(
             Appointment.doctor_id==data.doctor_id,
             Appointment.appointment_date==today).count() + 1
+        # A walk-in is filed into today's session chamber as well: the patient
+        # has to be sent to *this* doctor's room.  Arriving outside a session
+        # window is legitimate for a walk-in, so the resolver's 422 degrades to
+        # "no chamber" rather than refusing the registration.
+        try:
+            w_schedule, w_clinic = _resolve_location(
+                session, doctor_id=data.doctor_id,
+                organization_id=auth.organization_id, branch_id=auth.branch_id,
+                appointment_date=today,
+                start_time=datetime.now().strftime("%H:%M"))
+        except HTTPException:
+            w_schedule, w_clinic = _resolve_location(
+                session, doctor_id=data.doctor_id,
+                organization_id=auth.organization_id, branch_id=auth.branch_id,
+                appointment_date=today, start_time=None)
+        w_branch = (w_clinic.branch_id if w_clinic is not None
+                    else (w_schedule.branch_id if w_schedule is not None
+                          else (auth.branch_id or "")))
         a = Appointment(id=str(uuid.uuid4()), organization_id=auth.organization_id,
-            branch_id=auth.branch_id or "", patient_id=data.patient_id,
+            branch_id=w_branch, patient_id=data.patient_id,
             doctor_id=data.doctor_id, appointment_date=today,
             serial_number=count, appointment_type="walk_in",
             booking_source="walk_in", status="CONFIRMED",
             status_history=[{"from":"","to":"CONFIRMED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(data.doctor_id, count),
             notes=data.notes, created_by=auth.user_id)
+        _apply_location(a, w_schedule, w_clinic)
         session.add(a)
         record_audit(session, service="appointment", org_id=auth.organization_id,
             action="appointment.walk_in_created", target_type="appointment", target_id=a.id,
-            actor_id=auth.user_id, actor_role=auth.role, branch_id=auth.branch_id or "",
+            actor_id=auth.user_id, actor_role=auth.role, branch_id=w_branch,
             after={"patient_id": data.patient_id, "doctor_id": data.doctor_id,
-                   "status": "CONFIRMED", "appointment_type": "walk_in", "notes": data.notes})
+                   "status": "CONFIRMED", "appointment_type": "walk_in", "notes": data.notes,
+                   "session_id": a.session_id or "",
+                   "location": _location_label(a)})
+
         session.commit()
         # Sequence 3: hooks decide walk-ins need no message (see hooks.py).
         _notify("on_appointment_booked", a.id)
@@ -584,8 +746,14 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
         h.append({"from":orig.status,"to":"RESCHEDULED","reason":data.reason,
             "actor":auth.user_id,"at":str(datetime.now(timezone.utc))})
         orig.status_history = h; orig.status = "RESCHEDULED"
+        t_schedule, t_clinic = _resolve_location(
+            session, doctor_id=data.new_doctor_id,
+            organization_id=orig.organization_id, branch_id=data.new_branch_id,
+            appointment_date=nd,
+            start_time=data.new_start_time or orig.start_time)
+        t_branch = t_clinic.branch_id if t_clinic is not None else data.new_branch_id
         new_a = Appointment(id=str(uuid.uuid4()), organization_id=orig.organization_id,
-            branch_id=data.new_branch_id, patient_id=orig.patient_id,
+            branch_id=t_branch, patient_id=orig.patient_id,
             doctor_id=data.new_doctor_id, appointment_date=nd,
             start_time=data.new_start_time, serial_number=serial,
             booking_source=orig.booking_source, status="BOOKED",
@@ -593,7 +761,9 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             token_number=_serial_token(data.new_doctor_id, serial),
             rescheduled_from=appointment_id, reschedule_reason=data.reason,
             notes=f"Transferred from {orig.doctor_id}", created_by=auth.user_id)
+        _apply_location(new_a, t_schedule, t_clinic)
         session.add(new_a); session.flush()
+
         orig.rescheduled_to = new_a.id
         record_audit(session, service="appointment", org_id=orig.organization_id,
             action="appointment.transferred", target_type="appointment",

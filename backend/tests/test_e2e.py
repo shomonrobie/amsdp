@@ -151,8 +151,22 @@ class TestMvpWorkflow:
         assert r.status_code == 422
 
     def test_05_create_doctor(self, svc):
+        # Business Rules: doctor mobile-number uniqueness is enforced within the
+        # organization.  Doctors are reference rows (the append-only audit trail
+        # points at them) and therefore survive purge_org, so a second run of
+        # this module must find the previous Dr. E2E instead of re-registering
+        # it — exactly what an operator does before adding a doctor.
+        mobile = "01811111111"
+        found = svc.doctor.get("/api/v1/doctors", headers=_auth("admin"),
+                               params={"q": mobile})
+        assert found.status_code == 200, found.text
+        existing = [d for d in found.json()["items"] if d["mobile"] == mobile]
+        if existing:
+            STATE["doctor_id"] = existing[0]["id"]
+            assert existing[0]["organization_id"] == ORG
+            return
         r = svc.doctor.post("/api/v1/doctors", headers=_auth("admin"), json={
-            "name": "Dr. E2E", "mobile": "01811111111",
+            "name": "Dr. E2E", "mobile": mobile,
             "speciality": "Medicine", "branch_ids": [BR]})
         assert r.status_code == 201, r.text
         STATE["doctor_id"] = r.json()["id"]

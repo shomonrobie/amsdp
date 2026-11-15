@@ -19,6 +19,15 @@ install_health(app, "scheduling")
 # Q-2: every 403/404/422 answered by this service is written to the audit trail.
 install_denial_audit(app, "scheduling")
 
+# AMSDP-FACILITY-DOCTOR-01 — recurring clinic sessions with a chamber.  They
+# project into ``schedules.slot_templates``, so the calendar keeps its contract.
+try:
+    from .sessions import router as sessions_router
+except ImportError:                                   # script-mode import
+    from sessions import router as sessions_router    # type: ignore
+app.include_router(sessions_router)
+
+
 
 class SlotTemplate(BaseModel):
     day_of_week: int

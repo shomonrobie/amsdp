@@ -41,23 +41,35 @@ PERMISSIONS: dict[str, list[str]] = {
         # --- administrative capabilities already in the matrix --------------
         "org.create", "org.read", "org.manage",
         "branch.read", "branch.manage",
+        "facility.read", "facility.manage",
         "staff.read", "staff.manage", "audit.read",
         # --- clinic capability namespaces (tenant support), no wider ---------
         "patient.*", "doctor.*", "schedule.*", "appointment.*", "queue.*",
     ],
     "org_admin": [
         "org.create", "org.read",
-        "org.manage", "branch.manage", "staff.read", "staff.manage",
+        "org.manage", "branch.manage",
+        # AMSDP-FACILITY-DOCTOR-01: floors / departments / rooms / specialities
+        # are organization configuration, so they get their own capability.
+        # BMDC verification is *not* a new capability: it is gated on the
+        # existing "doctor.manage" (inside the "doctor.*" namespace below), so
+        # the matrix gains no invented privilege.
+        "facility.read", "facility.manage",
+        "staff.read", "staff.manage",
         "patient.*", "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
     "branch_admin": [
-        "branch.read", "staff.read",
+        "branch.read", "facility.read", "facility.manage", "staff.read",
         "patient.*", "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
     "receptionist": [
         "patient.create", "patient.read", "patient.search",
+        # Read-only facility access: a receptionist must be able to see which
+        # rooms exist at this branch when booking, and must not be able to
+        # create or retire them.
+        "facility.read",
         "appointment.create", "appointment.read", "appointment.modify",
         "queue.view", "queue.reorder", "queue.checkin", "queue.manage",
         # Sequence 3 / BR §27A: staff-confirmed missed-turn recovery.
@@ -65,6 +77,7 @@ PERMISSIONS: dict[str, list[str]] = {
     ],
     "doctor": [
         "patient.read", "patient.search",
+        "facility.read",
         "schedule.read", "appointment.read", "queue.view", "queue.consult",
         # Sequence 3 / BR §27A.1 + §27A.3: an authorized doctor may confirm a
         # missed turn and reposition within the same queue. This does NOT grant
@@ -73,6 +86,7 @@ PERMISSIONS: dict[str, list[str]] = {
     ],
     "assistant": [
         "patient.read", "patient.search",
+        "facility.read",
         "appointment.read", "queue.view",
     ],
 }

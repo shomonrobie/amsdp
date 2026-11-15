@@ -152,6 +152,74 @@ class TestAppointmentRead:
         assert client.get("/api/v1/appointments").status_code == 401
 
 
+class TestAppointmentCalendarWindow:
+    """The week/day booking grid asks for an inclusive [date_from, date_to] window.
+
+    Added with the calendar view: one request per visible week instead of one per
+    day. The existing single-`date` filter is untouched.
+    """
+
+    def test_window_returns_only_the_days_inside_it(self, client):
+        inside = _book(client, day="2031-05-14").json()["id"]
+        _book(client, day="2031-05-13")
+        _book(client, day="2031-05-21")
+        r = client.get("/api/v1/appointments",
+                       params={"date_from": "2031-05-14", "date_to": "2031-05-20"},
+                       headers=headers(RECP))
+        assert r.status_code == 200
+        assert [a["id"] for a in r.json()] == [inside]
+
+    def test_window_bounds_are_inclusive(self, client):
+        appt_id = _book(client, day="2031-05-16").json()["id"]
+        r = client.get("/api/v1/appointments",
+                       params={"date_from": "2031-05-16", "date_to": "2031-05-16"},
+                       headers=headers(RECP))
+        assert [a["id"] for a in r.json()] == [appt_id]
+
+    def test_one_sided_window_is_supported(self, client):
+        first = _book(client, day="2031-05-01").json()["id"]
+        second = _book(client, day="2031-05-09").json()["id"]
+        r = client.get("/api/v1/appointments", params={"date_from": "2031-05-05"},
+                       headers=headers(RECP))
+        assert [a["id"] for a in r.json()] == [second]
+        r = client.get("/api/v1/appointments", params={"date_to": "2031-05-05"},
+                       headers=headers(RECP))
+        assert [a["id"] for a in r.json()] == [first]
+
+    def test_window_combines_with_other_filters(self, client):
+        keep = _book(client, patient=PAT, day="2031-05-12").json()["id"]
+        _book(client, patient=PAT_WALKIN, day="2031-05-12")
+        r = client.get("/api/v1/appointments",
+                       params={"date_from": "2031-05-12", "date_to": "2031-05-18",
+                               "patient_id": PAT},
+                       headers=headers(RECP))
+        assert [a["id"] for a in r.json()] == [keep]
+
+    def test_malformed_window_is_rejected(self, client):
+        """A typo must not silently widen the result to the whole organization."""
+        assert client.get("/api/v1/appointments", params={"date_from": "12-05-2031"},
+                          headers=headers(RECP)).status_code == 422
+        assert client.get("/api/v1/appointments", params={"date_to": "tomorrow"},
+                          headers=headers(RECP)).status_code == 422
+
+    def test_window_never_crosses_the_tenant_boundary(self, client):
+        ensure_branch("legacy-appt-other-br", OTHER_ORG)
+        ensure_doctor("legacy-appt-foreign-doc", OTHER_ORG, name="Dr. Foreign",
+                      mobile="01700001099")
+        ensure_user("legacy_appt_foreign_recp2", "receptionist", OTHER_ORG,
+                    "legacy-appt-other-br")
+        foreign = client.post(
+            "/api/v1/appointments", headers=headers("legacy_appt_foreign_recp2"),
+            json={"patient_id": PAT_FOREIGN, "doctor_id": "legacy-appt-foreign-doc",
+                  "appointment_date": "2031-05-14", "start_time": "09:00"})
+        assert foreign.status_code == 201
+        mine = _book(client, day="2031-05-14").json()["id"]
+        r = client.get("/api/v1/appointments",
+                       params={"date_from": "2031-05-14", "date_to": "2031-05-14"},
+                       headers=headers(RECP))
+        assert [a["id"] for a in r.json()] == [mine]
+
+
 class TestAppointmentStatus:
     def test_booked_to_confirmed(self, client):
         appt_id = _book(client).json()["id"]

@@ -32,3 +32,41 @@ def reserved_for_capacity(capacity: int, org_config=None) -> int:
     if cfg["walk_in_reserve_mode"] == "count":
         return min(value, capacity)
     return int(round(capacity * value / 100.0))
+
+
+#: Registration policy defaults (AMSDP-FACILITY-DOCTOR-01).
+#:
+#: ``bmdc_required`` — a doctor cannot be **activated** (created as active, or
+#: moved from inactive to active) without a BMDC registration number.
+#:
+#: ``bmdc_verification_required`` — activation additionally needs that
+#: registration to have been *verified* by staff.
+#:
+#: Both default to **False**, and that is deliberate rather than lax.  Every
+#: doctor row that existed before this release has ``registration_number``
+#: ``NULL``; a default of "required" would have made the first save of each of
+#: those doctors a 422, i.e. a silent mass lock-out caused by a deploy.  The
+#: enforcement is therefore real but **opt-in per organization**: set
+#: ``registration_policy`` in the org config (``PATCH
+#: /api/v1/orgs/{id}/registration-policy``) and every activation path enforces
+#: it from that point on.  Whether the *platform* default should become
+#: "required" is a product decision for the owner, not a migration side effect.
+DEFAULT_REGISTRATION_POLICY = {
+    "bmdc_required": False,
+    "bmdc_verification_required": False,
+}
+
+
+def get_registration_policy(org_config=None) -> dict:
+    """Read ``registration_policy`` from the Organization ``config`` JSON.
+
+    Unknown or non-boolean values fall back to :data:`DEFAULT_REGISTRATION_POLICY`
+    — a malformed config must never silently disable the BMDC rule.
+    """
+    cfg = (org_config or {}).get("registration_policy") or {}
+    policy = dict(DEFAULT_REGISTRATION_POLICY)
+    for key in policy:
+        value = cfg.get(key)
+        if isinstance(value, bool):
+            policy[key] = value
+    return policy

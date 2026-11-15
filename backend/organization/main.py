@@ -30,6 +30,16 @@ except ImportError:
     from notification_config import router as notification_router
 app.include_router(notification_router)
 
+# AMSDP-FACILITY-DOCTOR-01 — facility hierarchy: floors, departments, chambers
+# and the organization's speciality catalogue.  Mounted here because every one
+# of those entities belongs to a branch or an organization.
+try:
+    from .facility import router as facility_router
+except ImportError:
+    from facility import router as facility_router
+app.include_router(facility_router)
+
+
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
