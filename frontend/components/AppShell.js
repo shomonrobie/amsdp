@@ -1,13 +1,14 @@
 /* AppShell — shared application shell: sidebar, header, breadcrumbs.
    Role-aware nav; responsive drawer on mobile; branch-context selector. */
 import { useState, useEffect } from 'react';
-import { getUser, signOut, getActiveBranch, setActiveBranch, apiFetch } from '../lib/auth';
+import { getUser, signOut, getActiveBranch, setActiveBranch, apiFetch, can } from '../lib/auth';
 import { t, getLocale, setLocale } from '../lib/i18n';
 
 const NAV = [
   { href: '/dashboard', perm: '*', key: 'dash' },
   { href: '/orgs', perms: ['org.manage'], key: 'org' },
   { href: '/branches', perms: ['branch.manage', 'branch.read', 'staff.read', 'queue.view'], key: 'branches' },
+  { href: '/facilities', perms: ['facility.read'], key: 'facilities' },
   { href: '/patients', perms: ['patient.read', 'patient.create'], key: 'patients' },
   { href: '/doctors', perms: ['doctor.*', 'patient.read'], key: 'doctors' },
   { href: '/staff', perms: ['staff.manage'], key: 'staff' },
@@ -18,10 +19,16 @@ const NAV = [
   { href: '/audit', perms: ['audit.read'], key: 'audit' },
 ];
 
-function hasAnyPerm(user, perms) {
+/**
+ * Nav visibility is a convenience, not an authorization boundary: every page and
+ * every endpoint checks the capability again server-side.  Hiding an entry the
+ * role cannot read keeps the menu honest (a receptionist sees Facilities but not
+ * Staff), and a role that reaches a page by URL still gets the server's answer.
+ */
+function visible(user, item) {
   if (!user.role) return false;
-  if (user.role === 'super_admin') return true;
-  return true; // nav presence per page is gated server-side too; keep simple client filter below
+  if (item.perm === '*') return true;
+  return (item.perms || []).some((p) => can(p));
 }
 
 export default function AppShell({ active, breadcrumbs = [], children }) {
@@ -59,11 +66,7 @@ export default function AppShell({ active, breadcrumbs = [], children }) {
   };
 
   const toggleLocale = () => { const n = locale === 'bn' ? 'en' : 'bn'; setLocale(n); setL(n); };
-  const nav = NAV.filter((n) => {
-    if (user.role === 'super_admin') return true;
-    if (n.perm === '*') return true;
-    return true; // all roles may navigate to permitted pages; the server enforces deep perms
-  });
+  const nav = NAV.filter((n) => visible(user, n));
   const activeBranchName = (branches.find((b) => b.id === activeBranch) || {}).name || '';
 
   const sidebar = (

@@ -20,15 +20,21 @@ export function can(perm) {
   if (u.role === 'super_admin') return true;
   const perms = {
     super_admin: ['*'],
-    org_admin: ['org.manage', 'staff.manage', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult'],
-    branch_admin: ['staff.read', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult'],
+    org_admin: ['org.manage', 'staff.manage', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
+      // AMSDP-FACILITY-DOCTOR-01 — floors / departments / rooms / specialities
+      'facility.read', 'facility.manage'],
+    branch_admin: ['staff.read', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
+      'facility.read', 'facility.manage'],
     receptionist: ['patient.create', 'patient.read', 'appointment.create', 'appointment.modify', 'queue.view', 'queue.reorder', 'queue.checkin', 'queue.manage',
       // Sequence 3 / BR §27A — mirrors backend/common/permissions.py
-      'queue.recover', 'queue.reposition'],
+      'queue.recover', 'queue.reposition',
+      // Read-only facility access: a receptionist sees which rooms exist when booking.
+      'facility.read'],
     doctor: ['patient.read', 'schedule.read', 'appointment.read', 'queue.view', 'queue.consult',
       // Sequence 3 / BR §27A.1 + §27A.3 — same-queue recovery only, no queue.manage
-      'queue.recover', 'queue.reposition'],
-    assistant: ['patient.read', 'appointment.read', 'queue.view'],
+      'queue.recover', 'queue.reposition',
+      'facility.read'],
+    assistant: ['patient.read', 'appointment.read', 'queue.view', 'facility.read'],
   }[u.role] || [];
   if (perms.includes('*')) return true;
   return perms.some(p => perm === p || (p.endsWith('.*') && perm.startsWith(p.slice(0, -1))));
