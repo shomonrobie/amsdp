@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-13) · **Snapshot:** 61 markdown documents, ≈2.18 MiB total (per-file sizes below; recompute with the *Maintenance* command)
+> **Date:** 2026-11-10 (revised 2026-11-15) · **Snapshot:** 69 markdown documents (per-file sizes below; recompute with the *Maintenance* command)
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -176,7 +176,128 @@
 > under §11) and **U-7** (final C-09 wording). **U-1 and U-2 are closed.** Nothing was staged,
 > committed or pushed; `frontend/styles/global.css`, `_tools/` and `docker-compose.demo.yml`
 > were not touched.
+> **Revision 15 — 2026-11-15**, task `AMSDP-DEMO-DIAGNOSIS-CURRENT-STATE-AUDIT-2026-11-15`:
+> one new document is registered — `audit/AMSDP_Current_State_Demo_Diagnosis_and_Feature_Audit_V1.0.md`
+> — a **read-only** diagnosis of why the hackathon demo fails and staff cannot sign in: the four
+> defects D1–D4 (frontend container down since 2026-11-12 with no restart policy; host-level
+> container↔container forwarding dropped after two Docker daemon restarts on 2026-11-14 with `ufw`
+> active; the isolated `amsdp_demo` stack never created on this host, its queue empty and its demo
+> appointments stale-dated; and the `/orgs` SSR `sessionStorage` crash), proof that the six demo
+> credentials are **correct** (6/6 bcrypt verifications, booleans only, no secret reproduced), the
+> 64-route / 14-page / 311-test feature matrix graded IMPLEMENTED / TESTED / VERIFIED, and the
+> prioritised repair plan R-1…R-10. Nothing was fixed, restarted, seeded or committed. The header
+> count is also corrected in this revision: the tree held **65** documents before this entry while
+> the header still claimed 61 and the revision log claimed 63 — the tree is the truth (§12) — so the
+> snapshot now reads **66** after registering this document. One further file is registered for the
+> first time in the new `chatgpt/` section below:
+> `chatgpt/AMSDP_Hackathon_Implementation_Backlog.md`, added by the HEAD commit and never indexed;
+> that folder is **not** one of the §11 subject folders, so the file is reported and left in place
+> (ownership not asserted, nothing moved, no manifest entry required).
+> **Revision 16 — 2026-11-15** (same task, second pass after an **owner correction**): the owner
+> stated that AMSDP had been configured to start automatically, that the demo users existed and that
+> sign-in had worked. Re-verification **confirmed both halves** and added **Part G** to
+> `audit/AMSDP_Current_State_Demo_Diagnosis_and_Feature_Audit_V1.0.md`: the startability mechanism that
+> does exist (`_tools/amsdp_stack.sh`, documented in `README.md` §3 and in the one-command restart
+> report) is a **manual one-command start with no auto-healing** — the omission of `restart:` policies
+> is a recorded, deliberate deferral (`deployment/AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md:642-643`
+> and `:724`); no systemd unit, cron entry or XDG autostart exists for AMSDP; all ten containers report
+> `RestartPolicy=no`; and the automation itself is **untracked** (`git ls-files _tools` → 0 files).
+> The same pass **corrected four statements** in Parts A–C (frontend exit `255` was a stack-wide stop
+> and a *skipped* restart, not a crash; the restart-policy omission was a documented deferral, not an
+> oversight; the inference that absent audit rows prove no login was **wrong**, because `staff_login`
+> writes no audit row — `backend/identity/main.py:184-219`; and journal rows read without `--utc` are
+> local time, not `Z`). It also adds open items **O-G** (which command restarted nine of ten
+> containers on 2026-11-14 is unattributable — the snap Docker journal is empty for those windows),
+> **O-H** (`_tools/` and `docker-compose.demo.yml` uncommitted) and **O-I** (`docs/demo/` content is
+> stale and, being owner-controlled, was cited but **not modified**). New evidence rows 19–26 in the
+> report's F.4. File size in the table below refreshed. No document was moved, renamed or deleted.
+> **Revision 17 — 2026-11-15**, task `AMSDP-AUTOSTART-AND-DEMO-LOGIN-FIX-2026-11-15`: the owner
+> then instructed that the stack be made to **restart automatically with demo data so all users
+> can log in**, so the read-only diagnosis was followed by a repair. One new document is
+> registered — `deployment/AMSDP_Auto_Start_and_Demo_Data_Recovery_V1.0.md` — recording what
+> changed and how it was verified. In outline: the real blocker was **`D2`** (the old
+> `amsdp_default` bridge had lost its forwarding rules; a newly created network on the same
+> daemon forwarded correctly, which isolated it to per-bridge state), fixed by **recreating the
+> network** (`down`/`up`) with **no `sudo`, no `ufw` change and no firewall disabled**;
+> `D1` cleared by starting the frontend; `D4` fixed in `frontend/pages/orgs.js` by adding the
+> `typeof window` guard that every other page already had. Automatic restart is now two
+> independent layers: `restart: unless-stopped` on all ten services in `docker-compose.yml`
+> (the earlier deferral in `deployment/AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md:642-643`
+> is explicitly superseded in that file's header, by owner instruction) and the systemd user
+> unit `amsdp-autostart.service` installed by the new `_tools/install_autostart.sh`, which
+> waits for the daemon, runs `_tools/amsdp_stack.sh up`, then re-runs the idempotent demo seed.
+> Three new `_tools/` scripts were added (`amsdp_autostart.sh`, `install_autostart.sh`,
+> `verify_demo_login.sh`). Verified live: 10/10 services `running/healthy/ok`; **6/6 demo
+> accounts return `HTTP 200` with the correct role** through
+> `http://localhost:3100/api/v1/staff/login`; all ten pages server-render `200`; the daemon
+> restarted a failing probe container 7 times in 9 s; the boot unit ran to `status=0/SUCCESS`
+> with `Linger=yes`; demo data is dated today (7 appointments, 2 queue entries); and row counts
+> including `audit_events` (3,484) are **identical before and after**, so nothing was lost.
+> Not verified and recorded as open items: a real crash of a production service (needs root),
+> and an actual host reboot (unit state verified, reboot not performed) — **O-J**, **O-K**,
+> **O-L**; the carried **O-H** (`_tools/` still untracked) and **O-I** (`docs/demo/` stale,
+> owner-controlled) remain open, plus **O-M** (`frontend/styles/global.css` carries unrelated
+> uncommitted work that is now inside the rebuilt image). No document was moved, renamed or
+> deleted; nothing was staged or committed.
+> **Revision 18 — 2026-11-15**, task `AMSDP-APPOINTMENT-CALENDAR-VIEW-2026-11-15`, owner
+> instruction *"refactor বুকিং to calendar view like standard booking system"*. One new
+> document is registered — `implementation/AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md`
+> — recording the refactor and its evidence. In outline: the appointment surface is now a
+> **week/day grid** (`frontend/components/AppointmentCalendar.js`) over a **pure, unit-tested
+> model** (`frontend/lib/calendar/grid.js`, 15 tests), with `তালিকা` preserving the old
+> table, a **slot picker** that replaces free-text time entry and shows `booked/capacity`
+> per slot, and a patient **type-ahead** replacing the 100-row select. Two traps were
+> handled explicitly: `slot_templates[].day_of_week` is **0 = Monday**
+> (`backend/seed/seed_demo.py:101`) while the display week starts **Saturday**, so
+> `pythonWeekday()` and `jsDay()` are separate functions; and the real demo data contains
+> off-grid times (`21:30`, `02:45`), so the row axis is the **union of slot starts and
+> appointment times** — a naive slot grid would have hidden those bookings. One additive,
+> backwards-compatible backend change: optional `date_from`/`date_to` on
+> `GET /api/v1/appointments` (inclusive, `422` on a malformed bound, organization scoping
+> unchanged, no migration). Verified: frontend **72/72** `node --test`, production build
+> `exit 0`, backend appointment suite **25/25**, live window query `200` with **0 rows
+> outside the range**, the old single-`date` filter still returning the same 8 rows for
+> 2026-11-15, malformed bounds `422`, and the rebuilt image serving the new bundle. The
+> component's **emitted markup** is also asserted, without a browser and without a new
+> dependency, by server-rendering it with the SWC compiler and `react-dom/server` that
+> already ship with Next (`frontend/tests/calendar-render.test.mjs`, 6 tests, report §7.4).
+> Not verified and recorded as open item **O-N**: no browser session was used, so the
+> rendered pixels and click paths still need a human look; plus **O-O** (seeded schedules
+> cover only Mon–Thu), **O-P** (demo bookings outside clinic hours), **O-Q** (appointment
+> reads remain organization-scoped, not branch-scoped) and **O-R** (an empty out-of-hours
+> row still offers `+`; current behaviour pinned by a test, left for an owner decision).
+> Carried **O-M**
+> (`frontend/styles/global.css` untouched by this task). No document was moved, renamed or
+> deleted; nothing was staged or committed.
 
+> **Revision 19 — 2026-11-15**, task `AMSDP-FACILITY-DOCTOR-01` (frontend half), owner
+> instruction to finish the redesigned facility/doctor screens on top of the already-green
+> backend. One new document is registered —
+> `implementation/AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` — and the
+> snapshot grows from 68 to **69** documents. In outline: `/doctors` is now a real directory
+> (canonical `01XXXXXXXXX` mobile, structured specialities, per-branch chamber, BMDC badge
+> and verification dialog, photograph) instead of a form over one free-text speciality;
+> `/schedules` is a chamber-assignment screen (weekday + half-open window + room, with the
+> two 409s warned about client-side by `windowConflicts`); `/facilities` is new and renders
+> the floor → department → room tree with room usage and the speciality catalogue. Two new
+> pure modules carry the rules — `frontend/lib/phone.js` (mirror of
+> `backend/common/phone.py`) and `frontend/lib/facility.js` (weekdays 0 = Monday, BMDC
+> transitions, chamber labels, overlap/conflict logic) — and both are covered by
+> `frontend/tests/facility-doctor.test.mjs` (21 tests, including JSX compilation of the three
+> pages through the SWC build shipped with Next, and Bangla/English dictionary parity).
+> That suite also proved the frontend proxy table complete: `PATCH`/`DELETE
+> /api/v1/floors|departments|rooms|specialties/{id}` were missing from
+> `frontend/next.config.js`, so facility edits and retirements would have 404'd in the
+> browser while the API itself was correct; the rewrites were added and the test was shown
+> to fail without them.
+> Verified: frontend **93/93** `node --test`, `next build` **exit 0** with `/doctors`,
+> `/facilities`, `/schedules` emitted, `alembic heads` → `f7d2b4c6e8a1` as the only head, and
+> a live `amsdp-db-1` read confirming `alembic_version = f7d2b4c6e8a1`, the
+> `facility_floors|departments|rooms`, `doctor_branches` and `schedule_sessions` tables, the
+> doctor `bmdc_*` columns and the appointment chamber-snapshot columns. **Not verified and
+> recorded as open items:** no browser session was used (report §7.1) and the backend suite
+> was not re-run because no backend file changed in this phase (§7.2). No document was moved,
+> renamed or deleted, so no manifest entry is due; nothing was staged or committed.
 
 ---
 
@@ -303,6 +424,8 @@ side.
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
 | `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 22,388 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
 | `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` | 25,424 | Diagnosing why the CI pipeline fails, `alembic`/`python -m` invocation questions, or the frontend test failures in `banglanamesense-integration.test.mjs` | — |
+| `AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` | 20,982 | Appointment booking UI, the week/day calendar grid, `lib/calendar/grid.js`, slot capacity, the `date_from`/`date_to` window on `GET /api/v1/appointments`, or how the component's markup is asserted without a browser (§7.4) | — |
+| `AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` | 15,455 | Doctor Management (`/doctors`), chamber assignment (`/schedules`), the facility tree (`/facilities`), `lib/phone.js`, `lib/facility.js`, BMDC verification UI, or why a conflicting session is warned about client-side but still decided by the server | — |
 
 ---
 
@@ -324,6 +447,7 @@ side.
 | `AMSDP_Project_Context_Report_V1.0.md` | 60,177 | **Briefing an external collaborator, or needing an evidence-graded picture of what the tree actually contains** — per-capability status with `path:line` citations, the architecture reality check AR-1…AR-6, the defect register F-1/F-2, the risk register P1-1…P3-4, the document-vs-tree conflicts C-1…C-6, a ranked reading list, and the re-verification protocol. Read this before quoting any readiness claim | — |
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **History only — superseded by the V1.1 proposal below.** V1.0's §3 misdescribes D-01/D-02/D-03 and is not to be used for the decision records; read it only to see what changed between versions | — |
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` | 115,496 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` / decision-register correction** — the corrected D-01…D-03 records (two permitted payment answers; `.clinerules` §1/§10 authority references; authorisation to prepare this material), the restated decisions R-1…R-4, the evidence-checked capability status table, the C-01…C-09 matrix with exact replacement wording, the six verified patches and the combined patch in Appendix A, the near-misses checked and left alone, and the open items U-1…U-7 (U-1/U-2 closed). Proposal only: nothing in it is applied and no capability in it is implemented | — |
+| `AMSDP_Current_State_Demo_Diagnosis_and_Feature_Audit_V1.0.md` | 60,907 | **Before any attempt to "fix the demo" or to claim the demo is ready** — why the demo fails and staff cannot sign in (D1 frontend container absent since the stack-wide stop of 2026-11-12 and skipped in the 2026-11-14 nine-of-ten restart; D2 host-level container↔container forwarding dropped after the 2026-11-14 Docker daemon restarts with `ufw` active; D3 the isolated `amsdp_demo` stack never created, queue empty and appointments stale-dated; D4 the `/orgs` SSR `sessionStorage` crash), the evidence that the demo credentials are **correct** and **demonstrably worked** (6/6 bcrypt verifications; authenticated `super_admin` audit events at 2026-11-12T20:46:41Z), the 64-route / 14-page / 311-test matrix graded IMPLEMENTED / TESTED / VERIFIED, the prioritised repair plan R-1…R-10 with exact verification gates, the evidence appendix (26 rows), the actions deliberately not performed, the open items O-A…O-I, and **Part G** — reconciliation with the owner's account, the four corrections to Parts A–C, and the container-level timeline. Read-only: nothing was fixed | — |
 
 ---
 
@@ -333,6 +457,7 @@ side.
 |---|---:|---|---|
 | `AMSDP_M8_Cloud_Deployment_Architecture.md` | 29,056 | Any Docker/compose/port/environment change | — |
 | `AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md` | 43,270 | Infra hardening, restart policy, health checks, container limits | — |
+| `AMSDP_Auto_Start_and_Demo_Data_Recovery_V1.0.md` | 16,196 | **Before restarting, reseeding, rebooting or re-diagnosing the local stack** — why two containers could not reach each other across the Docker bridge and the network-recreate fix (no `sudo`, no `ufw` change); the two auto-restart layers (`restart: unless-stopped` ×10 and the systemd user unit `amsdp-autostart.service`) and how they supersede the earlier deferral; the `/orgs` SSR fix; the new `_tools/` scripts (`amsdp_autostart.sh`, `install_autostart.sh`, `verify_demo_login.sh`); the live evidence (10/10 healthy, **6/6 demo logins**, 10/10 pages 200, `restarts=7`, data counts identical); and the open items **O-J**/**O-K**/**O-L**, plus carried **O-H**/**O-I** and new **O-M** | — |
 
 ---
 
@@ -384,6 +509,22 @@ indexed file-by-file here. Two things live there, both intentionally:
 For an AILI or AI Factory task, read those files directly under
 `ai_factory/docs/`; do not expect them here. New AMSDP reports are still never
 written there (§11).
+
+---
+
+## `chatgpt/` — one unregistered document, folder ownership unconfirmed (open item O-D)
+
+`find docs -type f -name '*.md'` reports one document in a folder that is **not** among the §11
+subject folders. It is registered here so the index matches the tree (§12), but it is **not** moved
+and its ownership is not asserted (§11: uncertain ownership → report and leave in place).
+
+| File | Size | Read when | Owner |
+|---|---:|---|---|
+| `AMSDP_Hackathon_Implementation_Backlog.md` | 24,229 | Needing the backlog framing that accompanied the 2026-11-14 reconciliation commit — a planning document, **not** an authority: business rules, MVP scope and the frozen design still govern (§1) | unconfirmed — folder outside the §11 set |
+
+Open item: whether `docs/chatgpt/` should be folded into an existing subject folder (`audit/` or
+`governance/`) is the Product Owner's decision. Until then the file stays exactly where it is, and
+no agent may treat `docs/chatgpt/` as an approved output location (§11).
 
 ---
 
