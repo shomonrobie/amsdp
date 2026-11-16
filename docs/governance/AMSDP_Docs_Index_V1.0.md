@@ -283,7 +283,7 @@
 > pure modules carry the rules — `frontend/lib/phone.js` (mirror of
 > `backend/common/phone.py`) and `frontend/lib/facility.js` (weekdays 0 = Monday, BMDC
 > transitions, chamber labels, overlap/conflict logic) — and both are covered by
-> `frontend/tests/facility-doctor.test.mjs` (21 tests, including JSX compilation of the three
+> `frontend/tests/facility-doctor.test.mjs` (22 tests, including JSX compilation of the three
 > pages through the SWC build shipped with Next, and Bangla/English dictionary parity).
 > That suite also proved the frontend proxy table complete: `PATCH`/`DELETE
 > /api/v1/floors|departments|rooms|specialties/{id}` were missing from
@@ -294,10 +294,19 @@
 > `/facilities`, `/schedules` emitted, `alembic heads` → `f7d2b4c6e8a1` as the only head, and
 > a live `amsdp-db-1` read confirming `alembic_version = f7d2b4c6e8a1`, the
 > `facility_floors|departments|rooms`, `doctor_branches` and `schedule_sessions` tables, the
-> doctor `bmdc_*` columns and the appointment chamber-snapshot columns. **Not verified and
-> recorded as open items:** no browser session was used (report §7.1) and the backend suite
-> was not re-run because no backend file changed in this phase (§7.2). No document was moved,
-> renamed or deleted, so no manifest entry is due; nothing was staged or committed.
+> doctor `bmdc_*` columns and the appointment chamber-snapshot columns. The stack was then
+> **rebuilt** (`docker compose up -d --build frontend organization doctor scheduling
+> appointment`) because the compose images are baked with no bind mounts, and the rebuilt
+> stack was probed: all six services healthy, `/facilities`, `/doctors` and `/schedules` serve
+> 200, the previously 404 facility/session/profile routes answer 401 (i.e. they now exist),
+> an authenticated `org_admin` read returns 200 from the facility tree, speciality, doctors,
+> sessions and registration-policy endpoints, and the frontend proxy returns FastAPI JSON
+> rather than Next's HTML 404 page for the by-id facility and session routes (report §5.4).
+> **Not verified and recorded as open items:** nothing rendered was checked in a browser
+> (report §7.1), the backend suite was not re-run (§7.2), and the demo organisation still has
+> an empty facility tree, so the screens open on their empty state (§7.8). No document was
+> moved, renamed or deleted, so no manifest entry is due. The work is committed as
+> `729054c`, `7f681c4` and `3875f18` on `hackathon-mvp` and pushed to `origin`.
 
 ---
 
@@ -425,7 +434,7 @@ side.
 | `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 22,388 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
 | `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` | 25,424 | Diagnosing why the CI pipeline fails, `alembic`/`python -m` invocation questions, or the frontend test failures in `banglanamesense-integration.test.mjs` | — |
 | `AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` | 20,982 | Appointment booking UI, the week/day calendar grid, `lib/calendar/grid.js`, slot capacity, the `date_from`/`date_to` window on `GET /api/v1/appointments`, or how the component's markup is asserted without a browser (§7.4) | — |
-| `AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` | 15,455 | Doctor Management (`/doctors`), chamber assignment (`/schedules`), the facility tree (`/facilities`), `lib/phone.js`, `lib/facility.js`, BMDC verification UI, or why a conflicting session is warned about client-side but still decided by the server | — |
+| `AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` | 20,296 | Doctor Management (`/doctors`), chamber assignment (`/schedules`), the facility tree (`/facilities`), `lib/phone.js`, `lib/facility.js`, BMDC verification UI, why a conflicting session is warned about client-side but still decided by the server, and what the post-rebuild runtime probes do and do not prove (§5.4) | — |
 
 ---
 

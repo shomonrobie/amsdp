@@ -19,8 +19,11 @@ working screens over the facility/session API that already exists:
 | Facilities | `/facilities` | Floor → department → room tree, room usage, speciality catalogue |
 
 Status of each: **IMPLEMENTED** (code exists and is reachable), **TESTED** (§5 names
-the passing tests) and **COMPILED** (`next build` emits the routes). Not **VERIFIED**
-in a browser by an independent artefact — no live click-through was performed, see §7.
+the passing tests), **COMPILED** (`next build` emits the routes) and, after the
+2026-11-15 stack rebuild, **runtime-verified at the HTTP level** (§5.4): the built
+image serves all three pages, the API answers the exact calls the screens make, and
+the proxy forwards the by-id routes. What is still **not VERIFIED** is the visual
+result — no browser click-through has been performed (§7).
 
 ---
 
@@ -165,6 +168,75 @@ information_schema.columns (appointments) → floor_id, floor_name, department_i
 head, so no `upgrade head` was needed and none was run (the database was already
 there).
 
+### 5.4 Runtime verification after the 2026-11-15 stack rebuild
+
+A restart alone would not have shown these screens: the compose stack uses **baked
+images with no bind mounts** (`frontend/Dockerfile` is `COPY . .` + `RUN npm run
+build` + `CMD npm start`), so the running containers still held 16-hour-old frontend
+code and 5-day-old backend images. Measured before the rebuild:
+
+```
+docker exec amsdp-frontend-1 ls /app/pages        → no facilities.js
+grep -c api/v1/floors /app/.next/routes-manifest.json → 0
+docker exec amsdp-organization-1 ls /app/facility.py  → missing
+curl localhost:8111/api/v1/branches/x/facility    → 404
+```
+
+Rebuilt with `docker compose up -d --build frontend organization doctor scheduling
+appointment` (identity came along as a dependency). After the rebuild:
+
+| Probe | Result |
+|---|---|
+| `docker ps` (amsdp-*) | frontend, organization, doctor, scheduling, appointment, identity all `Up (healthy)` |
+| `docker exec amsdp-organization-1 ls /app/facility.py` | present |
+| `docker exec amsdp-doctor-1 ls /app/profile.py` | present |
+| `docker exec amsdp-scheduling-1 ls /app/sessions.py` | present |
+| `ls /app/pages` in the frontend | 17 pages, `facilities.js` included |
+| `grep -c api/v1/floors routes-manifest.json` | 1 (rewrite baked into the build) |
+| `grep -c api/v1/sessions routes-manifest.json` | 1 |
+| `GET :8111/api/v1/branches/x/facility` | **401** (route exists; 404 before) |
+| `DELETE :8111/api/v1/floors/x` | **401** |
+| `PATCH :8111/api/v1/specialties/x` | **401** |
+| `GET :8113/api/v1/doctors/x/branches` | **401** |
+| `DELETE :8114/api/v1/sessions/x` | **401** |
+| `GET :3100/facilities`, `/doctors`, `/schedules` | **200**, 200, 200 |
+
+Authenticated smoke test (org_admin, read-only, status codes and counts only):
+
+```
+POST :8110/api/v1/staff/login            → 200
+GET  :8111/api/v1/orgs                   → 200  items=1
+GET  :8111/api/v1/orgs/{id}/branches     → 200  items=4
+GET  :8111/api/v1/branches/{id}/facility → 200  floors=0 depts=0 rooms=0
+GET  :8111/api/v1/orgs/{id}/specialties  → 200  items=0
+GET  :8113/api/v1/doctors?branch_id=…    → 200  items=4
+GET  :8114/api/v1/branches/{id}/sessions → 200  items=0
+GET  :8113/api/v1/orgs/{id}/registration-policy → 200 {"bmdc_required":false,…}
+```
+
+Doctor records returned by the rebuilt service carry the new profile fields
+(`bmdc_verification_status`, `bmdc_verified_at`, `registration_number`,
+`specialties`, `specialty_ids`, `branches`, `primary_branch_id`, `mobile`,
+`has_photo`), which is direct evidence that `doctor/profile.py` is the code serving
+requests, not the pre-rebuild `main.py`.
+
+Proxy proof that separates "proxied and the service said no" from "never proxied" —
+same 404 status, different body:
+
+```
+DELETE :3100/api/v1/floors/<missing>   → application/json  {"detail":"not found"}   ← reached the service
+DELETE :3100/api/v1/sessions/<missing> → application/json  {"detail":"not found"}   ← reached the service
+DELETE :3100/api/v1/nosuchresource/x   → text/html         <!DOCTYPE html>…          ← Next's own 404 page
+```
+
+Database totals after the rebuild (`floors=37 depts=25 rooms=29 specialties=14
+doctor_branches=8 schedule_sessions=0`): the hierarchy has been written to before,
+but those rows belong to other organisations created by the backend test suite. The
+demo organisation that `org_admin` logs into is **empty**, so `/facilities` opens on
+its empty state and `/schedules` has no session to list until floors, rooms,
+specialities and a chamber session are created. That is expected for a new feature,
+not a defect — but it is why the screens look blank on first visit.
+
 ---
 
 ## 6. Governance and Skill Compliance (§6)
@@ -197,15 +269,20 @@ documents above plus the repository's own conventions carried the task.
 - §11/§12: this report was written to `docs/implementation/`, an existing
   subfolder; `docs/governance/AMSDP_Docs_Index_V1.0.md` was updated in the same
   task. No document was moved, renamed or deleted, so no manifest entry is due.
+- §7 evidence standard: §5.4 states exactly what the runtime probes do and do not
+  establish — that the built image serves the screens and the API answers the calls
+  the screens make, **not** that anything renders correctly to a human.
 
 ---
 
 ## 7. Deviations, limitations and open items
 
 1. **Not browser-verified.** The evidence is a green suite, a successful
-   production build and a schema read against the live database. No human or
-   independent artefact confirmed a click-through — by §7 of `.clinerules` these
-   screens are IMPLEMENTED/TESTED/COMPILED, **not VERIFIED**, and not ACCEPTED.
+   production build, a schema read against the live database, and — after the
+   2026-11-15 rebuild — HTTP-level runtime checks (§5.4: pages 200, API 200 with a
+   real token, proxy forwarding proved by body type). No human or independent
+   artefact confirmed a *rendered* click-through, so by §7 of `.clinerules` the
+   visual result is still **not VERIFIED** and nothing here is ACCEPTED.
 2. **Backend suite not re-run in this phase.** No backend file was edited, so the
    216-passed result is inherited, not re-established here. Anyone re-verifying
    should run `cd backend && python -m pytest` and treat the number as the
@@ -232,3 +309,10 @@ documents above plus the repository's own conventions carried the task.
    The form therefore cannot unset a level once set; correcting it to another
    number works. Fixing it needs a sentinel on the request model, i.e. a backend
    contract decision.
+8. **The demo organisation has no facility data yet.** After the rebuild, the
+   branch `org_admin` sees (`demo-br-001`) returns `floors=0 depts=0 rooms=0` and
+   the org's speciality catalogue is empty, so `/facilities` opens blank and
+   `/schedules` cannot offer a chamber. The 37 floors / 29 rooms / 14 specialities
+   in the database belong to organisations created by the backend test suite. To
+   demo this feature, create a floor, a department, a room and the specialities on
+   `/facilities` first — or seed them — before adding a chamber to a session.
