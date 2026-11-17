@@ -116,3 +116,28 @@ Port 5432 and 3000 remain untouched. ✅
 ---
 
 **M4 complete. Ready for M5 authorization — queue operations.**
+
+---
+
+## 10. Later extension — optional symptoms and onset (AMSDP-SYMPTOM-01, 2026-11-16)
+
+This report documents the M4 appointment service as it was built. A later task
+added an **optional** symptom-recording capability inside the same booking flow.
+It is recorded here so this report does not read as the current state of the
+service without it; the full account is
+`docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md`.
+
+| Area | What was added |
+|---|---|
+| Database | `symptom_catalog` (org-owned bilingual catalogue), `appointment_symptoms` (one row per recorded symptom, `kind` = catalogue \| free_text, with a booking-time name snapshot), and `appointments.symptom_onset_code` / `.symptom_onset_note`. Migration `b3d7e91f6a24`. |
+| Endpoints | `GET /api/v1/symptoms` and `GET /api/v1/symptoms/onset-options` (both `symptom.read`). |
+| Booking | `POST /api/v1/appointments` and `POST /api/v1/appointments/walk-in` accept four optional fields: `symptom_ids`, `symptom_texts`, `symptom_onset`, `symptom_onset_note`. |
+| Responses | Every appointment payload now carries `symptoms[]`, `symptom_onset`, `symptom_onset_note`. |
+| Lifecycle | Reschedule and transfer copy the recorded symptoms and onset to the new appointment; the original rows stay with the original visit. |
+| Audit | `appointment.created` / `appointment.walk_in_created` add `symptom_count`, `symptom_ids`, `symptom_text_count`, `symptom_onset` — never the free text. |
+
+What did **not** change: the §18 status lifecycle, capacity enforcement, the
+token/serial authority, walk-in placement, the chamber resolution and the
+existing booking contract — a booking with no symptoms behaves exactly as
+before, which the M4 test module still proves (25 tests) alongside the 25 new
+ones.

@@ -400,4 +400,29 @@ Nothing was staged, committed, pushed, merged or deployed. Unrelated uncommitted
 work in the tree was preserved; no `git reset`, `stash`, `checkout` or `clean`
 was run.
 
+---
+
+## 13. Later reuse — appointment symptom search (AMSDP-SYMPTOM-01, 2026-11-16)
+
+A later task reused this capability for a different dataset: searching a
+bilingual *symptom* catalogue in the appointment booking form. The reuse is
+recorded here so this report stays an accurate index of who depends on what.
+Full account:
+`docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md`.
+
+| Layer | Reused? | Why |
+|---|---|---|
+| `lib/bangla-name-sense/normalize.js` | **Yes, imported directly** | NFC, the three nukta compositions, zero-width removal, whitespace collapse, Latin case-folding and `matchesWordPrefixesInOrder` are the language sense. `frontend/lib/symptom-catalogue/matcher.js` imports them and re-implements none of them. |
+| `lib/bangla-name-sense/matcher.js` | No | Its index collapses on one Bangla name with one English alias; a catalogue entry needs several aliases plus a context tie-break. |
+| `lib/bangla-name-sense/controller.js` | No | Different interaction: a multi-select with chips, not a single text field. |
+| `data/bangla_name_sense.json` | No | The symptom catalogue is database-backed, not bundled. |
+
+**Nothing in this module, its dataset or its component was modified.** The
+dataset hash test, the matcher tests, the controller tests and the integration
+tests are unchanged and still pass (they are part of the 135-test frontend run
+recorded in the symptom report §10.4). A contract test in the symptom feature
+asserts that its matcher imports `normalize.js` and never imports this module's
+`matcher.js` or `controller.js`, so the reuse cannot silently become a fork.
+
+
 | Approved business rules | Master Feature List §25.8 governs the feature and was followed clause by clause (§3–§8). No approved rule was modified or reinterpreted. Note: the brief listed `AMSDP_Master_Feature_List_V2.2_Consolidated_Draft.md`; that version contains **no** BanglaNameSense section (`grep -n BanglaNameSense` → no match), so the approved requirement text used is §25.8 of **V2.3**, which is the version that records the approval (`Change: Added BanglaNameSense as a P0 core MVP feature`, 2026-11-10). Both files were read-only |
