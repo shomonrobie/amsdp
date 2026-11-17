@@ -1,10 +1,16 @@
 # AMSDP — Tenant and Organization Management Specification V1.0
 
 > **Document ID:** `AMSDP_Tenant_and_Organization_Management_Specification`
-> **Version:** V1.0 · **Date:** 2026-11-17 · **Branch:** `hackathon-mvp` @ `133ce83`
-> **Status:** **SPECIFICATION — PROPOSED, NOT APPROVED.** No mechanism here is authorised for
-> implementation; each carries a status label and is ratified through ADR-SAAS-005 and
-> ADR-SAAS-012 in the architecture specification §12.
+> **Version:** V1.0 · **Revision 2 (owner decision reconciliation) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `409a929`
+> **Status:** **SPECIFICATION — DECISION-RECONCILED, NOT IMPLEMENTED.** The sixteen `O-SaaS` items and
+> directions A1–A4 were decided by the Product Owner on 2026-11-17 (architecture specification §1.5,
+> §14.3). This document applies those rulings: the model decisions are `OWNER-APPROVED`, every
+> mechanism here remains `SPECIFIED` and unbuilt, and nothing here authorises implementation.
+> **Evidence base:** `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §5 (tenant as built).
+> **Companion documents:** architecture specification (states, pipeline, ADRs), IAM specification
+> (principals, membership), subscription & entitlement specification (plans, quotas), implementation
+> roadmap.
+> **No code, schema, migration, compose or frontend file was changed to produce it.**
 > **Evidence base:** `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §5 (tenant as built).
 > **Companion documents:** architecture specification (states, pipeline, ADRs), IAM specification
 > (principals, membership), subscription & entitlement specification (plans, quotas), implementation
@@ -33,7 +39,13 @@ and limits** are expressed, and how one is **closed** without destroying the aud
 ### 1.3 Authority order
 
 `.clinerules` §3 → `AMSDP_Business_Rules_V1.1.md` §37–§40 → `AMSDP_Master_Feature_List_V2.5`
-§5.1, §19.1–§19.3, §21 → owner decisions Q-1…Q-6 → this document (`PROPOSED`).
+§5.1, §19.1–§19.3, §21 → owner decisions Q-1…Q-6 → **owner decision packet 2026-11-17** (`O-SaaS-1…16`,
+A1–A4 — architecture specification §1.5, §12, §14.3) → this document (mechanisms `SPECIFIED`).
+
+The two-axis status vocabulary of architecture specification §1.3 governs here: a decision axis
+(`OWNER-APPROVED` / `SPECIFIED` / `OPEN` / `DEFERRED` / `SUPERSEDED`) and an evidence axis
+(`NOT IMPLEMENTED` / `IMPLEMENTED` / `TESTED` / `VERIFIED`). `PROPOSED` is retained as the exact
+synonym of `SPECIFIED`.
 
 ---
 
@@ -198,6 +210,11 @@ which exist.
 the approved business rule. `suspended` is stronger than `read_only` because it is a deliberate
 governance act, not an expiry consequence.
 
+> **Revision 2 note.** ADR-SAAS-005 (the five-state model reproduced above) is **`OWNER-APPROVED`**
+> — it was ratified as part of the 2026-11-17 packet, together with `O-SaaS-14` (suspension needs a
+> second operator) and `O-SaaS-16` (closure needs a second approver and retains data by default).
+> The state set is unchanged by those rulings; only the **actor requirement** tightens (§5.2).
+
 ### 5.2 Transition table
 
 | From → To | Trigger | Actor | Reversible |
@@ -207,9 +224,9 @@ governance act, not an expiry consequence.
 | `active` → `read_only` | period end reached, grace policy = 0 | scheduler | yes, by renewal |
 | `grace` → `read_only` | grace elapsed | scheduler | yes, by renewal |
 | `read_only` → `active` | renewal recorded | `platform.subscription.manage` | yes |
-| `active`/`grace`/`read_only` → `suspended` | governance decision, reason required | `platform.tenant.manage` | yes |
+| `active`/`grace`/`read_only` → `suspended` | governance decision, reason required, **second operator approval required (O-SaaS-14)** | `platform.tenant.manage` + approver | yes |
 | `suspended` → `active` | decision reversed | `platform.tenant.manage` | yes |
-| any → `closed` | termination request, retention review done | `platform.tenant.manage` (owner approval for data questions) | **no** |
+| any → `closed` | termination request, retention review done, **second approver signed (O-SaaS-16)**; data retained by default | `platform.tenant.manage` + approver | **no** |
 | `closed` → anything | — | — | **forbidden**; a returning customer gets a new tenant |
 
 Two rules make this table safe to implement:
@@ -217,6 +234,10 @@ Two rules make this table safe to implement:
 1. **Every transition is compare-and-set** on the current state. The scheduler and an operator
    acting at the same moment cannot both win, so no "suspended then silently reactivated by an
    expiry job" sequence is possible.
+2. **Two of these transitions are two-person acts** (O-SaaS-14, O-SaaS-16). The approval is a
+   recorded row — a distinct principal, a timestamp and a reason — not a checkbox on the same
+   screen. A single operator holding both `platform_admin` and `platform_ops` cannot self-approve;
+   the approver must be a different account (IAM §7.3).
 ### 5.3 State × operation matrix (authoritative; identical in every document)
 
 | State | Sign in | Read (GET/HEAD) | Write (POST/PATCH/PUT/DELETE) | Export | Public display / tracking |
@@ -245,12 +266,12 @@ Three consequences that are easy to get wrong:
 
 | Point in time | Action | Channel | Status |
 |---|---|---|---|
-| 14 days before period end | `subscription.expiry_reminder` | notification worker (**not deployed** — Phase 4 prerequisite) | `PROPOSED`, blocked |
-| 3 days before | second reminder | same | `PROPOSED`, blocked |
-| at period end, grace > 0 | `active` → `grace`, audit | scheduler | `PROPOSED` |
-| at period end, grace = 0 | `active` → `read_only` | scheduler | `PROPOSED` |
-| grace elapsed | `grace` → `read_only` | scheduler | `PROPOSED` |
-| 30 days in `read_only` | **nothing automatic** — suspension is a human decision (BR §38) | — | `PROPOSED` |
+| 14 days before period end | `subscription.expiry_reminder` | notification worker (**not deployed** — Phase 4 prerequisite) | `SPECIFIED`, blocked |
+| 3 days before | second reminder | same | `SPECIFIED`, blocked |
+| at period end, grace > 0 | `active` → `grace`, audit | scheduler | `SPECIFIED` |
+| at period end, grace = 0 | `active` → `read_only` | scheduler | `SPECIFIED` |
+| grace elapsed | `grace` → `read_only` | scheduler | `SPECIFIED` |
+| 30 days in `read_only` | **nothing automatic** — suspension is a human decision (BR §38) requiring a second operator (O-SaaS-14) | — | `SPECIFIED` |
 
 The last row matters: BR §39 requires notice and read-only preservation; it does not authorise an
 automatic suspension or deletion. An expiry job that eventually suspends on its own would exceed
@@ -437,6 +458,13 @@ the same reasoning applies to limits: a limit may constrain *growth*, never *ope
    builds both sides from the already-mutated row, so the audit row records a change from X to X
    (audit R-04). The fix is one line at the correct place, and it is a precondition for this
    document's claim that lifecycle and configuration changes are auditable at all.
+7. **Event-plane routing (O-SaaS-2).** A *tenant-affecting* event goes to the tenant's `audit_events`
+   with a **non-null `organization_id`**, even when a platform operator caused it. A *platform-only*
+   event (operator sign-in, operator screens, internal review) goes to `platform_audit_events`. There
+   is no nullable `organization_id` anywhere, so "which tenant did this touch" is never inferred.
+8. **Operator identity is disclosed to the tenant (O-SaaS-10).** The tenant-facing view of an
+   operator-caused row names the operator's identity **and** their platform role; platform-only rows
+   are not hidden from the tenant when they affected it, and never expose another tenant's data.
 
 ---
 
@@ -467,6 +495,12 @@ the operator to confirm the decision, which is the point.
 | 2 | an export has been offered or declined in writing | BR §39 access guarantee |
 | 3 | a retention review reference is recorded | legal and finance reconciliation |
 | 4 | the reason is recorded in the audit row | an unexplained closure cannot be defended later |
+| 5 | **a second approver, distinct from the requesting operator, has signed (O-SaaS-16)** | closure is irreversible (§11.2); one account must not be able to end a tenant alone |
+
+**O-SaaS-16 in words.** The owner decided that a tenant ends through **two** operators and that its
+data is **retained by default**; deletion is never a consequence of closure and remains a separate,
+explicitly authorised retention process (§11.1). The approved ruling does not extend to reusing a
+closed tenant's id — §11.2 stands.
 
 ### 11.4 Offboarding checklist (operational)
 
@@ -547,21 +581,23 @@ The first four are the ones a reviewer should refuse to merge without: they enco
 | `.clinerules` §3 non-negotiables | `organization_id` stays the only tenant key (T-1); enforcement is server-side only (§6); cross-tenant `404` preserved (§6.1); audit append-only (§10.2); no secrets in audit or logs (§4.3, §10.2); forward-only idempotent migration (§12.1) |
 | `.clinerules` §4 domain table | read and applied: `saas-multitenant-data.md` (adapted, §4–5), `saas-cicd-workflow.md` §3 (adapted migration discipline), BR §38–§40, `backend/common/models.py`, `backend/alembic/versions/` |
 | `.clinerules` §5 skills | **no skills installed** in this workspace — none used, none claimed; governance documents used in their place |
-| `.clinerules` §7 evidence standard | every "today" statement is sourced from the audit; every mechanism is `PROPOSED`; nothing is claimed `VERIFIED` |
+| `.clinerules` §7 evidence standard | every "today" statement is sourced from the audit; every mechanism is `SPECIFIED`; nothing is claimed `VERIFIED` |
 | `.clinerules` §9 boundaries | no code, schema, migration, compose or frontend file changed; no server started, no test suite run |
 | `.clinerules` §11 output location | `docs/architecture/saas/`, the subject-matching subfolder (§15) |
-| `.clinerules` §12 reading policy | index and audit read before writing; architecture specification §14.3 used as the single open-item registry |
+| `.clinerules` §12 reading policy | index and audit read before writing; architecture specification §14.3 used as the single decision registry |
+| Revision 2 reconciliation | O-SaaS-1/2/5/9/10/14/16 applied; ADR-SAAS-005/012 `OWNER-APPROVED`; `PROPOSED` → `SPECIFIED`; two-person suspension and closure added (§5.2, §11.3); no evidence label advanced by any decision |
 
 ### 14.1 Self-check
 
 - Does anything here let a tenant change its own commercial state? No — T-3, §8.1.
-- Does anything here delete data? No — T-4, §11.1.
+- Does anything here delete data? No — T-4, §11.1; O-SaaS-16 confirms retention by default.
 - Does any lifecycle check run before tenant scope? No — §6.1.
 - Is any state trusted from a token? No — T-2.
 - Is a counter stored that can drift from reality? No — §9.2.
 - Is a notification claimed that does not exist? No — §5.4 marks it blocked and the roadmap gates it.
 - Is the §5.3 matrix written here independently of the architecture specification? No — cited, not
   re-derived, so the two cannot disagree.
+- Can one operator suspend or close a tenant alone? No — §5.2 rule 2, §11.3 item 5 (O-SaaS-14/16).
 
 ---
 
@@ -572,8 +608,24 @@ The first four are the ones a reviewer should refuse to merge without: they enco
 | Written to | `docs/architecture/saas/` (`.clinerules` §11: new leaf under the existing `architecture/` subject folder) |
 | Evidence base | `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` — all "as built" claims trace there |
 | Siblings | architecture specification (planes, ADRs, §5.3 matrix), IAM specification (principals, authorisation chain), subscription specification (plans, entitlements), roadmap (phases, gates) |
-| Open items | O-SaaS-3, O-SaaS-5, O-SaaS-9, O-SaaS-10, O-SaaS-16 — ids owned by architecture specification §14.3 |
+| Decisions applied | O-SaaS-3, O-SaaS-5, O-SaaS-9, O-SaaS-10, O-SaaS-14, O-SaaS-16 — ids and verbatim rulings owned by architecture specification §14.3 |
 | Code, schema, migration, compose, frontend changes | **none** |
 | Runtime verification | **none claimed** — a specification, not an acceptance report |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17 |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+
+### 15.1 Revision history
+
+| Revision | Date | Change | Authority |
+|---|---|---|---|
+| V1.0 | 2026-11-17 | Initial tenant & organization specification; five lifecycle states and closure left gated on owner questions | specification-only draft |
+| **Revision 2** | 2026-11-17 | Owner decisions `O-SaaS-1…16` and A1–A4 applied: ADR-SAAS-005 ratified; two-person suspension (§5.2 rule 2, O-SaaS-14) and two-approver closure (§11.3 item 5, O-SaaS-16); audit plane routing and operator disclosure (§10.2 rules 7–8, O-SaaS-2/10); header, §1.3 and all mechanism labels moved to the two-axis vocabulary | Product Owner, 2026-11-17 |
+
+### 15.2 What Revision 2 did not do
+
+- It did not create the `lifecycle_state` column, the resolver, the scheduler, the platform screens,
+  the two-approver workflow or the notification transport. Every mechanism stays `SPECIFIED` with
+  evidence `NOT IMPLEMENTED`.
+- It did not change the §5.3 state × operation matrix — that matrix is reproduced from architecture
+  specification §5.3 and must not drift between documents.
+- It did not touch any code, migration, compose file, frontend file or test.

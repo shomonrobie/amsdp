@@ -1,10 +1,11 @@
 # AMSDP — Identity and Access Management Specification V1.0
 
 > **Document ID:** `AMSDP_Identity_and_Access_Management_Specification`
-> **Version:** V1.0 · **Date:** 2026-11-17 · **Branch:** `hackathon-mvp` @ `133ce83`
-> **Status:** **SPECIFICATION — PROPOSED, NOT APPROVED.** Nothing here authorises implementation;
-> each mechanism carries a status label and is ratified through the ADR register in the
-> architecture specification §12.
+> **Version:** V1.0 · **Revision 2 (owner decision reconciliation) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `409a929`
+> **Status:** **SPECIFICATION — DECISION-RECONCILED, NOT IMPLEMENTED.** The sixteen `O-SaaS` items and
+> the four directions A1–A4 were decided by the Product Owner on 2026-11-17 (architecture
+> specification §1.5). This document applies those rulings. Model decisions are `OWNER-APPROVED`;
+> every mechanism here remains `SPECIFIED` and unbuilt. Nothing here authorises implementation.
 > **Evidence base:** `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §4 (identity as built) — every
 > "today" statement below is sourced there, not re-derived.
 > **Companion documents:** architecture specification (planes, pipeline, ADRs), tenant &
@@ -32,12 +33,16 @@ authority is decided — for **two distinct principal domains**:
 | 2 | `AMSDP_Business_Rules_V1.1.md` §7–§8 (roles, permissions), §39 (suspension must take effect), §40 (audit), §42 (security, secrets, session handling) |
 | 3 | `AMSDP_Master_Feature_List_V2.5` §5.1 (platform governance scope), §19.1–§19.3 (role/permission model) |
 | 4 | Owner decision **Q-1** (`docs/decisions/AMSDP_Owner_Decisions_Q1_Q6_V1.0.md`): enumerated platform capabilities, no wildcard |
-| 5 | This document: `PROPOSED` |
+| 5 | Owner decision packet **2026-11-17** — `O-SaaS-1…16` and A1–A4 (architecture specification §1.5, §12, §14.3) |
+| 6 | This document: mechanisms `SPECIFIED` |
 
 ### 1.3 Status labels
 
-Identical to the architecture specification §1.3: `APPROVED` / `PROPOSED` / `OPEN` / `DEFERRED` /
-`FORBIDDEN`. An agent may implement only `APPROVED` items, and only once scheduled.
+The two-axis vocabulary of architecture specification §1.3 governs here unchanged: the **decision
+axis** (`OWNER-APPROVED` / `SPECIFIED` / `OPEN` / `DEFERRED` / `FORBIDDEN` / `SUPERSEDED`) and the
+**evidence axis** (`NOT IMPLEMENTED` / `IMPLEMENTED` / `TESTED` / `VERIFIED`). `PROPOSED` is retained
+as the exact synonym of `SPECIFIED`. An agent may implement an `OWNER-APPROVED` item once it is
+scheduled *and* its mechanism is written and tested; a decision never implies working code.
 
 ### 1.4 The three failures this document exists to prevent
 
@@ -61,6 +66,11 @@ Identical to the architecture specification §1.3: `APPROVED` / `PROPOSED` / `OP
 | Status | `active` / other; non-active rejected at login and on every request | `identity/main.py:207`, `common/auth.py:142` |
 | Membership | none — cross-organization membership is impossible | audit §4.1 |
 | Password | bcrypt hash, no policy, no reset path | `identity/main.py:205` |
+
+> **Revision 2 note.** Lines 63–67 describe the tree **as built** and are kept verbatim as baseline
+> evidence. The approved target is **multi-membership** (O-SaaS-7, ADR-SAAS-014): `staff_users`
+> becomes the global identity and `organization_memberships` carries the per-tenant role. Read §8.1
+> for the target; nothing in this table is yet `IMPLEMENTED` differently.
 
 ### 2.2 The token
 
@@ -96,9 +106,9 @@ Identical to the architecture specification §1.3: `APPROVED` / `PROPOSED` / `OP
 
 | Type | Authenticates | Tenant key | Domain | Status |
 |---|---|---|---|---|
-| `tenant_staff` | password → tenant token | `staff_users.organization_id` (NOT NULL) | today, unchanged in shape | `APPROVED` (existing behaviour) |
-| `platform_operator` | password → short-lived platform token | **none** — no organization, no branch | new `platform_users` | `PROPOSED` (ADR-SAAS-003) |
-| `patient` | opaque tracking token, no login | resolved by the token pepper | public endpoint path only | `APPROVED`; explicitly **not** a principal — it never receives an `AuthContext` |
+| `tenant_staff` | password → tenant token | the membership the token names (today `staff_users.organization_id`, NOT NULL) | today, unchanged in shape | `OWNER-APPROVED` (existing behaviour); membership shape `SPECIFIED` (§8.1) |
+| `platform_operator` | password → short-lived platform token | **none** — no organization, no branch | new `platform_users` | `OWNER-APPROVED` model (O-SaaS-1, ADR-SAAS-003); table `SPECIFIED` |
+| `patient` | opaque tracking token, no login | resolved by the token pepper | public endpoint path only | `OWNER-APPROVED`; explicitly **not** a principal — it never receives an `AuthContext` |
 
 The important line: a principal is something that can *hold authority*. A patient tracking token
 carries a reference, not authority, and must never be accepted by `require_permission`.
@@ -155,9 +165,9 @@ token. Additions, all server-side:
 
 | # | Addition | Status |
 |---|---|---|
-| A-1 | reject login when the **organization** is not `active` (today only the user's status is checked) — audit R-03 / G-2 | `PROPOSED` |
-| A-2 | the throttle records a counter even when the username does not exist, so response time and audit volume do not reveal account existence | `PROPOSED` |
-| A-3 | a failed login is written to `audit_events` as `identity.login_failed` **without** the attempted password or a token | `PROPOSED` |
+| A-1 | reject login when the **organization** is not `active` (today only the user's status is checked) — audit R-03 / G-2 | `SPECIFIED` |
+| A-2 | the throttle records a counter even when the username does not exist, so response time and audit volume do not reveal account existence | `SPECIFIED` |
+| A-3 | a failed login is written to `audit_events` as `identity.login_failed` **without** the attempted password or a token | `SPECIFIED` |
 
 No account lockout is introduced: it remains an owner-approved non-control (audit §11, item 4).
 
@@ -208,12 +218,12 @@ longer the only mechanism — today it is the only one.
 
 | Rule | Value | Status |
 |---|---|---|
-| minimum length | 12 characters | `PROPOSED` |
-| composition rules | none (length beats symbols, and complexity rules push users to reuse) | `PROPOSED` |
-| rejected | the password equal to the username, the organization slug, or one of a bundled small list of common passwords | `PROPOSED` |
-| hashing | bcrypt, cost unchanged from today | `APPROVED` (existing) |
+| minimum length | 12 characters | `SPECIFIED` |
+| composition rules | none (length beats symbols, and complexity rules push users to reuse) | `SPECIFIED` |
+| rejected | the password equal to the username, the organization slug, or one of a bundled small list of common passwords | `SPECIFIED` |
+| hashing | bcrypt, cost unchanged from today | `OWNER-APPROVED` (existing, BR §42) |
 | reuse | last 3 hashes retained in `staff_password_history`, compared on change | `DEFERRED` (nice-to-have, not launch-blocking) |
-| transport | password only ever in the request body over TLS; never in a URL, log line or audit row | `APPROVED` |
+| transport | password only ever in the request body over TLS; never in a URL, log line or audit row | `OWNER-APPROVED` (BR §42) |
 
 ---
 
@@ -223,11 +233,11 @@ longer the only mechanism — today it is the only one.
 
 | Secret | Source | Consumers | Status |
 |---|---|---|---|
-| `AMSDP_JWT_SECRET` (tenant plane) | environment / deployment secret store | identity mints; all services verify | `APPROVED` (exists) |
-| `AMSDP_JWT_SECRET_PLATFORM` (platform plane) | environment / deployment secret store | platform service only | `PROPOSED` |
-| `AMSDP_TRACKING_PEPPER` | environment; already fail-closed outside development | public tracking endpoints | `APPROVED` (exists) |
-| `AMSDP_SESSION_PEPPER` | environment | refresh-token hashing | `PROPOSED` |
-| `POSTGRES_PASSWORD` | `.env`, never a compose literal | database + every service DSN | `APPROVED` (deployment convention) |
+| `AMSDP_JWT_SECRET` (tenant plane) | environment / deployment secret store | identity mints; all services verify | `OWNER-APPROVED` (exists) |
+| `AMSDP_JWT_SECRET_PLATFORM` (platform plane) | environment / deployment secret store | platform service only | `SPECIFIED` |
+| `AMSDP_TRACKING_PEPPER` | environment; already fail-closed outside development | public tracking endpoints | `OWNER-APPROVED` (exists) |
+| `AMSDP_SESSION_PEPPER` | environment | refresh-token hashing | `SPECIFIED` |
+| `POSTGRES_PASSWORD` | `.env`, never a compose literal | database + every service DSN | `OWNER-APPROVED` (deployment convention) |
 
 ### 5.2 The fail-closed rule (fixes audit R-10 / C-8)
 
@@ -402,9 +412,11 @@ it is renamed in three stages:
 | R-2 | mint `org_super_admin` for new users; migrate `staff_users.role` in a forward-only migration; `super_admin` remains accepted as an alias in `check()` for one release | old tokens keep working; `super_admin` no longer holds platform capabilities | yes — re-add the capability list |
 | R-3 | remove the `super_admin` alias and the `platform.*` grants from the tenant matrix entirely | requires no live token older than one access TTL; gate on a clean token-age check | **no** — a one-way door, hence last |
 
-R-3 is a breaking change to the permission matrix and therefore requires project-owner approval
-before it is scheduled (open item **O-SaaS-1**). Until R-3, `super_admin` retains its present
-capabilities exactly as they are: no privilege is *withdrawn* by today's documentation.
+**O-SaaS-1 decided this on 2026-11-17**: separate platform identity is approved, and removing the
+alias and its `platform.*` grants is approved **subject to safety** — R-1 and R-2 land first, and R-3
+only once the replacement is `TESTED` and `VERIFIED` and no live token is older than one access TTL.
+Until then `super_admin` retains its present capabilities exactly as they are: no privilege is
+withdrawn by documentation, and no agent may run R-3 on the strength of an approval alone.
 
 ### 7.5 Bootstrapping the first operator
 
@@ -434,19 +446,38 @@ first operator is a production act.
 
 ## 8. Membership and staff lifecycle
 
-### 8.1 Model: one organization per identity (ADR-SAAS-013, `OPEN`)
+### 8.1 Model: multi-membership (ADR-SAAS-014, `OWNER-APPROVED`)
 
-`staff_users.organization_id` is NOT NULL, so an identity belongs to exactly one organization for
-its whole life. A doctor working at two clinics therefore needs **two accounts and two logins** —
-one per tenant.
+**Revision 2 change.** V1.0 specified one organization per identity and recorded the join-table
+option as `OPEN` (ADR-SAAS-013). **O-SaaS-7 rejected that**: a clinician working at two institutions
+must not need two accounts. ADR-SAAS-013 is `SUPERSEDED` by ADR-SAAS-014; the model is now:
 
-| Option | Consequence | Owner decision |
-|---|---|---|
-| (a) one org per identity (today) | two accounts; no shared password; correct isolation; no code change | default if no ruling |
-| (b) join table `staff_memberships` | one login, org switcher, token re-mint per switch; requires changes to `require_org_access`, every token consumer and the frontend session | `OPEN` — larger than a SaaS-layer feature |
+- one human identity (`staff_users`) is **global** — it is the person, and it no longer carries the
+  tenant as its identity;
+- `organization_memberships` carries, per organization, the `role`, `permissions`/`branch_scope` and
+  membership status;
+- an access token names **exactly one** active organization and one membership; the role applied at
+  authorisation is the role **held in that membership**, never a union across memberships;
+- switching organization is an explicit, authorised act that mints a fresh token (architecture
+  spec §5.1); no request may name its own tenant.
 
-This document specifies (a) and does not design (b). The roadmap treats (b) as a post-launch
-enhancement so it cannot silently expand the MVP.
+| Question | Ruling / owner |
+|---|---|
+| Which model | **multi-membership** — `OWNER-APPROVED` (O-SaaS-7) |
+| Physical shape, backfill and cutover of `staff_users.organization_id` | `EQ-1` (architecture spec §14.3.1) — engineering, forward-only, no data loss |
+| How the active organization travels | `EQ-2` — engineering; the constraint is that a revoked membership fails on the **next request** |
+| Membership lifecycle and effective permissions | `EQ-3` — engineering; least privilege per tenant, no cross-membership union |
+
+What does **not** change: `organization_id` remains the only tenant key, every tenant table still
+carries exactly one `organization_id`, and a cross-tenant read still fails `404`. A
+single-organization deployment (P2/P3) is simply the case where every identity holds one membership.
+
+### 8.1.1 Why the superseded model was replaced, not deleted
+
+The V1.0 concern — a principal with a *selectable* tenant is the shape most multi-tenant breaches
+take — remains valid. It is answered by making the selection an **authorised** act (§4.3 revocation,
+architecture spec §5.1 step 6) rather than a client-supplied value, not by pretending the concern
+went away. The superseded reasoning is preserved verbatim in architecture specification §12.1.
 
 ### 8.2 Tenant-managed staff lifecycle
 
@@ -629,32 +660,41 @@ All of it is additive, and every step is forward-only (`.clinerules` §3):
 
 ---
 
-## 13. Open items
+## 13. Owner decisions applied (registry: architecture spec §14.3)
 
 Ids are the **canonical registry** in the architecture specification §14.3; this document mints no
-local ids (an earlier draft of this section did, and that duplication is what caused the renumber).
+local ids (an earlier draft did, and that duplication caused the renumber). **All of these were
+decided by the Product Owner on 2026-11-17**; each row now records what this document must do about
+the ruling, not a question.
 
-| ID | Item | Blocks | Owner ruling needed |
-|---|---|---|---|
-| O-SaaS-1 | R-3 removal of the `super_admin` alias and its `platform.*` grants (breaks the matrix); same decision as ADR-SAAS-003 | nothing today; must precede platform launch | yes — breaking change |
-| O-SaaS-2 | Platform-plane audit trail (`audit_events.organization_id` NOT NULL, audit C-7) — ADR-SAAS-009 | honest platform audit trail | yes |
-| O-SaaS-7 | Single-org identity (ADR-SAAS-013): accept two accounts per multi-site clinician | membership model | yes |
-| O-SaaS-11 | Whether `staff_password_history` reuse checks are launch-scope or post-launch | nothing; `DEFERRED` | yes, low urgency |
-| O-SaaS-12 | Whether the reset-code response may return the code to the requesting administrator (V1 assumes yes) | V1 reset flow | yes — a deliberate, documented trade-off to avoid a mailer dependency |
-| O-SaaS-13 | Support-grant acceptance: explicit `org_admin` consent vs policy pre-approval for `grace` tenants | support-access mechanism | yes |
-| O-SaaS-14 | Whether `platform_ops` may suspend a tenant without a second operator (four-eyes) | suspension authority | yes, policy |
-| O-SaaS-15 | MFA for platform operators — `DEFERRED` in V1, but the 30-minute token + no-refresh assumption is weaker without it | platform launch risk acceptance | yes |
+| ID | Ruling applied here | Effect on this document |
+|---|---|---|
+| O-SaaS-1 | Separate platform identity approved; `super_admin` alias/grants removed only after the replacement is tested | §7.2–§7.4 proceed; R-3 is last and conditional |
+| O-SaaS-2 | Platform-only events → `platform_audit_events`; tenant-affecting → tenant `audit_events` with non-null `organization_id` | §10.2; no nullable column anywhere |
+| O-SaaS-7 | Multi-membership replaces one-org-per-identity (ADR-SAAS-014) | §8.1 rewritten; shape `EQ-1…3` |
+| O-SaaS-8 | `platform_admin` and `platform_ops` are separate responsibilities | §7.3 (one role per account by default) |
+| O-SaaS-10 | Tenant audit view shows named operator identity **and** platform role | §10.1 event fields |
+| O-SaaS-11 | `staff_password_history` reuse checks deferred to post-launch | §4.6 stays `DEFERRED` |
+| O-SaaS-12 | The operator-assisted reset **may** return the code under the stated constraints | §6.2 as written |
+| O-SaaS-13 | Explicit `org_admin` consent for every support grant; no `grace` pre-approval | §7.3 |
+| O-SaaS-14 | Suspension requires second-person approval | §7.3; tenant spec §5.2 |
+| O-SaaS-15 | MFA deferred for MVP with risk recorded and accepted | §13.1 item 1 |
+| O-SaaS-16 | Closure needs platform admin + second approver; data retained by default | §7.3; tenant spec §11 |
 
 ### 13.1 Residual risks accepted by this specification
 
-1. **No MFA.** A stolen platform password grants 30 minutes of platform authority. Accepted for
-   the MVP only because the platform operator population is tiny and known; recorded as O-SaaS-15
-   so it cannot quietly become permanent.
+1. **No MFA.** A stolen platform password grants 30 minutes of platform authority. **Accepted for the
+   MVP by O-SaaS-15** because the platform operator population is tiny and known; MFA remains the
+   first post-launch hardening item, and the acceptance is recorded rather than assumed.
 2. **No e-mail channel.** Reset is operator-assisted (O-SaaS-12). The trade-off is documented
    rather than hidden behind a flow that cannot run.
 3. **One access token per plane, no central introspection.** Revocation is bounded by the access
    TTL, not instantaneous. A per-request introspection service is `DEFERRED` (it would add a
    network hop to every request, which the hardware envelope cannot absorb).
+4. **Multi-membership adds an authorisation surface** that one-org-per-identity did not have. The
+   owner accepted the trade for clinician usability (O-SaaS-7). Mitigation is structural: the active
+   organization comes from the token, is re-verified against a live membership on every request
+   (§8.1), and a switch is its own authorised, audited act — never a client-supplied value.
 
 ---
 
@@ -670,15 +710,18 @@ local ids (an earlier draft of this section did, and that duplication is what ca
 | `.clinerules` §9 boundaries | no code, migration, compose, frontend or test file changed; no server started, no suite run |
 | `.clinerules` §11 output location | written to `docs/architecture/saas/` — one new leaf under the existing `architecture/` subject folder (rule applied; see §15) |
 | `.clinerules` §12 reading policy | audit read before writing; index consulted; citations are paths opened in this session |
+| Revision 2 reconciliation | O-SaaS-1/2/7/8/10/11/12/13/14/15/16 and A1–A4 applied; ADR-SAAS-013 `SUPERSEDED` by 014; `EQ-1…3` cited for the membership shape; no evidence label advanced by any decision |
 
 ### 14.1 Self-check
 
-- Does anything here weaken tenant isolation? No — §9.1 is strictly additive to `require_org_access`.
+- Does anything here weaken tenant isolation? No — §9.1 is strictly additive to `require_org_access`,
+  and multi-membership keeps the active organization token-derived with a live-membership re-check.
 - Does anything here grant a new privilege to an existing role? No — `super_admin` loses nothing
-  until R-3, which is owner-gated.
+  until R-3, which O-SaaS-1 makes conditional on the replacement being `TESTED` and `VERIFIED`.
 - Is any claim marked VERIFIED without a second artefact? No.
-- Does any mechanism depend on an absent capability (mailer, MFA, introspection)? Yes, twice, and
-  both are labelled and recorded as open items rather than assumed.
+- Does any mechanism depend on an absent capability (mailer, MFA, introspection)? Yes, three times,
+  and each is labelled: MFA deferred by O-SaaS-15, reset operator-assisted by O-SaaS-12,
+  introspection `DEFERRED` in §13.1.
 
 ---
 
@@ -691,4 +734,20 @@ local ids (an earlier draft of this section did, and that duplication is what ca
 | Code/schema/deployment changes | **none** |
 | Runtime verification | **none claimed** |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17 |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+
+### 15.1 Revision history
+
+| Revision | Date | Change | Authority |
+|---|---|---|---|
+| V1.0 | 2026-11-17 | Initial identity/access specification; ADR-SAAS-013 left `OPEN` | specification-only draft |
+| **Revision 2** | 2026-11-17 | Owner decisions `O-SaaS-1…16` and A1–A4 applied. §8.1 rewritten to multi-membership (ADR-SAAS-014, supersedes 013) with `EQ-1…3` for the physical shape; §7.4 R-3 made conditional on tested replacement; §2.1 annotated as as-built baseline; §1.2/§1.3 moved to the two-axis vocabulary; §13 converted from open items to applied rulings; §13.1 gained the multi-membership risk and the O-SaaS-15 acceptance; `PROPOSED`/bare `APPROVED` labels normalised | Product Owner, 2026-11-17 |
+
+### 15.2 What Revision 2 did not do
+
+- It did not build multi-membership, `platform_users`, refresh tokens, revocation or the reset
+  flow. Every mechanism remains `SPECIFIED` with evidence `NOT IMPLEMENTED`.
+- It did not decide the membership table's physical shape, backfill or token mechanics — those are
+  `EQ-1`, `EQ-2`, `EQ-3` (architecture spec §14.3.1) and remain engineering questions.
+- It did not touch `common/auth.py`, `common/permissions.py`, `identity/main.py`, any migration,
+  `docker-compose.yml`, the frontend or any test.

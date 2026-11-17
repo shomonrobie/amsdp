@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **81** markdown documents on disk, every one now accounted for below — **77** in the `docs/` trees (11 at the `docs/` root + 66 across the subject folders, of which 6 are the new `architecture/saas/` set registered in Revision 27) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17, Revision 28: 77 + 4 = **81** on disk and **81** registered rows — the 4 `chatgpt/` rows and 77 `docs/`-tree rows, so **every** file on disk now has its own row. `chatgpt/` was the last gap: the Product Owner adopted its two remaining planning documents into the repository on 2026-11-17 (Revision 28). Open item **O-Y** — the `chatgpt/` count drift — is **closed** there: 4 files on disk, 4 rows.)*
+> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **82** markdown documents on disk, every one now accounted for below — **78** in the `docs/` trees (11 at the `docs/` root + 67 across the subject folders, of which 6 are the `architecture/saas/` set registered in Revision 27 and 1 is the SaaS reconciliation report registered in Revision 29) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17, Revision 29: 78 + 4 = **82** on disk and **82** registered rows. Revision 27 registered the six-document SaaS set → 81; Revision 28 closed open item **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → **82**.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -561,6 +561,33 @@
 > private-key blocks, `api_key`/`password` assignments, long `Bearer` tokens): **0** hits. **No
 > code, schema, migration, endpoint, test or running stack was touched**, so no test suite was run
 > and nothing is claimed `TESTED` or `VERIFIED`; no new index-level open item is raised.
+> **Revision 29 — 2026-11-17**, task `AMSDP-HYBRID-SAAS-DECISION-RECONCILIATION-2026-11-17` —
+> **one new document, no document moved**: all six documents of the `architecture/saas/` set were
+> revised **in place to Revision 2** to reconcile them against the Product Owner's decision packet
+> (`O-SaaS-1…O-SaaS-16` plus directions A1–A4), and the reconciliation report itself
+> (`governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md`, 25,554 bytes) is the one new
+> file. Registered rows **81 → 82**, on-disk snapshot **81 → 82** (78 `docs/`-tree rows + 4 `chatgpt/`
+> rows), so every file on disk still has a row. Only the six size cells and their *Read when* text in
+> the `architecture/saas/` sub-table were updated (post-revision `wc -c`: 98,511 / 46,232 / 46,345 /
+> 39,178 / 37,293 / 43,005 against 57,124 / 41,705 / 41,112 / 34,421 / 33,204 / 35,588 at Revision 27). What changed in the set, in one line each: the architecture
+> specification gained the ADR register (§12), traceability (§13), the **closed** decision registry
+> with verbatim rulings (§14.3) and the engineering questions `EQ-1…8` (§14.3.1); the audit kept every
+> finding **verbatim** and gained correction notes only, because its questions A-1…A-5 are now decided
+> and its evidence grades are untouched; IAM gained multi-membership (§8, ADR-SAAS-014 superseding 013)
+> and converted its open items into an applied-rulings table; the tenant specification gained the
+> second-operator suspension (O-SaaS-14) and two-approver closure with data retained by default
+> (O-SaaS-16); the subscription specification gained the settled platform-audit split (O-SaaS-2 option
+> A), the approved ten module keys (O-SaaS-4) and explicitly does **not** create billing columns
+> (O-SaaS-6); the roadmap converted its "decisions required" gates into "decisions applied" and moved
+> **multi-membership from Phase 5+ into Phase 2** (`EQ-1…3`), adding the platform-audit table (2.15) and
+> the two-person primitive (3.11 → 3.12). **Two-axis status** (decision vs evidence) is used
+> throughout, `PROPOSED` is now a declared synonym of `SPECIFIED`, and **no decision advanced any
+> evidence grade**: no code, schema, migration, endpoint, component, test or running stack was touched,
+> so no suite was run and nothing is claimed `TESTED` or `VERIFIED`. Nothing was moved, renamed,
+> overwritten or deleted, so **no migration-manifest entry is required** (§11). Nothing was staged,
+> committed or pushed. Index-level open items: none raised — the set's open questions are `EQ-1…8`
+> (engineering) plus `EQ-7`, which is explicitly an **owner** question, both already registered in
+> architecture specification §14.3.1 rather than here.
 
 ---
 
@@ -644,23 +671,32 @@ side.
 
 One mutually cross-referenced set specifying the multi-tenant SaaS layer **before** any code is
 written. `AMSDP_System_Architecture_V1.0.md` (above, **R**) remains the frozen design of record;
-this set extends it and never overrides it (§1). **One canonical open-item registry:**
+this set extends it and never overrides it (§1). **One canonical decision registry:**
 `O-SaaS-1…O-SaaS-16` is defined once, in the architecture specification §14.3 — every other
-document in the set cites those ids and mints none.
+document in the set cites those ids and mints none. **All sixteen were decided by the Product
+Owner on 2026-11-17**; the eight engineering questions the rulings left open (`EQ-1…8`) are listed in
+§14.3.1 of the same document. Status is two-axis throughout (decision vs evidence, architecture §1.3):
+**no decision advanced an evidence grade, and none of the six documents describes working software.**
 
-| File | Size | Read when | Owner |
+| File | Size (Rev 2) | Read when | Owner |
 |---|---:|---|---|
-| `saas/AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | 57,124 | Starting **any** SaaS, tenancy, entitlement or platform-plane task — the request pipeline (§5), the fixed module keys (§6), ADRs §10, traceability §13, the canonical open items (§14.3) | — |
-| `saas/AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` | 41,705 | Establishing what the tree actually does **today** before claiming a gap — findings R-01…R-18, corrections C-1…C-9, and the §4.6 table of claims that were wrong | — |
-| `saas/AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | 41,112 | Authentication, login, sessions, principals, RBAC, plane separation — §9 is the single authorisation chain (9 factors) | — |
-| `saas/AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md` | 34,421 | Organization/branch lifecycle, suspension, closure and anonymisation, the platform metadata surface, tenant-switch rules | — |
-| `saas/AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` | 33,204 | Plans, entitlements, the module gate, numeric limits, the `entitlements_version` cache contract, entitlement failure modes | — |
-| `saas/AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | 35,588 | Sequencing delivery — Phases 0–5+, flag-on/flag-off gates, risk register K-1…K-11, abort criteria, requirement traceability R-01…R-18 / C-1…C-9 | — |
+| `saas/AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | 98,511 | Starting **any** SaaS, tenancy, entitlement or platform-plane task — the request pipeline (§5), the fixed module keys (§6), the ADR register (§12), traceability (§13), the decision registry and rulings (§14.3), the engineering questions (§14.3.1), revision history (§15) | — |
+| `saas/AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` | 46,232 | Establishing what the tree actually does **today** before claiming a gap — findings R-01…R-18, corrections C-1…C-9, the §4.6 table of claims that were wrong, and the 2026-11-17 correction notes (evidence unchanged; the questions it raised are now decided) | — |
+| `saas/AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | 46,345 | Authentication, login, sessions, principals, RBAC, plane separation, and **multi-membership** (§8, ADR-SAAS-014) — §9 is the single authorisation chain (9 factors) | — |
+| `saas/AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md` | 39,178 | Organization/branch lifecycle, suspension and closure (both **two-person**, O-SaaS-14/16), the platform metadata surface, tenant-switch rules, operator disclosure | — |
+| `saas/AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` | 37,293 | Plans, entitlements, the module gate, numeric limits, the `entitlements_version` cache contract, entitlement failure modes, the settled platform-audit split (§9.3) | — |
+| `saas/AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | 43,005 | Sequencing delivery — Phases 0–5+, flag-on/flag-off gates, multi-membership in Phase 2 (§5.2.1), the two-person primitive (§6.2 3.11), risk register K-1…K-11, abort criteria, requirement traceability R-01…R-18 / C-1…C-9 | — |
 
 > These six are **specification and planning documents only**. They change no code, schema,
 > migration, endpoint or test; every claim in them is graded per `.clinerules` §7 (IMPLEMENTED /
 > TESTED / VERIFIED / ACCEPTED), and the audit's findings are `static` or `reported`, never
 > `VERIFIED` unless a second artefact confirms them.
+>
+> **Revision 2 of all six (2026-11-17)** reconciled them against the owner's decision packet. Sizes
+> above are the post-revision `wc -c` values (they were 57,124 / 41,705 / 41,112 / 34,421 / 33,204 /
+> 35,588 at Revision 27). No new file was created inside `architecture/saas/`, so this sub-table keeps
+> six rows; the reconciliation report itself is registered under `governance/` (Revision 29). Nothing
+> was moved, renamed, overwritten or deleted, so no migration-manifest entry is required (§11).
 
 ---
 
@@ -772,6 +808,7 @@ document in the set cites those ids and mints none.
 | `AMSDP_Docs_Inventory_and_Migration_Manifest_V1.0.md` | 24,959 | Establishing where a document came from, or the authority for its location | — |
 | `AMSDP_Docs_Output_Policy_Verification_Report_V1.0.md` | 22,021 | Confirming that the output-location policy was actually installed and verified | — |
 | `AMSDP_Owner_Decisions_O1_O6_Implementation_Report_V1.0.md` | 35,361 | Confirming how owner decisions O-1…O-6 were implemented; the 36-reference register; relocation evidence | — |
+| `AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` | 25,554 | Confirming how the six `architecture/saas/` documents were reconciled against owner decisions `O-SaaS-1…16` and A1–A4 — what changed per document, the six conflicts and their dispositions, the residue scan, and the evidence status (nothing `TESTED`/`VERIFIED`). **Registered 2026-11-17** (Revision 29) | — |
 
 ---
 

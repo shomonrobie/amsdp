@@ -1,18 +1,22 @@
 # AMSDP — Subscription and Entitlement Management Specification V1.0
 
 > **Document ID:** `AMSDP_Subscription_and_Entitlement_Management_Specification`
-> **Version:** V1.0 · **Date:** 2026-11-17 · **Branch:** `hackathon-mvp` @ `133ce83`
-> **Status:** **SPECIFICATION — PROPOSED, NOT APPROVED.** Nothing here is authorised for
-> implementation. Table shapes are fixed by the architecture specification §7.3; this document may
-> only add column detail and behaviour, never a new entity.
+> **Version:** V1.0 · **Revision 2 (owner decision reconciliation) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `409a929`
+> **Status:** **SPECIFICATION — DECISION-RECONCILED, NOT IMPLEMENTED.** The sixteen `O-SaaS` items and
+> directions A1–A4 were decided by the Product Owner on 2026-11-17 (architecture specification §1.5,
+> §14.3). This document applies those rulings; every mechanism remains `SPECIFIED` and unbuilt.
+> Table shapes are fixed by the architecture specification §7.3; this document may only add column
+> detail and behaviour, never a new entity.
 > **Evidence base:** `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §6 (no commercial layer exists).
 > **Companion documents:** architecture specification (§6 module registry, §7 data, §8 caching),
 > tenant & organization specification (lifecycle, limits counting), IAM specification
 > (authorisation chain), implementation roadmap (phases, gates).
 > **No code, schema, migration, compose or frontend file was changed to produce it.**
 
-Status labels are the architecture specification's set: `APPROVED`, `PROPOSED`, `OPEN`, `DEFERRED`,
-`FORBIDDEN`. This document adds no label and softens none.
+Status labels are the architecture specification's two-axis set (§1.3): decisions `OWNER-APPROVED`,
+`SPECIFIED`, `OPEN`, `DEFERRED`, `SUPERSEDED`; evidence `NOT IMPLEMENTED`, `IMPLEMENTED`, `TESTED`,
+`VERIFIED`. `PROPOSED` is retained as the exact synonym of `SPECIFIED`. This document adds no label
+and softens none.
 
 ---
 
@@ -38,8 +42,9 @@ becoming data loss.
 ### 1.3 Authority order
 
 `.clinerules` §3 → `AMSDP_Business_Rules_V1.1.md` §37–§40 → `AMSDP_Master_Feature_List_V2.5`
-§C/§C.1/§D, §19.1–§19.3, §30.1–§30.4 → architecture specification §6–§8 → this document
-(`PROPOSED`).
+§C/§C.1/§D, §19.1–§19.3, §30.1–§30.4 → architecture specification §6–§8 → **owner decision packet
+2026-11-17** (O-SaaS-2/4/6 govern this document — architecture specification §14.3) → this document
+(mechanisms `SPECIFIED`).
 
 ---
 
@@ -57,7 +62,14 @@ becoming data loss.
 The commercial layer is therefore **greenfield** — which is the good case, because it can be built
 straight rather than migrated into. The risk it carries is different: with no existing behaviour to
 constrain it, an under-specified design would invent behaviour the owner never approved. Hence the
-`PROPOSED` labels and the explicit refusal to invent pricing.
+`SPECIFIED` labels and the explicit refusal to invent pricing — a refusal the owner upheld: pricing
+stays an open commercial question (V2.5 §30.3), and no mechanism here assumes an answer to it.
+
+> **Revision 2 note.** `O-SaaS-4` **confirmed the ten module keys** as the approved commercial
+> vocabulary and ruled that Core is never sold, gated or disabled. The key set is therefore on the
+> decision axis `OWNER-APPROVED`; the plan catalogue, subscriptions, resolution, cache and
+> enforcement mechanisms described here all remain `SPECIFIED` with evidence `NOT IMPLEMENTED`, and
+> six of the ten modules have no code at all (architecture specification §6.2).
 
 ---
 
@@ -125,7 +137,7 @@ module-missing response (§6.3); it never affects tenant isolation, which is dec
 |---|---|---|
 | `entitlements_version` | `Integer NOT NULL DEFAULT 1` | bumped in the same transaction as any commercial write (§8.1) |
 | `lifecycle_state` | owned by the tenant specification §3.3 | read here, never written here |
-| billing metadata (`billing_contact_*`, `contract_reference`, `reseller_code`) | nullable text | `OPEN`; not required for enforcement, so not required for this specification to hold |
+| billing metadata (`billing_contact_*`, `contract_reference`, `reseller_code`) | nullable text | **not created in V1** — billing is excluded (ADR-SAAS-008) and `O-SaaS-6` keeps dedicated/institution licence mechanics `SPECIFIED` and undesigned (`EQ-6`); enforcement never reads these columns |
 
 ### 4.5 What is deliberately absent
 
@@ -174,7 +186,7 @@ platform treats "no subscription" as an **integrity alarm**, not as a permissive
 ### 5.3 The resolved object
 
 ```python
-# backend/common/entitlements.py — PROPOSED shape (contract, not implementation)
+# backend/common/entitlements.py — SPECIFIED shape (contract, not implementation)
 @dataclass(frozen=True)
 class Entitlement:
     organization_id: UUID
@@ -203,7 +215,7 @@ another request in the same worker.
 ### 6.1 The single gate
 
 ```python
-require_module("clinical_records")   # PROPOSED
+require_module("clinical_records")   # SPECIFIED
 ```
 
 Behaviour, in order:
@@ -373,14 +385,23 @@ incidents). Both are written in the same transaction as the change; neither repl
 commercial change that appears only in `subscription_events` is ungoverned, and one that appears
 only in `audit_events` is unrenderable.
 
-### 9.3 The platform-audit caveat
+### 9.3 Platform-scope audit — settled (O-SaaS-2)
 
 `audit_events.organization_id` is `NOT NULL` today (audit C-7), so a purely platform-scope action has
-nowhere to be written. Subscription events for a specific tenant carry that tenant's id and are
-therefore **writable today**; a plan-catalogue edit belongs to no tenant and is **not** writable
-until ADR-SAAS-009 / O-SaaS-2 is decided. This document does not invent a table for it — it records
-the gap and, in the meantime, requires plan-catalogue edits to be made only by an operator and
-logged to the platform service's structured log.
+nowhere to be written there. **O-SaaS-2 resolved this as option A**: a `platform_audit_events` table
+(ADR-SAAS-009) takes platform-only events, while every tenant-affecting event is written to that
+tenant's `audit_events` with a real `organization_id`, and the column is never made nullable.
+
+Consequences for this document:
+
+1. A plan-catalogue edit (no owning tenant) is written to `platform_audit_events` — it is **no longer
+   dependent on a structured log** as a stand-in.
+2. A subscription change for one tenant writes **both**: the tenant's `audit_events` row and the
+   platform record, because a platform operator caused it and the tenant must be able to see that it
+   happened (O-SaaS-10: named operator identity plus platform role).
+3. Keeping those two writes consistent is `EQ-4` (architecture specification §14.3.1) — one
+   transaction while the stores share a database, an outbox with retry once A1 separates them. A
+   failed second write is an alert, never a silently dropped event.
 
 ### 9.4 What is never in an audit row
 
@@ -518,26 +539,28 @@ R-6 and `.clinerules` §3 respectively.
 
 ---
 
-## 14. Open items
+## 14. Owner decisions applied (registry: architecture specification §14.3)
 
-Ids are the canonical registry (architecture specification §14.3); this document mints none.
+Ids are the canonical registry (architecture specification §14.3); this document mints none. All
+three were **decided on 2026-11-17**; each row records the ruling and its consequence here.
 
-| ID | Item | Blocks |
+| ID | Ruling | Consequence in this document |
 |---|---|---|
-| O-SaaS-4 | Confirm the ten module keys as the commercial vocabulary — the plan catalogue cannot be authored until the key set is fixed | plan authoring (Phase 1) |
-| O-SaaS-2 | Platform-scope audit shape (ADR-SAAS-009): plan-catalogue edits have no tenant and therefore no `audit_events` row | §9.3; platform launch |
-| O-SaaS-6 | If B2 dedicated deployment is in scope, how is a licence recorded for a stack that has one organization? Every mechanism here assumes platform-written subscription rows | Phase 3+ |
+| O-SaaS-4 | The ten module keys are **confirmed** as the commercial vocabulary; Core is always available and is never sold, gated or disabled | §4.1 key set `OWNER-APPROVED`; §11.3 Core cannot be removed by plan, add-on, override or limit; cataloguing may proceed in Phase 1 |
+| O-SaaS-2 | **Option A** — platform-only events to `platform_audit_events`, tenant-affecting events to the tenant's `audit_events` with a real `organization_id`; the column is never nullable | §9.3 rewritten; dual write for tenant-affecting subscription changes, consistency is `EQ-4` |
+| O-SaaS-6 | Dedicated (P2) and institution-controlled (P3) deployments are **not in MVP**; licence/renewal mechanics stay `SPECIFIED` and are deliberately not designed | §4.4 billing columns not created in V1; `EQ-6` owns the post-MVP question; nothing in P1 behaviour may depend on it |
 
 ### 14.1 Residual risks accepted by this specification
 
 1. **60-second staleness window** for entitlement changes. Accepted because it is bounded, because a
    lifecycle change (the safety-critical case) is never cached, and because the alternative is a
-   distributed cache on a 16 GB host.
+   distributed cache on a 16 GB host. The staleness bound and the fail-closed rule on optional-module
+   routes are `EQ-5`; the ruling that Core is never switched off is not negotiable.
 2. **`SAAS_ENFORCEMENT_ENABLED` exists at all.** Any flag is a bypass; this one is accepted only
    with a roadmap gate that removes it, and a test that asserts it defaults to off.
 3. **No self-service purchase.** The platform writes subscriptions; tenants cannot. That is a
    deliberate V1 restriction — there is no payment path, so a self-service purchase would be a
-   self-service free upgrade.
+   self-service free upgrade. O-SaaS-6 confirms no licence/renewal commerce is designed for the MVP.
 
 ---
 
@@ -546,13 +569,14 @@ Ids are the canonical registry (architecture specification §14.3); this documen
 | Requirement | Compliance |
 |---|---|
 | `.clinerules` §2 automatic routing | domain rows applied: backend API, multi-tenant data, database/migrations, audit, documentation |
-| `.clinerules` §3 non-negotiables | `organization_id` remains the only tenant key (§4.1); enforcement server-side only (§6.1, §5.4); cross-tenant `404` precedes every gate (§6.3); audit append-only (§9.2); no secrets in events or logs (§9.4); forward-only idempotent migrations (§12.1); no capability claimed that is unbuilt (every label `PROPOSED`) |
+| `.clinerules` §3 non-negotiables | `organization_id` remains the only tenant key (§4.1); enforcement server-side only (§6.1, §5.4); cross-tenant `404` precedes every gate (§6.3); audit append-only (§9.2); no secrets in events or logs (§9.4); forward-only idempotent migrations (§12.1); no capability claimed that is unbuilt (every mechanism `SPECIFIED`, evidence `NOT IMPLEMENTED`) |
 | `.clinerules` §4 domain table | read and applied: `saas-application-security.md` (adapted), `saas-multitenant-data.md` §4–5, BR §37–§40, V2.5 §C/§D/§30, architecture specification §6–§8 |
 | `.clinerules` §5 skills | **no skills installed** — none used, none claimed |
 | `.clinerules` §7 evidence standard | §2 is graded from the audit; no runtime claim is made |
 | `.clinerules` §9 boundaries | no code, schema, migration, compose or frontend file changed; no service started, no suite run |
 | `.clinerules` §11 output location | `docs/architecture/saas/` (§16) |
 | `.clinerules` §12 reading policy | index, audit and architecture specification read before writing; siblings cited by section, not paraphrased |
+| Revision 2 reconciliation | O-SaaS-2/4/6 applied; module keys `OWNER-APPROVED` with mechanisms `SPECIFIED`; §9.3 rewritten to the settled audit split; `PROPOSED` → `SPECIFIED` throughout; no evidence label advanced by any decision |
 
 ### 15.1 Self-check
 
@@ -561,8 +585,9 @@ Ids are the canonical registry (architecture specification §14.3); this documen
 - Can a tenant grant itself a module? No — `platform.*` only (§7.4); TENANT plane has no write route.
 - Does a downgrade lose data? No — §11.2, `test_downgrade_deletes_nothing`.
 - Is enforcement dependent on the frontend? No — §5.4, §6.1.
-- Is a limit able to break Core? No — §7.5, R-5.
-- Are module keys invented at implementation time? No — architecture §6.2, §11.4.
+- Is a limit able to break Core? No — §7.5, R-5; O-SaaS-4 makes Core ungated and unsold.
+- Are module keys invented at implementation time? No — architecture §6.2, §11.4; the ten keys are
+  owner-approved (O-SaaS-4).
 
 ---
 
@@ -574,8 +599,24 @@ Ids are the canonical registry (architecture specification §14.3); this documen
 | Evidence base | `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §6, §13 |
 | Shape authority | architecture specification §7.3 (tables), §8.1–§8.2 (resolution, cache), §5.1 (pipeline steps) |
 | Siblings | architecture specification, tenant & organization specification, IAM specification, implementation roadmap |
-| Open items | O-SaaS-2, O-SaaS-4, O-SaaS-6 |
+| Decisions applied | O-SaaS-2, O-SaaS-4, O-SaaS-6 — ids and verbatim rulings owned by architecture specification §14.3 |
 | Code, schema, migration, compose, frontend changes | **none** |
 | Runtime verification | **none claimed** |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17 |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+
+### 16.1 Revision history
+
+| Revision | Date | Change | Authority |
+|---|---|---|---|
+| V1.0 | 2026-11-17 | Initial subscription & entitlement specification; module keys, audit split and dedicated-mode licence left open | specification-only draft |
+| **Revision 2** | 2026-11-17 | Owner decisions applied: O-SaaS-4 (ten keys approved, Core never sold/gated), O-SaaS-2 (option A audit split, §9.3 rewritten), O-SaaS-6 (P2/P3 licence mechanics undesigned, `EQ-6`); two-axis labels; billing columns explicitly not created in V1 | Product Owner, 2026-11-17 |
+
+### 16.2 What Revision 2 did not do
+
+- It did not create `plans`, `subscriptions`, `subscription_modules`, the resolver, the cache or
+  `require_module`. Every mechanism stays `SPECIFIED`, evidence `NOT IMPLEMENTED`.
+- It did not design entitlement distribution — `EQ-5` owns the version stamp, propagation and the
+  staleness bound.
+- It did not add any billing, invoicing or payment entity, and did not touch code, migrations,
+  compose, frontend or tests.

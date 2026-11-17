@@ -3,11 +3,11 @@
 | Field | Value |
 |---|---|
 | Document | Implementation roadmap for the Hybrid SaaS architecture set |
-| Status | `PROPOSED` — a plan, not an acceptance record. Nothing in this document is implemented today. |
+| Status | **Revision 2** — `SPECIFIED` plan, **not** an acceptance record. Nothing in this document is implemented today. The sixteen `O-SaaS` decisions and directions A1–A4 were made by the Product Owner on 2026-11-17 (architecture specification §1.5, §14.3); this revision sequences the work they authorise. |
 | Date | 2026-11-17 |
 | Location | `docs/architecture/saas/` |
 | Siblings | `AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` (shape authority), `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` (evidence base), `AMSDP_Identity_and_Access_Management_Specification_V1.0.md`, `AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md`, `AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` |
-| Open-item registry | Architecture specification §14.3 (canonical `O-SaaS` ids — this document mints none) |
+| Decision registry | Architecture specification §14.3 (`O-SaaS-1…16`, all decided) and §14.3.1 (`EQ-1…8`, engineering questions) — this document mints no ids |
 
 ## 1. Purpose and scope
 
@@ -51,11 +51,11 @@ That is the whole roadmap; every gate below exists to protect it.
 | Phase | Name | Product behaviour change | Can it break the demo? | Exit gate |
 |---|---|---|---|---|
 | 0 | Verify and freeze | none | no | runtime verification of the stated baseline (§3.3) |
-| 1 | Foundation, enforcement off | none (flag off) | no | demo flow re-run green + decisions O-SaaS-3/4/5/9 (§4.6) |
-| 2 | Enforcement on | module/lifecycle/RBAC denials become real | **yes** | the demo-flow re-run passes **with** enforcement on; flag deleted (§5.6) |
-| 3 | Platform operations | a tenant can be sold, changed and closed | no (adds surface) | platform actions fully audited (§6.5) |
+| 1 | Foundation, enforcement off | none (flag off) | no | demo flow re-run green + the O-SaaS-3/4/5/9 rulings applied to the migration (§4.1) |
+| 2 | Enforcement on | module/lifecycle/RBAC denials become real; multi-membership lands | **yes** | the demo-flow re-run passes **with** enforcement on; flag deleted; membership switch verified (§5.6) |
+| 3 | Platform operations | a tenant can be sold, changed and closed | no (adds surface) | platform actions fully audited, four-eyes proved (§6.5) |
 | 4 | Notifications and recovery | expiry notices, self-service reset | low | notification worker exists and is deployed (§7.5) |
-| 5+ | Deferred | membership, MFA, B2 | — | owner decision per item (§8) |
+| 5+ | Deferred | MFA, P2/P3 deployment, introspection | — | owner decision per item (§8) |
 
 ### 2.2 Why this order and not another
 
@@ -134,17 +134,18 @@ nothing**, with the vocabulary decisions frozen first.
 
 **Product change:** none visible. `SAAS_ENFORCEMENT_ENABLED` defaults **off** (architecture §11.3).
 
-### 4.1 Decisions required before the first migration
+### 4.1 Decisions this phase depends on — **all now decided**
 
-| Item | Why it must precede code |
-|---|---|
-| O-SaaS-3 — five-state vocabulary and the `grace`/`read_only`/`suspended` reading of BR §39 | the CHECK constraint and the matrix encode it; changing it later is a migration plus a behaviour change |
-| O-SaaS-4 — the ten module keys | the registry row set is seeded by migration |
-| O-SaaS-5 — approve the transitional duplicate column (`lifecycle_state` beside `status`) | the migration shape depends on it |
-| O-SaaS-9 — mapping for legacy `status='inactive'` | the backfill lives in the same migration |
+| ID | Ruling (architecture §14.3) | Why it had to precede the migration |
+|---|---|---|
+| O-SaaS-3 | Five-state lifecycle vocabulary confirmed; automatic expiry capped at `read_only` | the CHECK constraint and the matrix encode it; changing it later is a migration plus a behaviour change |
+| O-SaaS-4 | The ten module keys confirmed as the commercial vocabulary; Core never sold or gated | the registry row set is seeded by migration |
+| O-SaaS-5 | `lifecycle_state` authoritative, transitional duplicate `status` approved | the migration shape depends on it; retirement precondition is `EQ-8` |
+| O-SaaS-9 | Legacy `status='inactive'` is **preserved, never auto-mapped**; only a validated reviewed backfill to `active` | the backfill lives in the same migration |
 
-If any of these is undecided, Phase 1 does **not** start. Coding against a guess and migrating later
-is how a vocabulary ends up with two spellings.
+These were open when this roadmap was first written; they are now `OWNER-APPROVED`, so Phase 1 is
+**unblocked on decisions** and blocked only on engineering. The migration still may not contradict a
+ruling: O-SaaS-9 in particular forbids the convenient `inactive → closed` shortcut.
 
 ### 4.2 Work items
 
@@ -207,15 +208,18 @@ applied one.
 
 **Product change:** **yes** — the only phase that can break a working demo.
 
-### 5.1 Decisions required
+### 5.1 Decisions this phase depends on — **all now decided**
 
-| Item | Why |
-|---|---|
-| O-SaaS-1 — approve ADR-SAAS-003 (separate platform identity) and the fate of `super_admin` | the rename and the grant removal cannot be half-done |
-| O-SaaS-2 — resolve ADR-SAAS-009 (platform audit shape) | Phase 3 needs it; resolving it here avoids a second audit migration |
-| O-SaaS-7 — one organization per staff identity (ADR-SAAS-013) | decides whether `staff_users` is touched at all |
-| O-SaaS-8 — separable `platform_admin` / `platform_ops` accounts | shapes the role map before it is written |
-| O-SaaS-10 — operator visibility in a tenant's audit view | shapes audit rendering in the same change |
+| ID | Ruling (architecture §14.3) | Consequence for this phase |
+|---|---|---|
+| O-SaaS-1 | Separate platform identity approved; legacy `super_admin` alias and its `platform.*` grants kept until the replacement is tested, then removed | 2.8 becomes a staged rename, not a drop |
+| O-SaaS-2 | **Option A** audit split — `platform_audit_events` for platform-only events; tenant `audit_events` with a real `organization_id` for tenant-affecting events; never nullable | 2.5 must ship the table; 3.10 uses it |
+| O-SaaS-7 | **Multi-membership adopted**; ADR-SAAS-013 superseded by ADR-SAAS-014 | `staff_users` **is** touched in this phase (2.12–2.14), not deferred |
+| O-SaaS-8 | `platform_admin` and `platform_ops` separable; holding both is an audited, individually approved exception | shapes the role map before it is written |
+| O-SaaS-10 | Named operator identity plus platform role in the tenant's audit view | shapes audit rendering in the same change |
+
+The two-person controls are decided too (O-SaaS-14 suspension, O-SaaS-16 closure) but they become
+relevant in Phase 3, where the buttons first exist — §6.1.
 
 ### 5.2 Work items
 
@@ -232,6 +236,23 @@ applied one.
 | 2.9 | `cross_org` retirement per the platform capability split | IAM spec §7.3, §9.3 |
 | 2.10 | **Delete `SAAS_ENFORCEMENT_ENABLED`** and its pass-through branch | architecture §11.3 |
 | 2.11 | Frontend: lifecycle banner, `403` rendering, capability discovery | tenant spec §7.3; IAM spec §9.3 |
+| 2.12 | Membership migration: `organization_memberships` join + backfill of exactly one membership per existing identity (**`EQ-1`**) | IAM spec §8.1, §8.1.1 |
+| 2.13 | Active-organization transport: token claim + dedicated switch endpoint with re-issue, live membership re-check on every request (**`EQ-2`**) | IAM spec §8.1; architecture §7.2 |
+| 2.14 | Per-membership `role` + `branch_scope` → effective permissions; invitation/acceptance/revocation/suspension (**`EQ-3`**) | IAM spec §8.1.1 |
+| 2.15 | `platform_audit_events` table + the tenant-side second write for tenant-affecting platform actions (**`EQ-4`**) | architecture §7.3; subscription spec §9.3 |
+
+### 5.2.1 Why multi-membership sits in Phase 2 and not Phase 5+
+
+It sat in "deferred" while ADR-SAAS-013 (one organization per identity) was the assumption. O-SaaS-7
+rejected that assumption, and `EQ-1` explicitly **blocks the Phase 2 migration**: retiring
+`staff_users.organization_id` into a join table cannot sensibly happen after enforcement is already
+reading the column. So the shape lands with the enforcement work, and the switch path is part of the
+Phase 2 gate.
+
+`organization_id` remains the only tenant key (D-1). `organization_memberships` is a join that answers
+"who may act in which tenant", never a second tenant column and never a second tenant key. Every
+cross-tenant read still fails `404`; switching is an explicit re-authorisation that re-issues the
+token, never a header or body value.
 
 ### 5.3 The order inside Phase 2 matters
 
@@ -267,6 +288,10 @@ denial path. The first run proves nothing broke; the second proves the feature e
 - [ ] A tenant token cannot perform a platform action; a platform token cannot read clinical content
 - [ ] Cross-tenant request on a module-gated route still returns `404`, never `403`
 - [ ] Revoked token rejected on the next request (live call, `VERIFIED`)
+- [ ] An identity holding two memberships switches explicitly; the token re-issues; a request naming
+      the other tenant in a header or body is ignored, not honoured
+- [ ] Removing a membership takes effect on the **next request**, not the next refresh
+- [ ] A membership revoked in tenant A cannot be used to reach tenant A from tenant B's token (`404`)
 - [ ] `read_only` tenant: writes `403`, reads `200`, banner shown
 - [ ] Phase report written to `docs/implementation/`
 
@@ -284,13 +309,15 @@ not through SQL.
 
 **Product change:** additive — new platform surface, no tenant-plane behaviour removed.
 
-### 6.1 Decisions required
+### 6.1 Decisions this phase depends on — **all now decided**
 
-| Item | Why |
-|---|---|
-| O-SaaS-13 — support-grant acceptance (explicit `org_admin` consent vs pre-approval for `grace`) | the grant flow is the whole point of the operator plane's clinical boundary |
-| O-SaaS-14 — may `platform_ops` suspend without a second operator (four-eyes) | decides whether suspension is a one- or two-person action |
-| O-SaaS-16 — who may close a tenant, and does closure anonymise or retain clinical data | closure is irreversible (tenant spec §11.2); the authority must be decided before the button exists |
+| ID | Ruling (architecture §14.3) | Consequence for this phase |
+|---|---|---|
+| O-SaaS-13 | **Explicit `org_admin` consent for every support grant**; no policy pre-approval, including for `grace` tenants | 3.6 has one acceptance path and no shortcut |
+| O-SaaS-14 | Suspension requires a **second approver**, exactly like closure | 3.7 and the suspend action are two-person actions; both buttons are gated by the same control |
+| O-SaaS-16 | Closure needs **platform administrator approval plus a second approver**; clinical data is **retained by default**; anonymisation only on legal approval, as a separate audited act; `closed` ≠ deleted | 3.7 exports and retains; it never anonymises |
+| O-SaaS-15 | Operator MFA stays `DEFERRED`, risk accepted for MVP | the operator plane launches without a second factor — recorded, not hidden |
+| O-SaaS-12 | The operator-assisted reset response may return the code to the requesting administrator, under constraints | K-9 becomes a constraint to implement, not an open question |
 
 ### 6.2 Work items
 
@@ -305,7 +332,16 @@ not through SQL.
 | 3.7 | Tenant closure flow (irreversible, export-first) | tenant spec §11 |
 | 3.8 | Platform UI: `/platform` pages — tenant list, plan picker, lifecycle actions | audit R-17 |
 | 3.9 | Commercial metadata fields on `organizations` (nullable, platform-writable only) | architecture §7.4 |
-| 3.10 | Platform-scope audit per the resolved ADR-SAAS-009 option | subscription spec §9.3 |
+| 3.10 | Platform-scope audit per the **settled** option A split: `platform_audit_events` + the tenant-side row | subscription spec §9.3; `EQ-4` |
+| 3.11 | Two-person workflow primitive: request → second approver → execution, both identities audited (**O-SaaS-14/16**) | tenant spec §5.2, §11.3; architecture §9.3 |
+| 3.12 | Suspension and closure buttons wired through 3.11 — no single-operator path in the code at all | tenant spec §5.2 rule 2 |
+
+3.11 precedes 3.7: a closure flow built before the four-eyes primitive exists would need the primitive
+retrofitted into the most dangerous code path in the product.
+
+The one-permission escape hatch is deliberately absent. `EQ-7` records that any single-operator
+emergency override would weaken exactly the control O-SaaS-14/O-SaaS-16 exist to create, and that it
+would be an **owner** decision, never an engineering one. Nothing in Phase 3 may add one.
 
 ### 6.3 Ordering inside Phase 3
 
@@ -321,7 +357,11 @@ before a page is drawn over it.
   (subscription spec §7.4).
 - Let a support grant modify commercial state — a support grant is a time-boxed clinical-key
   capability, not an entitlement editor (IAM spec §7.3).
-- Anonymise clinical data on closure without the O-SaaS-16 decision.
+- Anonymise, or delete, clinical data on closure. O-SaaS-16 settled this: data is **retained by
+  default** and `closed` ≠ deleted; anonymisation happens only on legal approval, as a separate audited
+  act — never as part of the closure flow.
+- Suspend or close a tenant on one operator's say-so. O-SaaS-14/O-SaaS-16 require a second approver;
+  a flow that can complete with one identity is a defect, not a convenience.
 
 ### 6.5 Exit gate — Phase 3
 
@@ -330,8 +370,13 @@ before a page is drawn over it.
 - [ ] An upgrade and a downgrade performed and verified against the resolver, with `reason` recorded
 - [ ] A downgrade over a limit verified to block growth only, never to delete data
 - [ ] A support grant exercised, time box expired, capability gone on the next request
-- [ ] A closure performed on a scratch tenant, verified irreversible, audited and export-first
-- [ ] Every platform action appears in `audit_events` (or the ADR-SAAS-009 store, if option A)
+- [ ] A closure performed on a scratch tenant, verified irreversible, audited and export-first, with
+      the clinical data **still present** (O-SaaS-16 retain-by-default)
+- [ ] Suspension attempted by one `platform_ops` identity: refused; completed only after a second
+      approver, with both identities in the audit trail
+- [ ] Every platform action appears in `platform_audit_events`; every tenant-affecting action also
+      appears in that tenant's `audit_events` with a real `organization_id` (`EQ-4`)
+- [ ] A `grace` tenant receives no shortcut: its support grant still needed explicit `org_admin` consent
 - [ ] Phase report written to `docs/implementation/`
 
 **Abort/rollback:** platform endpoints are additive, so an abort disables routes and leaves tenant
@@ -401,12 +446,15 @@ then the worker. Re-enabling is a deliberate act with an audit row, not a restar
 
 | Item | Canonical id | Why deferred |
 |---|---|---|
-| Staff membership across organizations (ADR-SAAS-013) | O-SaaS-7 | Would break the single `organization_id` in the token — the strongest existing isolation asset (audit §6) |
-| MFA for platform operators | O-SaaS-15 | Needs a second factor channel; the worker from Phase 4 is the prerequisite |
-| `staff_password_history` reuse checks | O-SaaS-11 | Defence in depth with no launch blocker attached |
-| B2 dedicated deployment licensing (ADR-SAAS-012) | O-SaaS-6 | Commercially undecided; every mechanism here assumes platform-written rows |
-| Payment integration | ADR-SAAS-008 (`ACCEPTED` out of scope) | V2.5 §21 |
+| MFA for platform operators | O-SaaS-15 | Risk **accepted for MVP**; needs a second factor channel, and the worker from Phase 4 is the prerequisite. First hardening item after launch |
+| `staff_password_history` reuse checks | O-SaaS-11 | Post-launch decision; defence in depth with no launch blocker, risk accepted |
+| P2 dedicated deployment and its licence/renewal mechanics | O-SaaS-6 | **Not in MVP.** Long-term direction; `EQ-6` owns it and it may not leak into P1 behaviour |
+| P3 institution-controlled deployment | O-SaaS-6; A2 | Same ruling; additionally requires the internal/dedicated profile work (A3) to mature |
+| Microservice split (A1) | ADR-SAAS-002 | Target, not MVP; transitional compromises stay until then. It is what turns `EQ-4`'s single transaction into an outbox |
+| Payment integration | ADR-SAAS-008 (`OWNER-APPROVED` out of scope) | V2.5 §21 |
 | Per-tenant custom domains | — | Not required by any approved document |
+
+Multi-membership is **no longer** on this list: O-SaaS-7 adopted it and it moved into Phase 2 (§5.2.1).
 
 A deferred item is **not** a half-built item: nothing in Phases 0–4 depends on these, and none of them
 leaves a stub in the code. If a deferred item later becomes required, it enters as a new phase with its
@@ -508,7 +556,7 @@ Two dependencies are commonly reversed by accident and are called out because of
 | K-6 | New platform tables create a second migration story | 1 | all tables in the single chain (audit C-6) | low |
 | K-7 | Scheduler double-transitions on restart | 4 | advisory lock + compare-and-set + idempotency test | low |
 | K-8 | Expiry degrades a tenant before any notice can be sent | 4 | scheduler gated behind the worker (§7.3) | **accepted until Phase 4** |
-| K-9 | Operator-assisted reset leaks a code (O-SaaS-12 undecided) | 2 | decision required before the flow ships | medium |
+| K-9 | Operator-assisted reset leaks a code (O-SaaS-12 allows returning it, under constraints) | 2 | authenticated operator + audited request + one-time code + no code in any log (IAM spec §6.2) | medium |
 | K-10 | Scope creep into billing during Phase 3 | 3 | ADR-SAAS-008 states the boundary; any price field is a review reject | low |
 | K-11 | The six documents drift from the code as phases land | all | each phase report re-checks its cited sections; the index is updated in the same task | medium |
 
@@ -553,11 +601,11 @@ without a reason.
 | R-06 no platform identity domain | 2 | 2.5 |
 | R-07 no revocation/refresh/logout | 2 | 2.7 |
 | R-08 no password reset/policy | 2 (policy), 4 (self-service) | IAM spec §4.6, §6 |
-| R-09 no membership model | 5+ | O-SaaS-7 |
+| R-09 no membership model | 2 | 2.12–2.14 (`EQ-1…3`) |
 | R-10 fail-open `AMSDP_ENV` guard | 2 | 2.6 |
 | R-11 no counting | 1 | 1.9 |
 | R-12 modules only as prose | 1 | 1.1 |
-| R-13 no platform-scope audit | 2 (decision), 3 (use) | 2.5, 3.10 |
+| R-13 no platform-scope audit | 2 (table + dual write), 3 (use) | 2.15, 3.10 |
 | R-14 no read-only mode | 2 | 2.1 |
 | R-15 no commercial metadata | 3 | 3.9 |
 | R-16 unvalidated `config` | 1 | 1.11 |
@@ -572,7 +620,7 @@ without a reason.
 | C-4 `super_admin` naming | 2 | 2.8 |
 | C-5 single-tier product | 1–3 | the whole set |
 | C-6 shared schema coupling | all | release coordination, §9.1 |
-| C-7 platform audit shape | 2 | ADR-SAAS-009 decision; consumed in 3.10 |
+| C-7 platform audit shape | 2 | O-SaaS-2 option A settled; table in 2.15, consumed in 3.10 |
 | C-8 secret fallback | 2 | 2.6 |
 | C-9 unbounded operator reach | 2 | 2.9 |
 
@@ -583,7 +631,7 @@ without a reason.
 | Requirement | Compliance |
 |---|---|
 | `.clinerules` §2 automatic routing | domains applied: documentation (this document's own subject), plus the domains its phases touch — backend API, auth/RBAC, multi-tenant data, database/migrations, frontend, audit, deployment, LLM/agent tooling (none used) |
-| `.clinerules` §3 non-negotiables | no secrets (§7.5 gate, §9.4); server-side authorisation only (§5.4); `404` on cross-tenant preserved as an abort trigger (§12); single tenant key and single migration chain (§9.1); audit append-only (§9.3); forward-only migrations (§9.1); no capability claimed unbuilt (whole document is `PROPOSED`; §7.4 names the missing notification specification instead of inventing one) |
+| `.clinerules` §3 non-negotiables | no secrets (§7.5 gate, §9.4); server-side authorisation only (§5.4); `404` on cross-tenant preserved as an abort trigger (§12) and re-asserted for membership switching (§5.6); single tenant key and single migration chain (§9.1); audit append-only (§9.3); forward-only migrations (§9.1); no capability claimed unbuilt (whole document is `SPECIFIED`; §7.4 names the missing notification specification instead of inventing one) |
 | `.clinerules` §4 domain table | governance documents read and applied: `saas-cicd-workflow.md` (adapted — git safety, honest CI state), `saas-multitenant-data.md` §4–5, `saas-application-security.md` (adapted), `saas-observability.md` (adapted), BR §37–§42, V2.5 §C/§D/§19/§21/§30 |
 | `.clinerules` §5 skills | **no skills installed** — verified absent (`.clinerules/skills/`, `.claude/skills/`, repo `skills/`); none used, none claimed |
 | `.clinerules` §6 compliance reporting | this section; each future phase report repeats it |
@@ -594,8 +642,9 @@ without a reason.
 
 ### 14.1 Self-check
 
-- Does any phase require an undecided question to be guessed? No — §4.1, §5.1, §6.1 list the decisions
-  as entry conditions.
+- Does any phase require an undecided question to be guessed? No — §4.1, §5.1, §6.1 list the rulings the
+  phase depends on, and all sixteen are decided. The eight `EQ` questions are named where a phase needs
+  their answer and gate that phase, so nothing is guessed either.
 - Can a phase ship a temporary bypass? No — §12 rejects it, and the one accepted flag is deleted in
   Phase 2 by an explicit gate.
 - Is there a phase whose exit cannot be observed? No — every gate is a command, a live call or a
@@ -604,6 +653,8 @@ without a reason.
   the specification gap.
 - Can the demo break silently? No — Phase 2's exit gate is the demo re-run itself, and §3.3 refuses to
   start Phase 1 on a broken baseline.
+- Can a tenant be suspended or closed by one operator? No — O-SaaS-14/16 are sequenced as 3.11 before
+  3.12, and §6.5 refuses the phase if a single identity can complete either action.
 - Is anything in this document already implemented? No.
 
 ---
@@ -615,9 +666,23 @@ without a reason.
 | Written to | `docs/architecture/saas/` (`.clinerules` §11: existing `architecture/` subject folder, one leaf) |
 | Shape authority | `AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` §3–§11 |
 | Evidence base | `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` R-01…R-18, C-1…C-9 |
-| Cross-referenced by | architecture specification §11.1 (Phase-1 exit gate = §4); the audit §14.2 (open-items table, R-17) |
-| Open items | none minted; cites O-SaaS-1…O-SaaS-16 from architecture specification §14.3 |
+| Cross-referenced by | architecture specification §11.1 (Phase-1 exit gate = §4); the audit §14.2 (question table with the 2026-11-17 rulings, R-17) |
+| Decisions applied | O-SaaS-1…16 and A1–A4 (architecture specification §14.3 / §1.5); `EQ-1…8` named where a phase depends on them |
 | Code, schema, migration, compose, frontend changes | **none** |
 | Runtime verification | **none claimed** |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17 |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+
+### 15.1 Revision history
+
+| Revision | Date | Change | Authority |
+|---|---|---|---|
+| V1.0 | 2026-11-17 | Initial roadmap: six phases, gates, abort criteria, risk register, traceability; five decision gates left open | specification-only draft |
+| **Revision 2** | 2026-11-17 | Owner decisions applied: §4.1/§5.1/§6.1 converted from "decisions required" to "decisions applied"; **multi-membership moved from Phase 5+ into Phase 2** (2.12–2.14, `EQ-1…3`, §5.2.1); platform audit table 2.15 with `EQ-4`; two-person suspension/closure primitive 3.11 → 3.12 (O-SaaS-14/16); closure retains data (O-SaaS-16); support grants need consent for `grace` tenants too (O-SaaS-13); deferred list re-labelled (MFA, password history, P2/P3 + `EQ-6`, A1, payment); `PROPOSED` → `SPECIFIED`; revision history added | Product Owner, 2026-11-17 |
+
+### 15.2 What Revision 2 did not do
+
+- It did not build anything, run anything or start any service; no gate in this document is satisfied.
+- It did not renumber phases — Phase 2 grew, the ordering argument survives, and the demo-breaking
+  phase remains Phase 2.
+- It did not answer an `EQ` question; it placed each one where its answer is needed.

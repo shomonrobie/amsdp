@@ -5,6 +5,27 @@
 > **Status:** audit record — **descriptive, not prescriptive**. It changes no code, schema,
 > migration or behaviour, and it authorises no implementation.
 > **Part of the set:** `docs/architecture/saas/` (six documents, see §14).
+>
+> **Correction note (2026-11-17, applied with Revision 2 of the sibling documents).** The
+> observations in §2–§13 were measured on `133ce83` and are **kept verbatim** — an audit is a record
+> of what was true, not a document to rewrite. What changed *after* the audit is recorded here and in
+> the bracketed notes at the affected rows (§1.3 vocabulary, §4.1 principal, §8 C-1/C-7, §9 K-8, §13,
+> §14.2):
+>
+> 1. **The owner decided.** All sixteen `O-SaaS` items and directions A1–A4 were ruled on 2026-11-17
+>    (architecture specification §1.5, §14.3), and eight engineering questions `EQ-1…8` were opened
+>    (§14.3.1). Every question this audit raised — §14.2 A-1…A-5 — is therefore **decided**; §14.2 is
+>    retained as the historical question list with the rulings appended.
+> 2. **The status vocabulary is now two-axis** (architecture specification §1.3): a decision axis
+>    (`OWNER-APPROVED` / `SPECIFIED` / `OPEN` / `DEFERRED` / `SUPERSEDED`) and an evidence axis
+>    (`NOT IMPLEMENTED` / `IMPLEMENTED` / `TESTED` / `VERIFIED`). This audit's grades are the evidence
+>    axis and are unaffected: **no decision advanced any evidence grade**, and nothing in §2–§13 was
+>    implemented by the decision. `PROPOSED` in this document's §1.3 table means what the set now calls
+>    `SPECIFIED`.
+> 3. **Nothing in this audit's evidence changed.** The commercial layer, the platform identity domain,
+>    revocation and the lifecycle enforcement are still absent from the tree exactly as graded; the
+>    rulings authorise work, they do not constitute it.
+>
 > **Governing documents read:** `docs/AMSDP_Business_Rules_V1.1.md` Part II (§3–§6), Part IX
 > (§37–§39, subscription lifecycle), §40 (audit history) and §42 (security),
 > `docs/AMSDP_Master_Feature_List_V2.5_…md` §C/§C.1/§D (module catalogue), §5.1 (Super Admin
@@ -51,7 +72,7 @@ run in this task (see §1.4).
 | **VERIFIED** | A second, independent artefact confirms it | *not claimed anywhere in this audit* |
 | **ACCEPTED** | The project owner has signed it | the owner decisions Q-1…Q-6 |
 | **ABSENT** | Grep and schema inspection find nothing | subscription, plan, entitlement, billing, reset, refresh, revocation |
-| **PROPOSED** | A design proposal in a sibling document, not approved | everything in the other five documents |
+| **PROPOSED** | A design proposal in a sibling document, not approved | everything in the other five documents. **Correction note (2026-11-17):** this grade is what the set now calls `SPECIFIED`; decisions made by the owner carry `OWNER-APPROVED` and are recorded in architecture specification §14.3, not here. This audit grades evidence only |
 
 **This audit contains no VERIFIED claim.** It is a static reading of the tree, not a runtime
 observation. A capability is not VERIFIED until a browser run, a live API call or a database
@@ -195,6 +216,13 @@ two organizations**. Consequences: a locum doctor working at two clinics needs t
 two passwords and two audit identities; a platform operator who also owns a clinic needs a
 tenant account *as well as* a platform identity. Both are recorded as open questions, not
 decided here (ADR-SAAS-013, `OPEN`).
+
+> **[Correction 2026-11-17]** This paragraph is kept as written because it describes the tree at
+> `133ce83`, which is unchanged. The *question* it raised has since been decided: O-SaaS-7 rejected
+> one-organization-per-identity and adopted **multi-membership** (ADR-SAAS-014 supersedes
+> ADR-SAAS-013), so the two-usernames consequence above is a statement about today's code, not about
+> the target design. Evidence grade unchanged: `staff_users` still carries `organization_id` and no
+> membership table exists.
 
 ### 4.2 Token mechanics — as built
 
@@ -399,13 +427,13 @@ resolution is proposed.
 
 | # | Document says (source) | Tree does | Resolution |
 |---|---|---|---|
-| **C-1** | `AMSDP_System_Architecture_V1.0.md` §8.1: database-per-service | one database, one schema, one Alembic chain, one `common/models.py` | ADR-SAAS-002 (`PROPOSED`): keep the shared database for V1; database ownership is an `OPEN` question, not an approved decision |
+| **C-1** | `AMSDP_System_Architecture_V1.0.md` §8.1: database-per-service | one database, one schema, one Alembic chain, one `common/models.py` | ADR-SAAS-002: keep the shared database for V1; database ownership is an `OPEN` question, not an approved decision. **[Correction 2026-11-17]** ADR-SAAS-002 is now `OWNER-APPROVED` as A1 (microservice split is the target, the shared database is the V1 compromise); `OPEN` remains only for the physical split, owned by `EQ-4` |
 | **C-2** | `AMSDP_Master_Feature_List_V2.5` §19/§20 place a super-admin console and organization management in the product | no platform plane, no console, no platform route, no page | roadmap Phases 2–3 build it; audit grades it **ABSENT** |
 | **C-3** | `AMSDP_Business_Rules_V1.1.md` §38–§39 specify subscription controls (suspension, reactivation) and an expiry/grace/read-only lifecycle | `organizations.status` exists but **nothing reads it**; the tenant can write it | R-03, R-14; tenant spec §5 |
 | **C-4** | `super_admin` reads as a platform superuser | it is a tenant-created `staff_users` row holding the two platform capabilities (Q-1) | IAM spec §7 renames the concept: a tenant role becomes `org_super_admin`, and `platform_admin` becomes a separate principal domain |
 | **C-5** | product positioning calls AMSDP a multi-tenant SaaS | it is multi-tenant, but **single-tier**: every tenant gets every capability, no plan exists | this audit's core finding; subscription spec |
 | **C-6** | architecture presents services as independently deployable domain owners | all eight services import `common/models.py` and one shared schema, so any schema change touches all of them | recorded as a constraint on the roadmap (release coordination), not as a defect to fix now |
-| **C-7** | `AMSDP_Business_Rules_V1.1.md` §40 requires auditing subscription activation/expiry/suspension/reactivation, and V2.5 §5.1 requires platform governance actions to be recorded | `audit_events.organization_id` is NOT NULL + FK, so a platform action that belongs to no tenant has nowhere to be written | ADR-SAAS-009 (`OPEN`, two options); tenant spec §10; subscription spec §9.3 |
+| **C-7** | `AMSDP_Business_Rules_V1.1.md` §40 requires auditing subscription activation/expiry/suspension/reactivation, and V2.5 §5.1 requires platform governance actions to be recorded | `audit_events.organization_id` is NOT NULL + FK, so a platform action that belongs to no tenant has nowhere to be written | **[Correction 2026-11-17]** resolved by O-SaaS-2 as **option A**: `platform_audit_events` for platform-only events, the tenant's `audit_events` (real `organization_id`) for tenant-affecting events, and the column is **never** made nullable; ADR-SAAS-009 `OWNER-APPROVED`. Subscription spec §9.3, roadmap 2.15/3.10, `EQ-4` |
 | **C-8** | `AMSDP_Business_Rules_V1.1.md` §42 forbids embedding production secrets in source | the secret is environment-sourced (`identity/models.py:15`); the dev fallback is only reached when `AMSDP_ENV` is unset or `development`, so a production host with `AMSDP_ENV` unset silently runs on a public constant | IAM spec §5.2 makes the guard fail **closed** (`AMSDP_ENV` required, or an explicit `AMSDP_ALLOW_DEV_SECRET=1` opt-in) — R-10 |
 | **C-9** | `AMSDP_Master_Feature_List_V2.5` §5.1: the Super Admin dashboard **must not create routine cross-tenant access to patient or appointment content** | a `super_admin` holding `platform.cross_org` passes `require_org_access` for any organization and also holds `patient.*`/`doctor.*`, so cross-org patient and appointment reads are possible; each is audited, but nothing bounds the scope to metadata | IAM spec §7.3 splits the capability: platform administration keeps tenant **metadata/usage** reach, and clinical reach requires a tenant-granted, time-boxed support grant (§9.3 of the architecture spec) |
 
@@ -450,7 +478,7 @@ requirements · **S3** debt that the SaaS layer makes worse if left.
 | K-5 | Entitlement cache serves stale state after a downgrade, so a tenant keeps a capability it no longer pays for | Medium | Medium | monotonic `entitlements_version` per org; cache keyed on it |
 | K-6 | New platform tables silently create a second migration story in a shared database (C-6) | High | Low | all new tables go into the same single Alembic chain; no second chain |
 | K-7 | Tenant closure deletes rows directly, breaking append-only audit (`.clinerules` §3) | Medium | High | closure is soft + anonymisation only; explicit prohibition in tenant spec §11 |
-| K-8 | The owner treats these documents as approved architecture and skips the `PROPOSED` markers | Medium | Medium | every design decision is labelled; §14.2 lists the open items verbatim |
+| K-8 | The owner treats these documents as approved architecture and skips the status labels | Medium | Medium | **[Correction 2026-11-17]** the decisions are now genuinely `OWNER-APPROVED`, so the risk inverted: an approved decision still has evidence `NOT IMPLEMENTED`. Mitigation is the two-axis label (architecture §1.3) and the roadmap's gates — no gate in the set is satisfied by a decision |
 
 ---
 
@@ -523,6 +551,13 @@ Then, in order: close R-03/R-04 (tenant-owned lifecycle + broken audit) → add 
 machine and read-only mode (R-14) → platform console (R-17). The roadmap sequences this with
 gates and exit criteria.
 
+> **[Correction 2026-11-17]** Both entry-point decisions were made: ADR-SAAS-003 is
+> `OWNER-APPROVED` (O-SaaS-1) and ADR-SAAS-002 is `OWNER-APPROVED` (A1). The recommended *order*
+> above is unchanged and still governs, but the sequencing now lives in the implementation roadmap
+> Revision 2 — including the corrected placement of multi-membership in Phase 2 (`EQ-1` blocks the
+> Phase 2 migration). Note that "close R-03/R-04" remains an evidence statement: the tenant can still
+> write its own status in the tree as audited.
+
 ---
 
 ## 14. Document set, open items and reproduction
@@ -531,26 +566,30 @@ gates and exit criteria.
 
 | Document | Answers |
 |---|---|
-| `AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | what "Hybrid SaaS" means for AMSDP: planes, modules, ADR-SAAS-001…013 |
+| `AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | what "Hybrid SaaS" means for AMSDP: planes, modules, ADR-SAAS-001…017 (001–017 after Revision 2; 013 `SUPERSEDED` by 014) |
 | `AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | principals, tokens, sessions, platform identity, membership |
 | `AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md` | tenant model, provisioning, lifecycle, read-only mode, closure |
 | `AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` | plans, modules, subscriptions, limits, enforcement, audit |
 | `AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | phases, gates, exit criteria, risk sequencing |
 | **this document** | what exists today, graded, with contradictions and gaps |
 
-### 14.2 Open items raised by this audit (not decided here)
+### 14.2 Questions raised by this audit — all since decided
 
 The audit numbers these questions A-1…A-5 locally; the **canonical ids** are those in the
 architecture specification's registry (§14.3), which is the single `O-SaaS` namespace for the whole
 six-document set. The right-hand column records that mapping so a reader can follow either number.
 
-| Local | Question | Recorded in | Canonical id |
-|---|---|---|---|
-| A-1 | Is the deployment model shared-database multi-tenant only, or must dedicated per-tenant stacks be supported in V1? | ADR-SAAS-012 | O-SaaS-6 |
-| A-2 | Platform-scope audit: a new `platform_audit_events` table, or a nullable `organization_id` on `audit_events`? | ADR-SAAS-009 | O-SaaS-2 |
-| A-3 | One human, many organizations: membership table now, or defer with separate accounts? | ADR-SAAS-013 | O-SaaS-7 |
-| A-4 | Should `super_admin` be renamed (a breaking change to tokens and roles) or deprecated in place? | IAM spec §7.4 | O-SaaS-1 |
-| A-5 | Who may close a tenant, and does closing anonymise clinical data or retain it? | Tenant spec §11 | O-SaaS-16 |
+> **[Correction 2026-11-17]** Every question below was **ruled by the owner on 2026-11-17**. The
+> question list is kept verbatim because it is the audit's historical output; the ruling column is the
+> correction. None of the rulings changes an evidence grade in §12.
+
+| Local | Question | Recorded in | Canonical id | Ruling (2026-11-17) |
+|---|---|---|---|---|
+| A-1 | Is the deployment model shared-database multi-tenant only, or must dedicated per-tenant stacks be supported in V1? | ADR-SAAS-012 | O-SaaS-6 | **Not in MVP.** Shared database for V1; P2 dedicated and P3 institution-controlled are long-term; licence mechanics stay `SPECIFIED` (`EQ-6`) |
+| A-2 | Platform-scope audit: a new `platform_audit_events` table, or a nullable `organization_id` on `audit_events`? | ADR-SAAS-009 | O-SaaS-2 | **New table (option A).** `organization_id` is **not** made nullable |
+| A-3 | One human, many organizations: membership table now, or defer with separate accounts? | ADR-SAAS-013 | O-SaaS-7 | **Membership now** — multi-membership adopted, ADR-SAAS-013 superseded by ADR-SAAS-014; physical shape is `EQ-1…3` |
+| A-4 | Should `super_admin` be renamed (a breaking change to tokens and roles) or deprecated in place? | IAM spec §7.4 | O-SaaS-1 | **Renamed by controlled migration**, never dropped; the legacy alias and its `platform.*` grants survive until the replacement is `TESTED`/`VERIFIED` |
+| A-5 | Who may close a tenant, and does closing anonymise clinical data or retain it? | Tenant spec §11 | O-SaaS-16 | **Platform administrator approval plus a second approver**; data **retained by default**; anonymisation only on legal approval, as a separate audited act |
 
 ### 14.3 Reproduction (read-only)
 
