@@ -42,6 +42,10 @@ PERMISSIONS: dict[str, list[str]] = {
         "org.create", "org.read", "org.manage",
         "branch.read", "branch.manage",
         "facility.read", "facility.manage",
+        # AMSDP-SYMPTOM-01: the bilingual symptom catalogue is organization
+        # configuration like the facility tree — reading it is what the booking
+        # form does, managing it (adding/retiring entries) is administrative.
+        "symptom.read", "symptom.manage",
         "staff.read", "staff.manage", "audit.read",
         # --- clinic capability namespaces (tenant support), no wider ---------
         "patient.*", "doctor.*", "schedule.*", "appointment.*", "queue.*",
@@ -55,12 +59,17 @@ PERMISSIONS: dict[str, list[str]] = {
         # existing "doctor.manage" (inside the "doctor.*" namespace below), so
         # the matrix gains no invented privilege.
         "facility.read", "facility.manage",
+        # AMSDP-SYMPTOM-01 — mirrors super_admin, and is what lets an
+        # administrator retrieve retired catalogue entries for review.
+        "symptom.read", "symptom.manage",
         "staff.read", "staff.manage",
         "patient.*", "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
     "branch_admin": [
         "branch.read", "facility.read", "facility.manage", "staff.read",
+        # AMSDP-SYMPTOM-01 — a branch administrator curates the branch's wording.
+        "symptom.read", "symptom.manage",
         "patient.*", "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
@@ -70,6 +79,9 @@ PERMISSIONS: dict[str, list[str]] = {
         # rooms exist at this branch when booking, and must not be able to
         # create or retire them.
         "facility.read",
+        # AMSDP-SYMPTOM-01: reading the catalogue is part of taking a booking;
+        # nothing here grants the receptionist the ability to change it.
+        "symptom.read",
         "appointment.create", "appointment.read", "appointment.modify",
         "queue.view", "queue.reorder", "queue.checkin", "queue.manage",
         # Sequence 3 / BR §27A: staff-confirmed missed-turn recovery.
@@ -78,6 +90,8 @@ PERMISSIONS: dict[str, list[str]] = {
     "doctor": [
         "patient.read", "patient.search",
         "facility.read",
+        # AMSDP-SYMPTOM-01: a doctor reads what the receptionist recorded.
+        "symptom.read",
         "schedule.read", "appointment.read", "queue.view", "queue.consult",
         # Sequence 3 / BR §27A.1 + §27A.3: an authorized doctor may confirm a
         # missed turn and reposition within the same queue. This does NOT grant
@@ -87,6 +101,8 @@ PERMISSIONS: dict[str, list[str]] = {
     "assistant": [
         "patient.read", "patient.search",
         "facility.read",
+        # AMSDP-SYMPTOM-01: read-only, like the rest of the assistant matrix.
+        "symptom.read",
         "appointment.read", "queue.view",
     ],
 }

@@ -38,10 +38,10 @@ import jwt                                                       # noqa: E402
 
 from common.auth import _ALGO, _SECRET                            # noqa: E402
 from common.database import SessionFactory                        # noqa: E402
-from common.models import (Appointment, Branch, Doctor, DoctorBranch,  # noqa: E402
-                           Notification, Organization, Patient, QueueEntry,
-                           QueueSequence, Schedule, ScheduleSession, StaffUser,
-                           TrackingToken)
+from common.models import (Appointment, AppointmentSymptom, Branch, Doctor,  # noqa: E402
+                           DoctorBranch, Notification, Organization, Patient,
+                           QueueEntry, QueueSequence, Schedule, ScheduleSession,
+                           StaffUser, SymptomCatalog, TrackingToken)
 
 #: Password used by every user this module creates.
 PASSWORD = "testpass123"
@@ -110,6 +110,41 @@ def ensure_patient(patient_id: str, org_id: str, *, name: str = "Test Patient",
                           mobile=mobile, sex=sex))
             s.commit()
     return patient_id
+
+
+def ensure_symptom(code: str, org_id: str, *, name_en: str = "",
+                   name_bn: str = "", synonyms_en=None, synonyms_bn=None,
+                   category: str = "general", specialty_hints=None,
+                   sort_order: int = 100, status: str = "active",
+                   symptom_id: str | None = None) -> str:
+    """Create (idempotently) one catalogue entry and return its id.
+
+    Ids are stable per ``(organization, code)`` so a test can name the entry it
+    depends on without keeping a fixture map.
+    """
+    row_id = symptom_id or f"{org_id}::{code}"
+    with db_session() as s:
+        row = s.query(SymptomCatalog).filter(
+            SymptomCatalog.organization_id == org_id,
+            SymptomCatalog.code == code).first()
+        if row is None:
+            row = SymptomCatalog(
+                id=row_id, organization_id=org_id, code=code,
+                name_en=name_en or code.title(), name_bn=name_bn,
+                synonyms_en=list(synonyms_en or []),
+                synonyms_bn=list(synonyms_bn or []),
+                category=category,
+                specialty_hints=list(specialty_hints or []),
+                sort_order=sort_order, status=status,
+                source="test fixture", review_status="curated")
+            s.add(row)
+        else:
+            row.name_en = name_en or row.name_en
+            row.name_bn = name_bn or row.name_bn
+            row.status = status
+            row.sort_order = sort_order
+        s.commit()
+        return row.id
 
 
 def ensure_user(username: str, role: str, org_id: str,
@@ -210,6 +245,11 @@ def purge_org(org_id: str) -> None:
                 QueueSequence.doctor_id.in_(doctor_ids)).delete(
                 synchronize_session=False)
         if appointment_ids:
+            # Recorded symptoms are children of the appointment (AMSDP-SYMPTOM-01)
+            # and must go before it, or the foreign key refuses the delete.
+            s.query(AppointmentSymptom).filter(
+                AppointmentSymptom.appointment_id.in_(appointment_ids)).delete(
+                synchronize_session=False)
             s.query(TrackingToken).filter(
                 TrackingToken.appointment_id.in_(appointment_ids)).delete(
                 synchronize_session=False)
@@ -228,5 +268,11 @@ def purge_org(org_id: str) -> None:
                 DoctorBranch.doctor_id.in_(doctor_ids)).delete(
                 synchronize_session=False)
         s.query(Patient).filter(Patient.organization_id == org_id).delete(
+            synchronize_session=False)
+        # The symptom catalogue is seeded reference data for each test
+        # organization (AMSDP-SYMPTOM-01); it has no children once the
+        # appointment symptom rows above are gone.
+        s.query(SymptomCatalog).filter(
+            SymptomCatalog.organization_id == org_id).delete(
             synchronize_session=False)
         s.commit()

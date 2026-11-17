@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Integer, Float, Text, DateTime, Date, Boolean,
-    ForeignKey, JSON, UniqueConstraint, Index, text,
+    ForeignKey, JSON, UniqueConstraint, Index, CheckConstraint, text,
 )
 from sqlalchemy.orm import relationship
 
@@ -531,6 +531,14 @@ class Appointment(Base):
     department_name       = Column(String(120))
     room_id               = Column(String, ForeignKey("facility_rooms.id"))
     room_name             = Column(String(120))
+    # --- Symptom onset, optional and recorded at booking (AMSDP-SYMPTOM-01) --
+    # A closed vocabulary (``appointment/symptoms.ONSET_CODES``) instead of a
+    # date: a patient at a reception desk routinely cannot name a day, and
+    # forcing one would either block the booking or invent a fact.  ``None``
+    # means "not recorded", which is different from ``UNKNOWN`` ("asked, could
+    # not say").  The free short note is the receptionist's own wording.
+    symptom_onset_code    = Column(String(30))
+    symptom_onset_note    = Column(Text)
     created_at            = Column(DateTime(timezone=True), default=_utcnow)
 
     organization          = relationship("Organization")
@@ -544,6 +552,133 @@ class Appointment(Base):
         Index("idx_appt_doctor_date", "doctor_id", "appointment_date"),
         Index("idx_appt_patient", "patient_id"),
         Index("idx_appt_session", "session_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Symptoms — service: appointment
+# ---------------------------------------------------------------------------
+
+class SymptomCatalog(Base):
+    """Organization-owned catalogue of **patient-reported symptoms**.
+
+    Scope is deliberately narrow, and the schema says so: an entry names
+    something a patient can *report* ("মাথাব্যথা / headache", "কাশি / cough").
+    It is not a diagnosis, a clinical finding, a disease or a triage rule —
+    AMSDP never derives a condition from a selected symptom, and
+    ``review_status`` exists precisely so an unreviewed entry cannot be
+    presented as clinically validated.
+
+    Bilingual by construction: ``name_bn`` is required for a displayable entry
+    and both synonym lists carry the words a receptionist might actually type.
+
+    ``specialty_hints`` is a **ranking hint only** — a list of speciality codes
+    (``cardiology``, ``medicine``, …) copied from the organization's
+    ``specialties.code`` values.  A cardiology booking may therefore show chest
+    pain earlier, while every other symptom stays searchable and selectable.
+    It is a soft tag, not a foreign key: speciality catalogues are per
+    organization, and a hint must never make a symptom unselectable anywhere.
+
+    The whole catalogue is returned to the booking UI in one response and
+    searched in the browser (the same design as BanglaNameSense), so a
+    keystroke never costs a request.
+    """
+    __tablename__ = "symptom_catalog"
+    __service__ = "appointment"
+
+    id              = Column(String, primary_key=True, default=_new_id)
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    #: Stable identifier for this entry within the organization (``headache``).
+    code            = Column(String(60), nullable=False)
+    name_en         = Column(String(160), nullable=False)
+    name_bn         = Column(String(160), default="")
+    #: Recognised alternate wording, per script.  JSON lists of short strings.
+    synonyms_en     = Column(JSON, default=list)
+    synonyms_bn     = Column(JSON, default=list)
+    #: Coarse classification for grouping and later analytics (not shown as a
+    #: clinical category): general, neurological, respiratory, …
+    category        = Column(String(60), default="general")
+    #: Ranking hints (see the class docstring).  Never a filter.
+    specialty_hints = Column(JSON, default=list)
+    #: Where the wording came from, and how far it has been reviewed.
+    source          = Column(String(300), default="")
+    #: ``unreviewed`` | ``curated`` | ``clinically_reviewed``
+    review_status   = Column(String(30), default="unreviewed")
+    #: Ascending display/commonness order; a deterministic tie-break for search.
+    sort_order      = Column(Integer, default=100)
+    status          = Column(String(20), default="active")
+    created_at      = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "code", name="uq_symptom_org_code"),
+        Index("idx_symptom_org", "organization_id"),
+        Index("idx_symptom_org_status", "organization_id", "status"),
+    )
+
+
+class AppointmentSymptom(Base):
+    """One symptom recorded against one appointment, as recorded at booking.
+
+    The receptionist records two things that must stay distinguishable, so the
+    table carries both shapes rather than collapsing them into a string:
+
+    * ``kind='catalogue'`` — ``symptom_id`` references ``symptom_catalog``.
+      ``name_en``/``name_bn`` are **snapshotted** at booking time, exactly like
+      the chamber snapshot on ``appointments``: renaming or retiring a
+      catalogue entry must never rewrite what was recorded for this visit.
+    * ``kind='free_text'`` — ``symptom_id`` is NULL and ``text_reported`` holds
+      the words the receptionist typed, because the complaint was not in the
+      catalogue.  ``text_key`` is the case/whitespace-normalised form used for
+      duplicate suppression only.
+
+    Duplicates are prevented by two *partial* unique indexes, so the database —
+    not only the service — refuses the same catalogue entry twice on one
+    appointment, and the same free-text description twice::
+
+        uq_appt_symptom_catalogue (appointment_id, symptom_id)
+                                  WHERE symptom_id IS NOT NULL
+        uq_appt_symptom_text      (appointment_id, text_key)
+                                  WHERE symptom_id IS NULL AND text_key <> ''
+
+    ``organization_id`` is written on every row (the tenant key is
+    ``organization_id`` throughout AMSDP) even though it is derivable from the
+    appointment: a cross-tenant read then fails closed on this table too, and
+    the index makes that the cheap path.
+    """
+    __tablename__ = "appointment_symptoms"
+    __service__ = "appointment"
+
+    id              = Column(String, primary_key=True, default=_new_id)
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=False)
+    appointment_id  = Column(String, ForeignKey("appointments.id"), nullable=False)
+    #: 'catalogue' | 'free_text' — never inferred at read time.
+    kind            = Column(String(20), nullable=False)
+    symptom_id      = Column(String, ForeignKey("symptom_catalog.id"))
+    #: Snapshot of the catalogue entry (empty for free text).
+    name_en         = Column(String(160), nullable=False, default="")
+    name_bn         = Column(String(160), nullable=False, default="")
+    #: What the receptionist typed (empty for catalogue entries).
+    text_reported   = Column(Text, nullable=False, default="")
+    text_key        = Column(String(300), nullable=False, default="")
+    recorded_by     = Column(String)
+    created_at      = Column(DateTime(timezone=True), default=_utcnow)
+
+    symptom         = relationship("SymptomCatalog")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(kind = 'catalogue' AND symptom_id IS NOT NULL"
+            " AND length(trim(text_reported)) = 0)"
+            " OR (kind = 'free_text' AND symptom_id IS NULL"
+            " AND length(trim(text_reported)) > 0)",
+            name="ck_appt_symptom_shape"),
+        Index("idx_appt_symptom_appt", "appointment_id"),
+        Index("idx_appt_symptom_org", "organization_id"),
+        Index("uq_appt_symptom_catalogue", "appointment_id", "symptom_id",
+              unique=True, postgresql_where=text("symptom_id IS NOT NULL")),
+        Index("uq_appt_symptom_text", "appointment_id", "text_key",
+              unique=True,
+              postgresql_where=text("symptom_id IS NULL AND text_key <> ''")),
     )
 
 
