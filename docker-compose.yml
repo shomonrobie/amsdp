@@ -13,6 +13,16 @@
 #     tokens with a different secret would 401 every authenticated call;
 #   * the audit service now builds from the same context as the rest (it was
 #     unstartable: wrong build context, no common/ package, no DB driver).
+#
+# Automatic (re)start — owner decision, 2026-11-15:
+#   every service declares `restart: unless-stopped`, so a container that crashes
+#   is restarted by the Docker daemon, and the whole stack comes back after a
+#   host reboot without anyone running a command.  This supersedes the earlier
+#   deliberate deferral ("a restart policy is a deployment decision for whatever
+#   supervisor", AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md §restart policy):
+#   on this host the supervisor is systemd, and `unless-stopped` is what makes
+#   the demo survive a reboot.  See _tools/install_autostart.sh for the boot-time
+#   wrapper that additionally refreshes the demo data after the stack is ready.
 
 x-backend-env: &backend-env
   AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp}
@@ -35,6 +45,7 @@ x-healthcheck-defaults: &healthcheck-defaults
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     ports: ["5433:5432"]
     environment:
       POSTGRES_USER: amsdp
@@ -53,6 +64,7 @@ services:
     build:
       context: ./backend
       dockerfile: identity/Dockerfile
+    restart: unless-stopped
     ports: ["8110:8000"]
     environment: *backend-env
     depends_on: *db-gate
@@ -64,6 +76,7 @@ services:
     build:
       context: ./backend
       dockerfile: organization/Dockerfile
+    restart: unless-stopped
     ports: ["8111:8001"]
     environment: *backend-env
     depends_on: *db-gate
@@ -75,6 +88,7 @@ services:
     build:
       context: ./backend
       dockerfile: patient/Dockerfile
+    restart: unless-stopped
     ports: ["8112:8002"]
     environment: *backend-env
     depends_on: *db-gate
@@ -86,6 +100,7 @@ services:
     build:
       context: ./backend
       dockerfile: doctor/Dockerfile
+    restart: unless-stopped
     ports: ["8113:8003"]
     environment: *backend-env
     depends_on: *db-gate
@@ -97,6 +112,7 @@ services:
     build:
       context: ./backend
       dockerfile: scheduling/Dockerfile
+    restart: unless-stopped
     ports: ["8114:8004"]
     environment: *backend-env
     depends_on: *db-gate
@@ -108,6 +124,7 @@ services:
     build:
       context: ./backend
       dockerfile: appointment/Dockerfile
+    restart: unless-stopped
     ports: ["8115:8005"]
     environment: *backend-env
     depends_on: *db-gate
@@ -119,6 +136,7 @@ services:
     build:
       context: ./backend
       dockerfile: queuing/Dockerfile
+    restart: unless-stopped
     ports: ["8116:8006"]
     environment: *backend-env
     depends_on: *db-gate
@@ -130,6 +148,7 @@ services:
     build:
       context: ./backend
       dockerfile: audit/Dockerfile
+    restart: unless-stopped
     ports: ["8117:8007"]
     environment: *backend-env
     depends_on: *db-gate
@@ -139,6 +158,7 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports: ["3100:3000"]
     depends_on:
       identity:

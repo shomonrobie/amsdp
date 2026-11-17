@@ -1,0 +1,57 @@
+# AMSDP isolated demo environment — M7-B0.
+#
+# Runs the SAME application code and approved migrations against a dedicated
+# demo database (amsdp_demo) on a separate Docker volume (amsdp_demo_pg_data).
+# The development database (amsdp on amsdp_pg_data, host port 5433) is never
+# touched by the demo project.
+#
+# Because backend/frontend host ports are identical to the dev project, the
+# dev stack must be stopped before the demo stack is started (and vice versa).
+#
+# The restart policy is NOT repeated here: this overlay only patches environment
+# and volumes, so every service inherits `restart: unless-stopped` from
+# docker-compose.yml (see the note in that file's header).
+#
+# Start demo project (from repo root):
+#   docker compose -p amsdp_demo -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+# Initialize demo schema + seed (demo DB must be healthy):
+#   cd backend && AMSDP_DATABASE_URL="postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD}@127.0.0.1:5433/amsdp_demo" python -m alembic upgrade head
+#   cd backend && AMSDP_DATABASE_URL="postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD}@127.0.0.1:5433/amsdp_demo" python seed/seed_demo.py
+# Stop demo (dev data on amsdp_pg_data remains untouched):
+#   docker compose -p amsdp_demo -f docker-compose.yml -f docker-compose.demo.yml down
+# Resume dev:
+#   docker compose -p amsdp up -d --build
+
+services:
+  db:
+    environment:
+      POSTGRES_DB: amsdp_demo
+    volumes:
+      - amsdp_demo_pg_data:/var/lib/postgresql/data
+  identity:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  organization:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  patient:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  doctor:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  scheduling:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  appointment:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  queuing:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+  audit:
+    environment:
+      AMSDP_DATABASE_URL: ${AMSDP_DATABASE_URL_DEMO:-postgresql+psycopg2://amsdp:${POSTGRES_PASSWORD:?missing - set it in .env, see .env.example}@db:5432/amsdp_demo}
+
+volumes:
+  amsdp_demo_pg_data:

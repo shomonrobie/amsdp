@@ -5,11 +5,11 @@ export async function getServerSideProps(){return{props:{}}}
 const L={bn:{t:'প্রতিষ্ঠান',n:'নাম',c:'কোড',s:'অবস্থা',a:'ঠিকানা',na:'কোন প্রতিষ্ঠান নেই',cr:'তৈরি করুন'},
   en:{t:'Organizations',n:'Name',c:'Code',s:'Status',a:'Address',na:'No organizations',cr:'Create'}};
 function T(k){const l=typeof window!=='undefined'?sessionStorage.getItem('locale')||'bn':'bn';return(L[l]||L.bn)[k]||k;}
-function usr(){try{return JSON.parse(sessionStorage.getItem('amsdp_user')||'{}')}catch(e){return{}}}
+function usr(){try{if(typeof window==='undefined')return{};return JSON.parse(sessionStorage.getItem('amsdp_user')||'{}')}catch(e){return{}}}
 export default function Orgs(){
   const[items,setItems]=React.useState([]);const[loading,setLoading]=React.useState(true);const[err,setErr]=React.useState('');
   const[showForm,setShowForm]=React.useState(false);const[f,setF]=React.useState({name:'',code:'',address:''});
-  const u=usr();const h={'Authorization':'Bearer '+sessionStorage.getItem('amsdp_token')};
+  const u=usr();const h={'Authorization':'Bearer '+(typeof window!=='undefined'?sessionStorage.getItem('amsdp_token')||'':'')};
   React.useEffect(()=>{fetch('/api/v1/orgs',{headers:h}).then(r=>r.ok?r.json():[]).then(d=>{setItems(d);setLoading(false)}).catch(e=>{setErr(String(e));setLoading(false)})},[]);
   const create=async()=>{
     const r=await fetch('/api/v1/orgs',{method:'POST',headers:{'Content-Type':'application/json',...h},body:JSON.stringify(f)});

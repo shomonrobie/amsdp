@@ -24,6 +24,7 @@ It gives each subscribing hospital, clinic or independent medical chamber a dedi
 Its core capabilities include:
 
 - **Flexible appointment management:** Supports time-slot, serial-based and hybrid appointment systems.
+- **Calendar booking view:** A week/day calendar built from each doctor's published slots, so staff book into a real opening (with live `booked/capacity` per slot) instead of typing a time by hand; the flat appointment list is still one click away.
 - **Unified patient queue:** Brings scheduled appointments and walk-in patients into one manageable queue.
 - **Configurable walk-in handling:** Facilities can place walk-ins at the end of the queue, use first-come-first-served ordering, reserve walk-in capacity or allow authorized staff to decide placement.
 - **Simple daily operations board:** Staff can see the day's appointments and queue at a glance, update patient status and manually reorder the queue.
@@ -198,6 +199,8 @@ _tools/amsdp_stack.sh            # start or resume everything (same as `up`)
 | Check service status, health and HTTP probes | `_tools/amsdp_stack.sh status` |
 | Follow logs (all services, or one) | `_tools/amsdp_stack.sh logs [service]` |
 | Rebuild images before starting | `AMSDP_BUILD=1 _tools/amsdp_stack.sh up` |
+| Redeploy **a code change** (rebuild + recreate only the affected services, then verify) | `_tools/amsdp_rebuild.sh` — see `docs/deployment/AMSDP_Platform_Restart_and_Redeploy_Runbook_V1.0.md` |
+| Read-only: what changed / probe the running stack | `_tools/amsdp_rebuild.sh --check` / `--verify` |
 
 **Access after startup**
 
@@ -236,9 +239,38 @@ _tools/amsdp_stack.sh            # start or resume everything (same as `up`)
    | A backend stays `starting` / probe `FAILED` | the service cannot reach the database or crashed on boot | `_tools/amsdp_stack.sh logs <service>` |
    | `Bind for 0.0.0.0:5433 failed` | another PostgreSQL (or the demo stack) holds the port | stop the other process, then re-run `up` |
    | Frontend probe fails after a code change | the container is running an older image | `AMSDP_BUILD=1 _tools/amsdp_stack.sh up` |
+   | Everything looks started, but login or the frontend proxy hangs/returns `502` and some `/health/ready` probes never answer (while `/health` returns `200`) | the containers cannot reach each other: the Docker bridge lost its forwarding rules after a failed daemon restart | `docker compose -p amsdp down && _tools/amsdp_stack.sh up` — recreates the network; volumes and data are kept |
 
    Afterwards re-run `_tools/amsdp_stack.sh up`; it resumes whatever did start.
 
 The isolated demo environment (`docker-compose.demo.yml`, project `amsdp_demo`)
 still uses `_tools/init_demo_env.sh`; the development stack must be stopped first
 because both publish the same host ports.
+
+**Automatic start and demo data**
+
+The stack comes back on its own, in two independent layers:
+
+| What happens | What brings it back |
+|---|---|
+| A service crashes | `restart: unless-stopped` on every service in `docker-compose.yml` — the Docker daemon restarts it |
+| The host reboots | the same restart policy, **plus** the systemd user unit `amsdp-autostart.service`, which starts the stack through the readiness gate and then refreshes the demo data |
+
+```bash
+_tools/install_autostart.sh            # install + enable the boot unit (once)
+_tools/install_autostart.sh --status   # current unit state
+_tools/install_autostart.sh --uninstall
+_tools/amsdp_autostart.sh              # run the same start + demo refresh by hand
+_tools/verify_demo_login.sh            # prove all six demo accounts can sign in
+```
+
+`_tools/amsdp_autostart.sh` waits for the Docker daemon (a *user* unit cannot order
+itself against the system `docker.service`), runs `_tools/amsdp_stack.sh up`, then
+re-runs the idempotent demo seed — so appointments and queue entries are dated
+today and every demo account's password hash matches the value in `.env`. Read its
+output with `journalctl --user -u amsdp-autostart.service -n 80 --no-pager`.
+
+`_tools/verify_demo_login.sh` signs in every demo account through the same endpoint
+the browser uses (`http://localhost:3100/api/v1/staff/login`) and prints OK/FAIL per
+account, with the role it received. Passwords and tokens are never printed. It exits
+non-zero if any account fails, so it can be used as a pre-demo gate.
