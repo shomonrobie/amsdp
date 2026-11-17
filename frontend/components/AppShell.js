@@ -2,7 +2,7 @@
    Role-aware nav; responsive drawer on mobile; branch-context selector. */
 import { useState, useEffect } from 'react';
 import { getUser, signOut, getActiveBranch, setActiveBranch, apiFetch, can } from '../lib/auth';
-import { t, getLocale, setLocale } from '../lib/i18n';
+import { tIn, getLocale, setLocale } from '../lib/i18n';
 
 const NAV = [
   { href: '/dashboard', perm: '*', key: 'dash' },
@@ -32,11 +32,23 @@ function visible(user, item) {
 }
 
 export default function AppShell({ active, breadcrumbs = [], children }) {
-  const user = getUser();
-  const [locale, setL] = useState(getLocale());
+  // The session and the preferred locale live in sessionStorage, which the server
+  // cannot see.  Reading them during render made the first client pass disagree
+  // with the server HTML, so React threw the server tree away (error #418 →
+  // #423) and the shell flashed empty.  They are read once after mount instead:
+  // server HTML and the first client render now agree, and the shell fills in.
+  const [user, setUser] = useState({});
+  const [locale, setL] = useState('bn');
   const [drawer, setDrawer] = useState(false);
   const [branches, setBranches] = useState([]);
-  const [activeBranch, setAB] = useState(user.id ? getActiveBranch() : '');
+  const [activeBranch, setAB] = useState('');
+
+  useEffect(() => {
+    const session = getUser();
+    setUser(session);
+    setL(getLocale());
+    if (session.id) setAB(getActiveBranch());
+  }, []);
 
   useEffect(() => {
     if (!user.id) return;
@@ -71,9 +83,9 @@ export default function AppShell({ active, breadcrumbs = [], children }) {
 
   const sidebar = (
     <div className="app-sidebar">
-      <div className="brand">{t('app')}</div>
+      <div className="brand">{tIn(locale, 'app')}</div>
       {nav.map((n) => (
-        <a key={n.href} href={n.href} className={active === n.href ? 'active' : ''}>{t(n.key)}</a>
+        <a key={n.href} href={n.href} className={active === n.href ? 'active' : ''}>{tIn(locale, n.key)}</a>
       ))}
     </div>
   );
@@ -96,10 +108,10 @@ export default function AppShell({ active, breadcrumbs = [], children }) {
             <span>{user.display_name} ({user.role})</span>
             {branches.length > 0 && (
               <>
-                <label className="branch-select-label">{t('branch')}:</label>
+                <label className="branch-select-label">{tIn(locale, 'branch')}:</label>
                 <select
                   className="branch-select"
-                  aria-label={t('branch')}
+                  aria-label={tIn(locale, 'branch')}
                   value={activeBranch || ''}
                   onChange={switchBranch}
                   title={activeBranchName}>
@@ -114,7 +126,7 @@ export default function AppShell({ active, breadcrumbs = [], children }) {
             <a href="#" onClick={(e) => { e.preventDefault(); toggleLocale(); }}>
               {locale === 'bn' ? 'English' : 'বাংলা'}</a>
             <a href="#" className="btn btn-sm btn-danger" onClick={(e) => { e.preventDefault(); signOut(); }}>
-              {t('logout')}</a>
+              {tIn(locale, 'logout')}</a>
           </div>
         </header>
         <main className="main">{children}</main>

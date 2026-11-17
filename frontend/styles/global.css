@@ -1,6 +1,6 @@
 /* AMSDP Frontend — Global Styles */
 * { box-sizing:border-box; margin:0; padding:0; }
-body { font-family:Helvetica,Arial,sans-serif; background:#f0f2f5; color:#333; line-height:1.5; }
+body { font-family:var(--font-sans, Helvetica, Arial, sans-serif); background:#f0f2f5; color:#333; line-height:1.5; }
 a { color:#1a5c7a; text-decoration:none; }
 button { cursor:pointer; }
 input,select,textarea { width:100%; padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-size:0.9rem; }
@@ -25,7 +25,12 @@ tr:hover { background:#f8faff; }
 .form-group { margin-bottom:0.75rem; }
 .form-actions { display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem; }
 .page-title { color:#1a5c7a; margin-bottom:1rem; font-size:1.2rem; }
-.flex { display:flex; gap:0.5rem; align-items:center; }
+/* The legacy `.flex` alias was removed: it set `gap` and `align-items:center` on
+   every element carrying the Tailwind `flex` utility, which silently centred and
+   shrink-wrapped dialog bodies, card stacks and form fields.  Its single legacy
+   caller (pages/queue.js) now spells out `flex items-center gap-2` itself.
+   The remaining legacy aliases below duplicate Tailwind semantics; they are
+   harmless (identical values) and are tracked for migration as open item O-9. */
 .flex-wrap { flex-wrap:wrap; }
 .justify-between { justify-content:space-between; }
 .mb-1 { margin-bottom:0.5rem; }
@@ -158,4 +163,38 @@ tr:hover { background:#f8faff; }
 .tree-title { font-weight:700; color:#1a5c7a; font-size:0.88rem; }
 .toolbar { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.6rem; }
 .summary { display:flex; gap:1rem; flex-wrap:wrap; font-size:0.82rem; color:#555; }
+
+/* ---------------------------------------------------------------------------
+   Booking calendar affordances (additive)
+   AMSDP-FRONTEND-UX-DEMO-01 — `AppointmentCalendar` keeps its own inline
+   geometry (the SSR contract test asserts those strings), so only interaction
+   feedback lives here: a chip that lifts on hover, a "+" that fills in, and a
+   pointer cursor over bookable cells.  Keyboard focus already comes from
+   tokens.css `:focus-visible`, which covers every button in the grid.
+   --------------------------------------------------------------------------- */
+.appt-cal-chip { transition: filter 120ms ease, transform 120ms ease; }
+.appt-cal-chip:hover { filter: brightness(0.95); transform: translateY(-1px); }
+.appt-cal-add { transition: background 120ms ease, border-color 120ms ease; }
+.appt-cal-add:hover { background: hsl(var(--accent)); border-color: hsl(var(--primary)); }
+/* "+N more": the same affordance as "+", because it is the same promise —
+   there is more in this cell than fits, and opening it shows the rest. */
+.appt-cal-more { transition: background 120ms ease, border-color 120ms ease; }
+.appt-cal-more:hover { background: hsl(var(--accent)); border-color: hsl(var(--primary)); }
+.appt-cal-cell.is-closed { cursor: not-allowed; }
+/* The matched substring on a chip.  `<mark>` already means "marked for the
+   reader"; the border adds a second, non-colour cue, and `color:inherit` keeps
+   the cancelled chip's strikethrough reading as one word. */
+.appt-cal-hit { background: hsl(var(--warning-soft)); color: inherit;
+  border-bottom: 2px solid hsl(var(--warning)); border-radius: 2px; padding: 0 1px;
+  font-weight: inherit; }
+
+/* "There are matches, just not on these dates" — the calendar's answer to a
+   search that reached past its window (owner decision D-2).  An information
+   strip, not an alert: the search did not fail, it found things elsewhere. */
+.appt-matches { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-radius: 4px;
+  background: hsl(var(--accent)); border: 1px solid hsl(var(--border));
+  font-size: 0.85rem; color: hsl(var(--accent-foreground)); }
+.appt-matches strong { font-weight: 700; }
+
 

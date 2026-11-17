@@ -142,7 +142,7 @@ return (
         <div className="flex justify-between mb-2">
           <h1 className="page-title">{t('queue')}</h1>
           {canManage && (
-            <div className="flex">
+            <div className="flex items-center gap-2">
               <button className="btn" onClick={() => setShowCi(true)}>{t('checkIn')}</button>
               <button className="btn" onClick={() => setShowWi(true)}>{t('walkIn')}</button>
             </div>

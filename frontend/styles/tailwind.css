@@ -1,0 +1,10 @@
+/* Tailwind entry point for the AMSDP design system.
+ *
+ * Imported from `pages/_app.js` *after* `styles/tokens.css` and
+ * `styles/global.css`, so a utility class always wins over a legacy class of
+ * equal specificity.  Preflight is off (see `tailwind.config.js`), so this file
+ * emits only the utilities the components actually use.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

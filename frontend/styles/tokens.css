@@ -1,0 +1,127 @@
+/* ---------------------------------------------------------------------------
+   AMSDP design tokens — the single source of truth for colour, type, spacing,
+   radius, shadow, focus and state.
+   AMSDP-FRONTEND-UX-DEMO-01.
+
+   The variable names follow the shadcn/ui convention (`--background`,
+   `--foreground`, `--primary`, `--muted-foreground`, `--ring`, `--radius` …) and
+   store bare HSL channels, so both Tailwind (`hsl(var(--primary))`) and the
+   legacy class stylesheet (`var(--primary)` composed with `hsl()`) read the
+   same values.  One palette, one identity, every role.
+
+   Additive only: no existing selector is redefined here.  `styles/global.css`
+   keeps the legacy component classes until they are migrated.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* --- surfaces and text (shadcn names) --------------------------------- */
+  --background: 216 20% 95%;          /* app canvas            #f0f2f5 */
+  --foreground: 0 0% 20%;             /* body text             #333333 */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 20%;
+  --primary: 199 65% 29%;             /* AMSDP teal            #1a5c7a */
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 199 68% 23%;       /* #134b63 */
+  --secondary: 200 30% 94%;
+  --secondary-foreground: 199 65% 25%;
+  --muted: 200 16% 96%;
+  --muted-foreground: 205 10% 45%;    /* secondary text        #6b7a82 */
+  --accent: 197 45% 92%;              /* hover wash            #e4f0f7 */
+  --accent-foreground: 199 65% 25%;
+  --destructive: 1 65% 47%;           /* #c62828 */
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 80%;
+  --input: 0 0% 80%;
+  --ring: 199 65% 40%;
+
+  /* --- semantic state (never colour alone: every state also has a label) -- */
+  --success: 123 46% 33%;             /* #2e7d32 */
+  --success-soft: 122 39% 93%;        /* #e8f5e9 */
+  --warning: 36 100% 35%;             /* #b26a00 */
+  --warning-soft: 34 100% 95%;        /* #fff4e5 */
+  --danger-soft: 4 82% 95%;           /* #fbe9e7 */
+  --info: 187 82% 27%;                /* #0b6b78 */
+  --info-soft: 187 60% 93%;
+  --neutral: 200 10% 42%;
+  --neutral-soft: 200 16% 94%;
+
+  /* --- appointment / queue status tones --------------------------------- */
+  --status-scheduled: 199 65% 29%;
+  --status-confirmed: 123 46% 33%;
+  --status-checked-in: 174 100% 20%;
+  --status-waiting: 27 100% 47%;      /* #ef6c00 */
+  --status-in-consultation: 282 65% 35%;
+  --status-completed: 200 11% 33%;
+  --status-cancelled: 1 65% 47%;
+  --status-no-show: 0 0% 46%;
+  --status-rescheduled: 15 25% 33%;
+
+  /* --- typography ------------------------------------------------------- */
+  /* Bangladesh-first: a Bangla face precedes the Latin stack so mixed
+     Bangla/Latin labels keep their metrics.  No webfont is fetched — the demo
+     must render offline, so the stack degrades to the host's system fonts. */
+  --font-sans: "Hind Siliguri", "Noto Sans Bengali", "SolaimanLipi", "Kalpurush",
+    system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;              /* the operational density: 14px body */
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.375rem;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-bn: 1.7;                  /* Bangla needs more leading */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* --- space, radius, elevation ----------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-sm: 0.25rem;
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(15, 40, 55, 0.08);
+  --shadow: 0 1px 3px rgba(15, 40, 55, 0.1);
+  --shadow-lg: 0 12px 32px rgba(15, 40, 55, 0.22);
+
+  /* --- focus (visible, high-contrast, never removed) --------------------- */
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --focus-colour: hsl(199 90% 38%);
+
+  /* --- layout ----------------------------------------------------------- */
+  --sidebar-width: 208px;
+  --header-height: 52px;
+  --content-max: 1440px;
+  --density: 1;                        /* reception density multiplier */
+}
+
+/* Bangla runs longer than English at the same size: give it leading, not a
+   smaller font.  Both languages stay first-class. */
+:lang(bn), .lang-bn {
+  line-height: var(--leading-bn);
+}
+
+/* A single, consistent keyboard-focus indicator for every interactive element.
+   `:focus-visible` keeps it out of mouse interaction. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--focus-width) solid var(--focus-colour);
+  outline-offset: var(--focus-offset);
+}
+
+/* Disabled controls must look — and behave — disabled in both languages. */
+:where(button, input, select, textarea)[disabled],
+[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

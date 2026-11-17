@@ -77,6 +77,20 @@ export const DICT = {
     allDoctors: 'সব ডাক্তার', slotLength: 'স্লটের দৈর্ঘ্য', order: 'ক্রম',
     invalidWindow: 'শেষ সময় শুরুর সময়ের পরে হতে হবে',
     sessionCreated: 'সেশন যোগ হয়েছে', sessionRetired: 'সেশন নিষ্ক্রিয় হয়েছে',
+    // AMSDP-FRONTEND-UX-DEMO-01 — doctor directory & facility structure redesign
+    addDoctor: 'ডাক্তার যোগ করুন', doctorProfile: 'ডাক্তার প্রোফাইল', profile: 'প্রোফাইল',
+    contact: 'যোগাযোগ', professional: 'পেশাগত তথ্য', view: 'প্রদর্শন',
+    viewCards: 'কার্ড', viewTable: 'তালিকা', clearFilters: 'ফিল্টার রিসেট',
+    doctorDirectoryHint: 'ডাক্তার, বিশেষত্ব, চেম্বার ও বিএমডিসি যাচাই — এক পাতায়।',
+    noResults: 'কোনো ডাক্তার পাওয়া যায়নি',
+    noResultsHint: 'নাম বা মোবাইল বদলে খুঁজুন, ফিল্টার রিসেট করুন, অথবা নতুন ডাক্তার যোগ করুন।',
+    noMatch: 'কিছু পাওয়া যায়নি',
+    structure: 'সুবিধা কাঠামো', catalogue: 'বিশেষত্ব তালিকা',
+    structureHint: 'তলা → বিভাগ → কক্ষ — এক শাখার সম্পূর্ণ কাঠামো।',
+    showRetired: 'নিষ্ক্রিয়ও দেখান', restore: 'সক্রিয় করুন',
+    expand: 'বিস্তারিত দেখান', collapse: 'সংক্ষিপ্ত করুন',
+    addRoomHere: 'এই তলায় কক্ষ', searchSpecialities: 'নাম বা কোড দিয়ে বিশেষত্ব খুঁজুন',
+    retireSpecialty: 'বিশেষত্ব নিষ্ক্রিয় করুন',
   },
   en: {
     app: 'AMSDP', dash: 'Dashboard', welcome: 'Welcome', role: 'Role', logout: 'Logout',
@@ -155,6 +169,20 @@ export const DICT = {
     allDoctors: 'All doctors', slotLength: 'Slot length', order: 'Order',
     invalidWindow: 'The end time must be after the start time',
     sessionCreated: 'Session added', sessionRetired: 'Session retired',
+    // AMSDP-FRONTEND-UX-DEMO-01 — doctor directory & facility structure redesign
+    addDoctor: 'Add doctor', doctorProfile: 'Doctor profile', profile: 'Profile',
+    contact: 'Contact', professional: 'Professional', view: 'View',
+    viewCards: 'Cards', viewTable: 'Table', clearFilters: 'Clear filters',
+    doctorDirectoryHint: 'Doctors, specialities, chambers and BMDC verification on one page.',
+    noResults: 'No doctors found',
+    noResultsHint: 'Change the name or mobile, clear the filters, or add a new doctor.',
+    noMatch: 'Nothing found',
+    structure: 'Facility structure', catalogue: 'Speciality catalogue',
+    structureHint: 'Floor → department → room — the whole branch structure.',
+    showRetired: 'Show retired', restore: 'Restore',
+    expand: 'Show details', collapse: 'Hide details',
+    addRoomHere: 'Add room here', searchSpecialities: 'Search by name or code',
+    retireSpecialty: 'Retire speciality',
   },
 };
 
@@ -168,10 +196,21 @@ export function setLocale(l) {
   sessionStorage.setItem('locale', l);
 }
 
-export function t(key) {
-  const l = getLocale();
+/** Translate a key for an explicit locale.
+ *
+ * Pages that render the same markup on the server and in the browser must use
+ * this rather than `t`: `t` reads the session locale, which the server cannot
+ * see, so a user whose stored locale is `en` would otherwise get Bangla HTML
+ * from the server and English text on the first client render — a hydration
+ * mismatch that makes React throw away the server tree (error #418/#423).
+ */
+export function tIn(l, key) {
   const table = DICT[l] || DICT.bn;
   return table[key] || DICT.bn[key] || key;
+}
+
+export function t(key) {
+  return tIn(getLocale(), key);
 }
 
 export function fmtDate(iso) {
