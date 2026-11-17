@@ -74,7 +74,8 @@ class AuthContext:
 
     def __init__(self, user_id: str, organization_id: str,
                  branch_id: Optional[str], role: str, username: str,
-                 locale: str, status: str, token_payload: dict):
+                 locale: str, status: str, token_payload: dict,
+                 doctor_id: Optional[str] = None):
         self.user_id = user_id
         self.organization_id = organization_id
         self.branch_id = branch_id
@@ -83,6 +84,7 @@ class AuthContext:
         self.locale = locale
         self.status = status
         self.token_payload = token_payload
+        self.doctor_id = doctor_id
 
     @property
     def is_super_admin(self) -> bool:
@@ -148,6 +150,7 @@ def get_current_user(
         branch_id=payload.get("branch"), role=role,
         username=user.username, locale=user.locale or "en",
         status=user.status or "active", token_payload=payload,
+        doctor_id=user.doctor_id,
     )
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -174,6 +177,7 @@ def get_optional_user(
             branch_id=payload.get("branch"), role=role,
             username=user.username, locale=user.locale or "en",
             status=user.status or "active", token_payload=payload,
+            doctor_id=user.doctor_id,
         )
     except (jwt.PyJWTError, HTTPException):
         return None

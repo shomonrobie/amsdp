@@ -763,3 +763,38 @@ Additional findings classified:
 
 Verification: `backend/queuing/tests/test_queue.py` 28 passed; `backend/scheduling/tests/test_scheduling.py` 28 passed; `tests/test_security.py`, `patient/tests/`, `identity/tests/` 59 passed; `appointment/tests/` 108 passed. No commit or push was made; the working tree was preserved.
 
+## 13. Phase 1B Implementation Outcome (dated)
+
+**Recorded implementation date: 2026-11-17.** This section records the outcome of the remaining Operational RBAC corrections (AMSDP Phase 1B).
+
+### RBAC-R1 — Queue enqueue branch ownership (VERIFIED DEFECT — FIXED)
+- **Finding:** `POST /api/v1/queue/enqueue` accepted caller-supplied `branch_id` without verifying the branch belongs to the caller's organization. An org_admin could enqueue into a branch in another org. Empty branch_id was allowed.
+- **Fix:** `backend/queuing/main.py` — Resolve target branch from body or token branch. Require a valid, existing branch. Verify `Branch.id == target_branch AND Branch.organization_id == auth.organization_id`. Reject missing, invalid, nonexistent, or foreign-tenant branches with non-disclosing 404.
+- **Tests:** `TestQueueEnqueueBranchOwnership` — 7 tests covering cross-org enqueue denial, same-org cross-branch enqueue for org_admin, own-branch enqueue for receptionist, foreign-branch denial, missing branch rejection, nonexistent branch rejection, and valid enqueue with DB row verification.
+
+### RBAC-R2 — Complete schedule resource branch authorization (VERIFIED DEFECT — FIXED)
+- **Finding:** Schedule endpoints did not consistently enforce branch scope:
+  - `GET /api/v1/schedules`: branch-scoped users could see all branches when `branch_id` omitted
+  - `GET /api/v1/schedules/{id}`: no branch authorization check
+  - `PATCH /api/v1/schedules/{id}`: no branch authorization check
+  - `GET /api/v1/schedules/{id}/available-slots`: no branch authorization check
+- **Fix:** `backend/scheduling/main.py` — Added branch scope filter for listing when `branch_id` omitted; added `branch_accessible()` checks on get, update, and available-slots endpoints.
+- **Tests:** `TestScheduleRBACR2` — 8 tests covering branch-scoped listing restrictions, foreign branch param rejection, org-admin org-wide access, foreign schedule read/update/slots denial, and cross-tenant non-disclosure.
+
+### RBAC-R3 — Doctor ownership and assistant assignment (PARTIALLY RESOLVED)
+- **Doctor ownership (VERIFIED DEFECT — FIXED):**
+  - Added `doctor_id` to `AuthContext` (`backend/common/auth.py`), populated from `StaffUser.doctor_id` in `get_current_user`/`get_optional_user`
+  - `GET /api/v1/queue`: doctors and assistants restricted to their assigned doctor's queue
+  - `GET /api/v1/queue/history`: same restriction
+  - `PATCH /api/v1/queue/{id}`: consultation actions restricted to the doctor's own entries
+  - **Tests:** `TestQueueDoctorAssistantOwnership` — 8 tests covering doctor cross-queue denial, own queue access, cross-doctor consultation denial, own consultation, assistant unassigned denial, assistant assigned access, assistant consultation denial (403)
+- **Assistant assignment:** Uses existing `StaffUser.doctor_id` FK (single assignment per assistant). No new assignment model created. Backward compatible: when `auth.doctor_id` is unset, checks are skipped.
+
+### Not implemented (out of scope, per finding 8.8): SaaS Platform RBAC, `super_admin` migration, last-admin/self-escalation protection.
+
+Additional findings classified:
+- R-13 patient update `patient.create` vs `patient.update`: NOT A CODE CHANGE — correct role policy unclear; left blocked for product-owner decision.
+- R-15 self-escalation / R-16 last-admin protection: NOT IMPLEMENTED — no existing approved rule; reported unresolved.
+- R-07 frontend `super_admin` wildcard bypass: presentation only, not an authorization boundary; no code change.
+
+Verification: `backend/queuing/tests/test_queue.py` 41 passed; `backend/scheduling/tests/test_scheduling.py` 36 passed; `tests/test_security.py`, `patient/tests/`, `identity/tests/` 59 passed; `appointment/tests/` 108 passed. Total: 244 passed, 0 failed.

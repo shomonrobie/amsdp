@@ -194,4 +194,45 @@ No tests were fabricated. No browser verification was performed or claimed. The 
 **Acceptance:** Phase 0 complete (25 KEEP / 1 DEFER NOT-001; SYM-001 and QUE-006 KEEP; documentation discrepancies corrected). Phase 1 complete (all six P0 defects fixed; regression tests added and passing; no SaaS Platform RBAC introduced). Nothing committed or pushed.
 
 
+## Phase 1B — Remaining Operational RBAC Corrections (Recorded 2026-11-17)
 
+### Scope
+Three remaining authorization areas (RBAC-R1, RBAC-R2, RBAC-R3) identified during independent review of commit `0eaec02`. All corrections are server-side, preserve existing roles and permission matrix, and introduce no SaaS Platform RBAC.
+
+### RBAC-R1 — Queue enqueue branch ownership
+- **File:** `backend/queuing/main.py`
+- **Fix:** Enqueue now resolves target branch from body or token branch, requires a valid existing branch belonging to `auth.organization_id`, and checks `branch_accessible()`. Empty, nonexistent, or foreign-tenant branches are rejected with non-disclosing 404.
+- **Tests:** `TestQueueEnqueueBranchOwnership` — 7 tests (all passing)
+
+### RBAC-R2 — Complete schedule resource branch authorization
+- **File:** `backend/scheduling/main.py`
+- **Fix:** 
+  - `GET /api/v1/schedules`: branch-scoped users filtered to their token branch when `branch_id` omitted; caller-supplied `branch_id` validated
+  - `GET /api/v1/schedules/{id}`: branch authorization checked against stored branch
+  - `PATCH /api/v1/schedules/{id}`: branch authorization checked against stored branch
+  - `GET /api/v1/schedules/{id}/available-slots`: branch authorization checked against stored branch
+- **Tests:** `TestScheduleRBACR2` — 8 tests (all passing)
+
+### RBAC-R3 — Doctor ownership and assistant assignment
+- **File:** `backend/common/auth.py`, `backend/queuing/main.py`
+- **Fix:** 
+  - `AuthContext` now carries `doctor_id` from `StaffUser.doctor_id`
+  - `GET /api/v1/queue` and `GET /api/v1/queue/history`: doctors/assistants restricted to their assigned doctor's queue
+  - `PATCH /api/v1/queue/{id}`: consultation actions restricted to doctor's own entries
+  - Backward compatible: when `auth.doctor_id` is unset, checks are skipped
+- **Tests:** `TestQueueDoctorAssistantOwnership` — 8 tests (all passing)
+
+### Not implemented (out of scope)
+SaaS Platform RBAC, `super_admin` migration, last-admin/self-escalation protection, patient update permission mismatch (R-13 — needs product decision).
+
+### Test results (all suites)
+| Suite | Result |
+|---|---|
+| `queuing/tests/test_queue.py` | 41 passed |
+| `scheduling/tests/test_scheduling.py` | 36 passed |
+| `tests/test_security.py`, `patient/tests/`, `identity/tests/` | 59 passed |
+| `appointment/tests/` | 108 passed |
+| **Total** | **244 passed, 0 failed** |
+
+### Disposition
+**IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).

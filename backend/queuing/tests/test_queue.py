@@ -480,3 +480,352 @@ class TestQueueBranchAuthorization:
                        headers=_auth(_token(receptionist))).json()
         pos = {x["id"]: x["position"] for x in q["entries"]}
         assert pos[e1["id"]] == 2 and pos[e2["id"]] == 1
+
+
+class TestQueueEnqueueBranchOwnership:
+    """RBAC-R1: queue enqueue must validate branch ownership against the
+    caller's organization."""
+
+    def _mk_patient_at(self, session, org_id="m5-org"):
+        p = Patient(id=str(uuid.uuid4()), organization_id=org_id,
+                    name="RBAC-R1 Patient", mobile="01799999999")
+        session.add(p); session.commit(); return p
+
+    def _ensure_branch(self, session, branch_id, org_id="m5-org"):
+        b = session.query(Branch).filter(Branch.id == branch_id).first()
+        if b is None:
+            session.add(Branch(id=branch_id, organization_id=org_id,
+                               name=branch_id, code=branch_id.upper()))
+            session.commit()
+
+    def test_rbac_r1_org_admin_cannot_enqueue_foreign_org_branch(self, receptionist):
+        foreign_org = f"r1-org-2-{uuid.uuid4().hex[:8]}"
+        foreign_br = f"r1-br-2-{uuid.uuid4().hex[:8]}"
+        foreign_code = f"R1ORG2-{uuid.uuid4().hex[:8]}"
+        session = SessionFactory()
+        try:
+            o2 = Organization(id=foreign_org, name="R1 Org 2", code=foreign_code)
+            b2 = Branch(id=foreign_br, organization_id=foreign_org,
+                        name="R1 Branch 2", code=foreign_code)
+            session.add(o2); session.add(b2); session.commit()
+        finally:
+            session.close()
+
+        p = self._mk_patient_at(SessionFactory())
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org",
+                          "branch": None, "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(tok),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": foreign_br})
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r1_org_admin_can_enqueue_own_org_other_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+        finally:
+            session.close()
+        p = self._mk_patient_at(SessionFactory())
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org",
+                          "branch": None, "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(tok),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": "m5-branch-2"})
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "m5-branch-2"
+
+    def test_rbac_r1_receptionist_own_branch(self, receptionist):
+        p = self._mk_patient_at(SessionFactory())
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(_token(receptionist)),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": "m5-branch"})
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "m5-branch"
+
+    def test_rbac_r1_receptionist_cannot_enqueue_other_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+        finally:
+            session.close()
+        p = self._mk_patient_at(SessionFactory())
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(_token(receptionist)),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": "m5-branch-2"})
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r1_missing_branch_rejected(self, receptionist):
+        p = self._mk_patient_at(SessionFactory())
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org",
+                          "branch": None, "role": "receptionist",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(tok),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in"})
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r1_nonexistent_branch_rejected(self, receptionist):
+        p = self._mk_patient_at(SessionFactory())
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(_token(receptionist)),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": "does-not-exist"})
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r1_valid_enqueue_creates_entry_and_audit(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+        finally:
+            session.close()
+        p = self._mk_patient_at(SessionFactory())
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org",
+                          "branch": None, "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(tok),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in",
+                              "branch_id": "m5-branch-2"})
+        assert r.status_code == 201, r.text
+        s = SessionFactory()
+        try:
+            entry = s.query(QueueEntry).filter(
+                QueueEntry.id == r.json()["id"]).one()
+            assert entry.branch_id == "m5-branch-2"
+            assert entry.organization_id == "m5-org"
+        finally:
+            s.close()
+
+
+class TestQueueDoctorAssistantOwnership:
+    """RBAC-R3: doctor ownership and assistant assignment scope."""
+
+    def _mk_doctor(self, session, doctor_id, name, org_id="m5-org"):
+        d = session.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if d is None:
+            d = Doctor(id=doctor_id, organization_id=org_id,
+                       name=name, mobile=f"017{doctor_id[-4:]}00000")
+            session.add(d)
+            session.commit()
+        return d
+
+    def _mk_user_with_doctor(self, session, username, role, doctor_id,
+                             org_id="m5-org", branch_id="m5-branch"):
+        u = session.query(StaffUser).filter(
+            StaffUser.username == username).first()
+        if u is None:
+            pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=org_id,
+                          branch_id=branch_id, doctor_id=doctor_id,
+                          username=username, password_hash=pw,
+                          display_name=username, role=role, status="active")
+            session.add(u); session.commit()
+        return u
+
+    def _mk_patient_rbac_r3(self, session, org_id="m5-org"):
+        p = Patient(id=str(uuid.uuid4()), organization_id=org_id,
+                    name="RBAC-R3 Patient", mobile="01788888888")
+        session.add(p); session.commit(); return p
+
+    def _mk_appointment_rbac_r3(self, session, patient_id, doctor_id,
+                                status="CONFIRMED"):
+        a = Appointment(id=str(uuid.uuid4()),
+            organization_id="m5-org", branch_id="m5-branch",
+            patient_id=patient_id, doctor_id=doctor_id,
+            appointment_date=date.today(), start_time="10:00",
+            status=status, status_history=[], token_number="T-R3-001")
+        session.add(a); session.commit(); return a
+
+    def _enqueue_rbac_r3(self, patient_id, doctor_id, token,
+                         entry_source="walk_in"):
+        return client.post("/api/v1/queue/enqueue",
+            headers=_auth(token),
+            json={"doctor_id": doctor_id, "patient_id": patient_id,
+                  "entry_source": entry_source})
+
+    def test_rbac_r3_doctor_a_cannot_list_doctor_b_queue(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-a", "Doctor A")
+            self._mk_doctor(session, "rbac-r3-doc-b", "Doctor B")
+            user_a = self._mk_user_with_doctor(
+                session, "rbacr3_doc_a", "doctor", "rbac-r3-doc-a")
+            user_b = self._mk_user_with_doctor(
+                session, "rbacr3_doc_b", "doctor", "rbac-r3-doc-b")
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-b")
+            entry_b = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-b",
+                _token(user_b, branch="m5-branch")).json()
+            session.close()
+        finally:
+            session.close()
+
+        tok_a = jwt.encode({"sub": user_a.id, "org": "m5-org",
+                            "branch": "m5-branch", "role": "doctor",
+                            "exp": int((datetime.now(timezone.utc)
+                                        + timedelta(hours=1)).timestamp())},
+                           _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=rbac-r3-doc-b&date={date.today().isoformat()}",
+            headers=_auth(tok_a))
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r3_doctor_a_can_list_own_queue(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-c", "Doctor C")
+            user_c = self._mk_user_with_doctor(
+                session, "rbacr3_doc_c", "doctor", "rbac-r3-doc-c")
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-c")
+            entry_c = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-c",
+                _token(user_c, branch="m5-branch")).json()
+            session.close()
+        finally:
+            session.close()
+
+        tok_c = jwt.encode({"sub": user_c.id, "org": "m5-org",
+                            "branch": "m5-branch", "role": "doctor",
+                            "exp": int((datetime.now(timezone.utc)
+                                        + timedelta(hours=1)).timestamp())},
+                           _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=rbac-r3-doc-c&date={date.today().isoformat()}",
+            headers=_auth(tok_c))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert all(e["doctor_id"] == "rbac-r3-doc-c" for e in body["entries"])
+
+    def test_rbac_r3_doctor_a_cannot_consult_doctor_b_entry(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-d", "Doctor D")
+            self._mk_doctor(session, "rbac-r3-doc-e", "Doctor E")
+            user_d = self._mk_user_with_doctor(
+                session, "rbacr3_doc_d", "doctor", "rbac-r3-doc-d")
+            user_e = self._mk_user_with_doctor(
+                session, "rbacr3_doc_e", "doctor", "rbac-r3-doc-e")
+            recp = self._mk_user_with_doctor(
+                session, "rbacr3_recp", "receptionist", None)
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-e")
+            r_e = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-e",
+                _token(recp, branch="m5-branch"))
+            assert r_e.status_code == 201, r_e.text
+            entry_e = r_e.json()
+            session.close()
+        finally:
+            session.close()
+
+        tok_d = jwt.encode({"sub": user_d.id, "org": "m5-org",
+                            "branch": "m5-branch", "role": "doctor",
+                            "exp": int((datetime.now(timezone.utc)
+                                        + timedelta(hours=1)).timestamp())},
+                           _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/queue/{entry_e['id']}",
+            headers=_auth(tok_d),
+            json={"action": "start_consultation"})
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r3_doctor_can_consult_own_entry(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-f", "Doctor F")
+            user_f = self._mk_user_with_doctor(
+                session, "rbacr3_doc_f", "doctor", "rbac-r3-doc-f")
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-f")
+            recp_f = self._mk_user_with_doctor(
+                session, "rbacr3_recp_f", "receptionist", None)
+            r_f = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-f",
+                _token(recp_f, branch="m5-branch"))
+            assert r_f.status_code == 201, r_f.text
+            entry_f = r_f.json()
+        finally:
+            session.close()
+
+        tok_f = jwt.encode({"sub": user_f.id, "org": "m5-org",
+                            "branch": "m5-branch", "role": "doctor",
+                            "exp": int((datetime.now(timezone.utc)
+                                        + timedelta(hours=1)).timestamp())},
+                           _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/queue/{entry_f['id']}",
+            headers=_auth(tok_f),
+            json={"action": "start_consultation"})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "in_consultation"
+    def test_rbac_r3_assistant_can_access_assigned_doctor_queue(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-h", "Doctor H")
+            user_h = self._mk_user_with_doctor(
+                session, "rbacr3_doc_h", "doctor", "rbac-r3-doc-h")
+            asst_h = self._mk_user_with_doctor(
+                session, "rbacr3_asst_h", "assistant", "rbac-r3-doc-h")
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-h")
+            entry_h = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-h",
+                _token(user_h, branch="m5-branch")).json()
+            session.close()
+        finally:
+            session.close()
+
+        tok_asst_h = jwt.encode({"sub": asst_h.id, "org": "m5-org",
+                                 "branch": "m5-branch", "role": "assistant",
+                                 "exp": int((datetime.now(timezone.utc)
+                                             + timedelta(hours=1)).timestamp())},
+                                _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=rbac-r3-doc-h&date={date.today().isoformat()}",
+            headers=_auth(tok_asst_h))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert all(e["doctor_id"] == "rbac-r3-doc-h" for e in body["entries"])
+
+    def test_rbac_r3_assistant_cannot_perform_consultation(self):
+        session = SessionFactory()
+        try:
+            self._mk_doctor(session, "rbac-r3-doc-i", "Doctor I")
+            user_i = self._mk_user_with_doctor(
+                session, "rbacr3_doc_i", "doctor", "rbac-r3-doc-i")
+            asst_i = self._mk_user_with_doctor(
+                session, "rbacr3_asst_i", "assistant", "rbac-r3-doc-i")
+            recp_i = self._mk_user_with_doctor(
+                session, "rbacr3_recp_i", "receptionist", None)
+            p = self._mk_patient_rbac_r3(session)
+            a = self._mk_appointment_rbac_r3(session, p.id, "rbac-r3-doc-i")
+            r_i = self._enqueue_rbac_r3(p.id, "rbac-r3-doc-i",
+                _token(recp_i, branch="m5-branch"))
+            assert r_i.status_code == 201, r_i.text
+            entry_i = r_i.json()
+            session.close()
+        finally:
+            session.close()
+
+        tok_asst_i = jwt.encode({"sub": asst_i.id, "org": "m5-org",
+                                 "branch": "m5-branch", "role": "assistant",
+                                 "exp": int((datetime.now(timezone.utc)
+                                             + timedelta(hours=1)).timestamp())},
+                                _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/queue/{entry_i['id']}",
+            headers=_auth(tok_asst_i),
+            json={"action": "start_consultation"})
+        assert r.status_code == 403, r.text

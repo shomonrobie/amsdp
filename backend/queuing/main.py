@@ -12,7 +12,7 @@ from datetime import date as date_type, datetime, timezone
 import logging
 
 from common.database import SessionFactory
-from common.models import QueueEntry, QueueSequence, Appointment, Patient, Doctor
+from common.models import QueueEntry, QueueSequence, Appointment, Patient, Doctor, Branch
 from common.auth import AuthContext, get_current_user, require_permission, branch_accessible
 from common.audit import record_audit
 from common.queue_tokens import allocate_daily_token, token_for
@@ -117,6 +117,14 @@ def get_queue(doctor_id: str = Query(...), date: str = Query(...),
     try:
         try: day = datetime.strptime(date, "%Y-%m-%d").date()
         except: raise HTTPException(422, "invalid date")
+        # RBAC-R3: a doctor or assistant may only view their own assigned
+        # doctor's queue.  A caller-supplied doctor_id must match their
+        # staff_user.doctor_id assignment; it cannot be used to expand access.
+        # When auth.doctor_id is unset (not assigned to a doctor record), the
+        # check is skipped for backward compatibility.
+        if auth.role in ("doctor", "assistant") and auth.doctor_id:
+            if doctor_id != auth.doctor_id:
+                raise HTTPException(404, "not found")
         q = session.query(QueueEntry).filter(
             QueueEntry.organization_id == auth.organization_id,
             QueueEntry.doctor_id == doctor_id, QueueEntry.date == day,
@@ -251,11 +259,20 @@ def enqueue_patient(data: QueueEnqueueRequest,
             Doctor.id == data.doctor_id,
             Doctor.organization_id == auth.organization_id).first()
         if not doctor: raise HTTPException(422, "doctor not found")
-        # P0-4: enforce the caller's branch scope.  A caller-supplied branch_id
-        # is validated before use; an unauthorized branch selection is rejected
-        # (non-disclosing 404).  The fallback is the caller's own token branch.
+        # RBAC-R1: enforce the caller's branch scope.  A caller-supplied
+        # branch_id is validated before use; an unauthorized branch selection
+        # is rejected (non-disclosing 404).  The fallback is the caller's own
+        # token branch.  The target branch must exist and belong to the
+        # caller's organization.
         target_branch = data.branch_id or auth.branch_id or ""
-        if target_branch and not branch_accessible(auth, target_branch):
+        if not target_branch:
+            raise HTTPException(404, "not found")
+        branch_row = session.query(Branch).filter(
+            Branch.id == target_branch,
+            Branch.organization_id == auth.organization_id).first()
+        if not branch_row:
+            raise HTTPException(404, "not found")
+        if not branch_accessible(auth, target_branch):
             raise HTTPException(404, "not found")
         seq = _next_sequence(session, data.doctor_id, day)
         token = _token_for(data.doctor_id, seq)
@@ -329,6 +346,12 @@ def queue_action(entry_id: str, data: QueueAction,
     session = SessionFactory()
     try:
         entry = _scoped_entry_or_404(session, auth, entry_id)
+        # RBAC-R3: a doctor may perform consultation actions only on their own
+        # assigned doctor's queue entries.  When auth.doctor_id is unset, the
+        # check is skipped for backward compatibility.
+        if data.action in ("start_consultation", "complete_consultation") and auth.doctor_id:
+            if entry.doctor_id != auth.doctor_id:
+                raise HTTPException(404, "queue entry not found")
         allowed = _TRANSITIONS.get(entry.status, ())
         if data.action not in allowed:
             raise HTTPException(422, f"cannot {data.action} from {entry.status}")
@@ -463,6 +486,12 @@ def queue_history(doctor_id: str = Query(...), date: str = Query(...),
     try:
         try: day = datetime.strptime(date, "%Y-%m-%d").date()
         except: raise HTTPException(422, "invalid date")
+        # RBAC-R3: doctor/assistant may only view their own assigned doctor's
+        # queue history.  When auth.doctor_id is unset, the check is skipped
+        # for backward compatibility.
+        if auth.role in ("doctor", "assistant") and auth.doctor_id:
+            if doctor_id != auth.doctor_id:
+                raise HTTPException(404, "not found")
         q = session.query(QueueEntry).filter(
             QueueEntry.organization_id == auth.organization_id,
             QueueEntry.doctor_id == doctor_id, QueueEntry.date == day)

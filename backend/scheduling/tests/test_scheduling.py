@@ -354,3 +354,134 @@ class TestScheduleBranchAuthorization:
             params={"branch_id": BR},
             headers=headers("sch_org_adm3"))
         assert r.status_code == 200, r.text
+
+
+class TestScheduleRBACR2:
+    """RBAC-R2: complete schedule resource branch authorization."""
+
+    def test_rbac_r2_list_without_branch_id_only_own_branch(self, client):
+        ensure_branch("r2-br-2", ORG)
+        ensure_user("r2_org_adm", "org_admin", ORG, None)
+        client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": BR,
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-2",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        r = client.get("/api/v1/schedules",
+            headers=headers(RECP))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert all(s["branch_id"] == BR for s in body), body
+
+    def test_rbac_r2_list_foreign_branch_via_param(self, client):
+        ensure_branch("r2-br-2", ORG)
+        ensure_user("r2_org_adm2", "org_admin", ORG, None)
+        client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm2"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-2",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        r = client.get("/api/v1/schedules",
+            params={"branch_id": "r2-br-2"},
+            headers=headers(RECP))
+        assert r.status_code == 404, r.text
+
+    def test_rbac_r2_org_admin_lists_own_org_all_branches(self, client):
+        ensure_branch("r2-br-3", ORG)
+        ensure_user("r2_org_adm3", "org_admin", ORG, None)
+        client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm3"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-3",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        r = client.get("/api/v1/schedules",
+            params={"branch_id": "r2-br-3"},
+            headers=headers("r2_org_adm3"))
+        assert r.status_code == 200, r.text
+
+    def test_rbac_r2_cannot_retrieve_foreign_branch_schedule(self, client):
+        ensure_branch("r2-br-4", ORG)
+        ensure_user("r2_org_adm4", "org_admin", ORG, None)
+        r = client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm4"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-4",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        sid = r.json()["id"]
+        r2 = client.get(f"/api/v1/schedules/{sid}",
+            headers=headers(RECP))
+        assert r2.status_code == 404, r2.text
+
+    def test_rbac_r2_cannot_update_foreign_branch_schedule(self, client):
+        ensure_branch("r2-br-5", ORG)
+        ensure_user("r2_org_adm5", "org_admin", ORG, None)
+        r = client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm5"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-5",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        sid = r.json()["id"]
+        with db_session() as s:
+            orig = s.query(Schedule).filter(Schedule.id == sid).one()
+            orig_templates = list(orig.slot_templates)
+        r2 = client.patch(f"/api/v1/schedules/{sid}",
+            headers=headers(ADMIN),
+            json={"slot_templates": MORNING})
+        assert r2.status_code == 404, r2.text
+        with db_session() as s:
+            row = s.query(Schedule).filter(Schedule.id == sid).one()
+            assert list(row.slot_templates) == orig_templates
+
+    def test_rbac_r2_cannot_retrieve_foreign_branch_slots(self, client):
+        ensure_branch("r2-br-6", ORG)
+        ensure_user("r2_org_adm6", "org_admin", ORG, None)
+        r = client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm6"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-6",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        sid = r.json()["id"]
+        r2 = client.get(f"/api/v1/schedules/{sid}/available-slots",
+            params={"date_str": "2026-04-15"},
+            headers=headers(RECP))
+        assert r2.status_code == 404, r2.text
+
+    def test_rbac_r2_org_admin_org_wide_slots(self, client):
+        ensure_branch("r2-br-7", ORG)
+        ensure_user("r2_org_adm7", "org_admin", ORG, None)
+        r = client.post("/api/v1/schedules",
+            headers=headers("r2_org_adm7"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "r2-br-7",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        sid = r.json()["id"]
+        r2 = client.get(f"/api/v1/schedules/{sid}/available-slots",
+            params={"date_str": "2026-04-15"},
+            headers=headers("r2_org_adm7"))
+        assert r2.status_code == 200, r2.text
+
+    def test_rbac_r2_cross_tenant_schedule_non_disclosing(self, client):
+        ensure_user("r2_other_admin", "branch_admin", OTHER_ORG, OTHER_BR)
+        r = client.post("/api/v1/schedules",
+            headers=headers("r2_other_admin"),
+            json={"doctor_id": OTHER_DOC, "organization_id": OTHER_ORG,
+                  "branch_id": OTHER_BR,
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        sid = r.json()["id"]
+        r2 = client.get(f"/api/v1/schedules/{sid}",
+            headers=headers(RECP))
+        assert r2.status_code == 404, r2.text

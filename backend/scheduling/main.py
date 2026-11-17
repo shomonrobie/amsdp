@@ -118,6 +118,10 @@ def search_schedules(doctor_id: str = Query(None), branch_id: str = Query(None),
             if not branch_accessible(auth, branch_id):
                 raise HTTPException(404, "not found")
             q = q.filter(Schedule.branch_id == branch_id)
+        elif not auth.is_super_admin and not auth.is_org_admin and auth.branch_id:
+            # RBAC-R2: branch-scoped users only see their own branch's
+            # schedules even when branch_id is omitted.
+            q = q.filter(Schedule.branch_id == auth.branch_id)
         return [_schedule_to_dict(s) for s in q.all()]
     finally:
         session.close()
@@ -129,6 +133,9 @@ def get_schedule(schedule_id: str, auth=Depends(get_current_user)):
         s = session.query(Schedule).filter(Schedule.id == schedule_id,
             Schedule.organization_id == auth.organization_id).first()
         if not s: raise HTTPException(404)
+        # RBAC-R2: verify the caller may access the schedule's stored branch.
+        if not branch_accessible(auth, s.branch_id):
+            raise HTTPException(404)
         return _schedule_to_dict(s)
     finally:
         session.close()
@@ -141,6 +148,10 @@ def update_schedule(schedule_id: str, data: ScheduleUpdate,
         s = session.query(Schedule).filter(Schedule.id == schedule_id,
             Schedule.organization_id == auth.organization_id).first()
         if not s: raise HTTPException(404)
+        # RBAC-R2: verify the caller may modify this schedule's stored branch.
+        # Request-body values cannot override authenticated scope.
+        if not branch_accessible(auth, s.branch_id):
+            raise HTTPException(404)
         if data.slot_templates is not None:
             s.slot_templates = [t.dict() for t in data.slot_templates]
         if data.appointment_model is not None: s.appointment_model = data.appointment_model
@@ -168,6 +179,9 @@ def get_available_slots(schedule_id: str, date_str: str = Query(...),
         sched = session.query(Schedule).filter(Schedule.id == schedule_id,
             Schedule.organization_id == auth.organization_id).first()
         if not sched: raise HTTPException(404)
+        # RBAC-R2: verify the caller may inspect this schedule's stored branch.
+        if not branch_accessible(auth, sched.branch_id):
+            raise HTTPException(404)
         org = session.query(Organization).filter(
             Organization.id == sched.organization_id).first()
         qcfg = get_queue_config(org.config if org else None)
