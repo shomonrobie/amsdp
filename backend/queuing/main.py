@@ -13,7 +13,7 @@ import logging
 
 from common.database import SessionFactory
 from common.models import QueueEntry, QueueSequence, Appointment, Patient, Doctor
-from common.auth import AuthContext, get_current_user, require_permission
+from common.auth import AuthContext, get_current_user, require_permission, branch_accessible
 from common.audit import record_audit
 from common.queue_tokens import allocate_daily_token, token_for
 from common.timeutil import operational_today
@@ -102,6 +102,11 @@ def _scoped_entry_or_404(session, auth, entry_id: str):
     ).first()
     if not entry:
         raise HTTPException(404, "queue entry not found")
+    # P0-1: enforce branch scope on the entry's *stored* branch.  The
+    # authenticated actor must be authorized for that branch; a caller is
+    # never allowed to reach another branch's entry by supplying an id.
+    if not branch_accessible(auth, entry.branch_id):
+        raise HTTPException(404, "queue entry not found")
     return entry
 
 
@@ -117,6 +122,11 @@ def get_queue(doctor_id: str = Query(...), date: str = Query(...),
             QueueEntry.doctor_id == doctor_id, QueueEntry.date == day,
             QueueEntry.status.in_(ACTIVE_STATUSES))
         if branch_id:
+            # P0-2: validate the caller-supplied branch against authenticated
+            # scope.  Reject unauthorized branch selection (non-disclosing
+            # 404) so a branch-scoped actor cannot read another branch's queue.
+            if not branch_accessible(auth, branch_id):
+                raise HTTPException(404, "not found")
             q = q.filter(QueueEntry.branch_id == branch_id)
         elif auth.branch_id and not (auth.is_super_admin or auth.is_org_admin):
             q = q.filter(QueueEntry.branch_id == auth.branch_id)
@@ -161,13 +171,21 @@ def check_in_appointment(data: CheckInRequest,
             QueueEntry.status.in_(ACTIVE_STATUSES)).first()
         if dup:
             raise HTTPException(422, "appointment is already queued")
+        # P0-3: the check-in branch is the appointment's stored branch.  A
+        # caller may not select another branch by supplying branch_id in the
+        # body, and must be authorized for the appointment's branch.
+        target_branch = appt.branch_id
+        if data.branch_id and data.branch_id != appt.branch_id:
+            raise HTTPException(404, "not found")
+        if not branch_accessible(auth, target_branch):
+            raise HTTPException(404, "not found")
         day = appt.appointment_date
         seq = _next_sequence(session, appt.doctor_id, day)
         token = _token_for(appt.doctor_id, seq)
         pos = data.position if (data.walk_in_policy == "staff_placement" and data.position) else seq
         entry = QueueEntry(id=str(uuid.uuid4()),
             organization_id=appt.organization_id,
-            branch_id=data.branch_id or appt.branch_id,
+            branch_id=target_branch,
             doctor_id=appt.doctor_id, date=day, position=pos, token=token,
             patient_id=appt.patient_id, appointment_id=appt.id,
             entry_source="appointment", status="waiting",
@@ -233,12 +251,18 @@ def enqueue_patient(data: QueueEnqueueRequest,
             Doctor.id == data.doctor_id,
             Doctor.organization_id == auth.organization_id).first()
         if not doctor: raise HTTPException(422, "doctor not found")
+        # P0-4: enforce the caller's branch scope.  A caller-supplied branch_id
+        # is validated before use; an unauthorized branch selection is rejected
+        # (non-disclosing 404).  The fallback is the caller's own token branch.
+        target_branch = data.branch_id or auth.branch_id or ""
+        if target_branch and not branch_accessible(auth, target_branch):
+            raise HTTPException(404, "not found")
         seq = _next_sequence(session, data.doctor_id, day)
         token = _token_for(data.doctor_id, seq)
         pos = data.position if (data.walk_in_policy == "staff_placement" and data.position) else seq
         entry = QueueEntry(id=str(uuid.uuid4()),
             organization_id=auth.organization_id,
-            branch_id=data.branch_id or auth.branch_id or "",
+            branch_id=target_branch,
             doctor_id=data.doctor_id, date=day, position=pos, token=token,
             patient_id=data.patient_id, appointment_id=None,
             entry_source=data.entry_source, status="waiting",
@@ -374,6 +398,24 @@ def reorder_queue(data: QueueReorder,
         by_id = {e.id: e for e in entries}
         if len(by_id) != len(data.entry_ids):
             raise HTTPException(422, "one or more entries not found in scope")
+        # P0-5: validate queue homogeneity — every entry must belong to the
+        # same authorized branch/doctor/date queue context, and the caller
+        # must be authorized for that branch.  Reject mixed-queue or
+        # unauthorized entries; raise before any mutation so an invalid
+        # reorder is never partially applied.
+        queue_context = None
+        for eid in data.entry_ids:
+            entry = by_id[eid]
+            if entry.status not in ACTIVE_STATUSES:
+                raise HTTPException(422, f"entry {eid} is not in a reorderable state")
+            if not branch_accessible(auth, entry.branch_id):
+                raise HTTPException(404, "queue entry not found")
+            key = (entry.branch_id, entry.doctor_id, entry.date)
+            if queue_context is None:
+                queue_context = key
+            elif key != queue_context:
+                raise HTTPException(
+                    422, "entries must belong to the same branch, doctor and date")
         for idx, eid in enumerate(data.entry_ids, start=1):
             entry = by_id[eid]
             if entry.position != idx:

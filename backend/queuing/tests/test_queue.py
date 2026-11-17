@@ -262,3 +262,221 @@ class TestAuthorization:
         assert evt.actor_role == "receptionist"
         s2.close()
 client = TestClient(app)
+
+
+class TestQueueBranchAuthorization:
+    """P0-1..P0-5: branch scope enforcement across the queue endpoints.
+
+    The catalogue's single branch (m5-branch) is extended here with a second
+    branch in the same organisation so cross-branch attempts can be exercised.
+    Tokens are minted with an explicit branch so a caller can be placed in a
+    branch different from the entry they target.
+    """
+
+    def _ensure_branch(self, session, branch_id, org_id="m5-org"):
+        b = session.query(Branch).filter(Branch.id == branch_id).first()
+        if b is None:
+            session.add(Branch(id=branch_id, organization_id=org_id,
+                               name=branch_id, code=branch_id.upper()))
+            session.commit()
+
+    def _ensure_user_at(self, session, username, role, branch_id):
+        u = session.query(StaffUser).filter(StaffUser.username == username).first()
+        if u is None:
+            pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id="m5-org",
+                          branch_id=branch_id, username=username,
+                          password_hash=pw, display_name=username, role=role,
+                          status="active")
+            session.add(u); session.commit()
+        return u
+
+    def _enqueue(self, patient_id, branch_id=None, token=None):
+        body = {"doctor_id": "m5-doc", "patient_id": patient_id,
+                "entry_source": "walk_in"}
+        if branch_id is not None:
+            body["branch_id"] = branch_id
+        return client.post("/api/v1/queue/enqueue", headers=_auth(token),
+                           json=body)
+
+    def test_p0_1_cross_branch_entry_denied(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_b = self._ensure_user_at(session, "p01_recp_b",
+                                          "receptionist", "m5-branch-2")
+            user_b_id = user_b.id
+        finally:
+            session.close()
+        token_b = _token(user_b, branch="m5-branch-2")
+
+        p = _mk_patient(SessionFactory())
+        a = _mk_appointment(SessionFactory(), p.id, status="CONFIRMED")
+        entry = self._enqueue(p.id, token=_token(receptionist)).json()
+        assert entry["branch_id"] == "m5-branch"
+
+        # P0-1: a caller in another branch cannot touch the entry (404, never 403).
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(token_b),
+                         json={"action": "cancel", "reason": "x"})
+        assert r.status_code == 404, r.text
+        # Same-branch caller still succeeds.
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(_token(receptionist)),
+                         json={"action": "cancel", "reason": "x"})
+        assert r.status_code == 200, r.text
+
+    def test_p0_2_queue_list_rejects_foreign_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+        finally:
+            session.close()
+        today = date.today().isoformat()
+        base = f"/api/v1/queue?doctor_id=m5-doc&date={today}"
+
+        # P0-2: caller-supplied branch_id for another branch is rejected (404).
+        r = client.get(base + "&branch_id=m5-branch-2",
+                       headers=_auth(_token(receptionist)))
+        assert r.status_code == 404, r.text
+        # Own branch still works.
+        r = client.get(base + "&branch_id=m5-branch",
+                       headers=_auth(_token(receptionist)))
+        assert r.status_code == 200, r.text
+
+    def test_p0_2_queue_list_org_admin_org_wide(self):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_o = self._ensure_user_at(session, "p02_org_admin",
+                                          "org_admin", None)
+        finally:
+            session.close()
+        today = date.today().isoformat()
+        # org_admin retains organization-wide access across branches.
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={today}"
+                       f"&branch_id=m5-branch-2",
+                       headers=_auth(_token(user_o)))
+        assert r.status_code == 200, r.text
+
+    def test_p0_3_check_in_rejects_foreign_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_b = self._ensure_user_at(session, "p03_recp_b",
+                                          "receptionist", "m5-branch-2")
+        finally:
+            session.close()
+        p = _mk_patient(SessionFactory())
+        a = _mk_appointment(SessionFactory(), p.id, status="CONFIRMED")
+        assert a.branch_id == "m5-branch"
+
+        # P0-3: supplying another branch_id in the body is denied.
+        r = client.post("/api/v1/queue/check-in",
+                        headers=_auth(_token(receptionist)),
+                        json={"appointment_id": a.id, "branch_id": "m5-branch-2"})
+        assert r.status_code == 404, r.text
+        # A caller not authorized for the appointment's branch is denied.
+        r = client.post("/api/v1/queue/check-in",
+                        headers=_auth(_token(user_b, branch="m5-branch-2")),
+                        json={"appointment_id": a.id})
+        assert r.status_code == 404, r.text
+        # Same-branch check-in succeeds.
+        r = client.post("/api/v1/queue/check-in",
+                        headers=_auth(_token(receptionist)),
+                        json={"appointment_id": a.id})
+        assert r.status_code == 201, r.text
+
+    def test_p0_4_enqueue_rejects_foreign_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_b = self._ensure_user_at(session, "p04_recp_b",
+                                          "receptionist", "m5-branch-2")
+        finally:
+            session.close()
+        p = _mk_patient(SessionFactory())
+
+        # P0-4: caller-supplied branch_id for another branch is denied.
+        r = self._enqueue(p.id, branch_id="m5-branch-2",
+                          token=_token(receptionist))
+        assert r.status_code == 404, r.text
+        # Falling back to the caller's own branch succeeds.
+        r = self._enqueue(p.id, branch_id=None, token=_token(receptionist))
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "m5-branch"
+        # A caller in branch B enqueuing with no branch_id lands in branch B.
+        r = self._enqueue(p.id, branch_id=None, token=_token(user_b, branch="m5-branch-2"))
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "m5-branch-2"
+
+    def test_p0_4_enqueue_org_admin_org_wide(self):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_o = self._ensure_user_at(session, "p04_org_admin",
+                                          "org_admin", None)
+        finally:
+            session.close()
+        p = _mk_patient(SessionFactory())
+        # org_admin may enqueue into any branch of the organisation.
+        r = self._enqueue(p.id, branch_id="m5-branch-2",
+                          token=_token(user_o, branch=None))
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "m5-branch-2"
+
+    def test_p0_5_reorder_rejects_mixed_branch(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._ensure_branch(session, "m5-branch-2")
+            user_o = self._ensure_user_at(session, "p05_org_admin",
+                                          "org_admin", None)
+        finally:
+            session.close()
+        p1 = _mk_patient(SessionFactory())
+        p2 = _mk_patient(SessionFactory())
+        e1 = self._enqueue(p1.id, branch_id="m5-branch",
+                           token=_token(receptionist)).json()
+        e2 = self._enqueue(p2.id, branch_id="m5-branch-2",
+                           token=_token(user_o, branch=None)).json()
+
+        # Positions before the (rejected) reorder.
+        s = SessionFactory()
+        try:
+            before = {row.id: row.position for row in s.query(QueueEntry).filter(
+                QueueEntry.id.in_([e1["id"], e2["id"]])).all()}
+        finally:
+            s.close()
+
+        # P0-5: mixed-branch reorder is rejected with no partial mutation.
+        # org_admin is authorized for both branches, so the homogeneity check
+        # (not the per-entry branch check) is what rejects the mix.
+        r = client.post("/api/v1/queue/reorder",
+                        headers=_auth(_token(user_o, branch=None)),
+                        json={"entry_ids": [e1["id"], e2["id"]], "reason": "x"})
+        assert r.status_code == 422, r.text
+
+        # Neither entry moved.
+        s = SessionFactory()
+        try:
+            after = {row.id: row.position for row in s.query(QueueEntry).filter(
+                QueueEntry.id.in_([e1["id"], e2["id"]])).all()}
+        finally:
+            s.close()
+        assert before == after
+
+    def test_p0_5_reorder_same_branch_succeeds(self, receptionist):
+        p1 = _mk_patient(SessionFactory())
+        p2 = _mk_patient(SessionFactory())
+        e1 = self._enqueue(p1.id, branch_id="m5-branch",
+                           token=_token(receptionist)).json()
+        e2 = self._enqueue(p2.id, branch_id="m5-branch",
+                           token=_token(receptionist)).json()
+        r = client.post("/api/v1/queue/reorder",
+                        headers=_auth(_token(receptionist)),
+                        json={"entry_ids": [e2["id"], e1["id"]], "reason": "swap"})
+        assert r.status_code == 200, r.text
+        q = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+                       headers=_auth(_token(receptionist))).json()
+        pos = {x["id"]: x["position"] for x in q["entries"]}
+        assert pos[e1["id"]] == 2 and pos[e2["id"]] == 1

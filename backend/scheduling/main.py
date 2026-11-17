@@ -9,8 +9,8 @@ from typing import Optional
 from datetime import date, datetime, timezone
 
 from common.database import SessionFactory
-from common.models import Schedule
-from common.auth import AuthContext, require_permission, get_current_user
+from common.models import Schedule, Branch, Doctor
+from common.auth import AuthContext, require_permission, get_current_user, branch_accessible
 from common.health import install_health
 from common.denial_audit import install_denial_audit
 
@@ -76,6 +76,23 @@ def create_schedule(data: ScheduleCreate, auth=Depends(require_permission("sched
         if data.effective_to:
             try: et = datetime.strptime(data.effective_to, "%Y-%m-%d").date()
             except: pass
+        # P0-6: enforce branch scope.  organization_id comes from the token
+        # (never the body).  The caller must be authorized for the target
+        # branch, and the doctor + branch must belong to the caller's
+        # organization.  Doctor multi-branch scheduling is preserved: a doctor
+        # may be scheduled at any branch in the same organization.
+        if not branch_accessible(auth, data.branch_id):
+            raise HTTPException(404, "not found")
+        doctor = session.query(Doctor).filter(
+            Doctor.id == data.doctor_id,
+            Doctor.organization_id == auth.organization_id).first()
+        if not doctor:
+            raise HTTPException(404, "doctor not found")
+        branch = session.query(Branch).filter(
+            Branch.id == data.branch_id,
+            Branch.organization_id == auth.organization_id).first()
+        if not branch:
+            raise HTTPException(404, "branch not found")
         s = Schedule(id=str(uuid.uuid4()), doctor_id=data.doctor_id,
             organization_id=auth.organization_id, branch_id=data.branch_id,
             appointment_model=data.appointment_model, effective_from=ef,
@@ -94,7 +111,13 @@ def search_schedules(doctor_id: str = Query(None), branch_id: str = Query(None),
     try:
         q = session.query(Schedule).filter(Schedule.organization_id == auth.organization_id)
         if doctor_id: q = q.filter(Schedule.doctor_id == doctor_id)
-        if branch_id: q = q.filter(Schedule.branch_id == branch_id)
+        if branch_id:
+            # 8.2: validate the caller-supplied branch against authenticated
+            # scope so a branch-scoped actor cannot list another branch's
+            # schedules.  org_admin retains organization-wide access.
+            if not branch_accessible(auth, branch_id):
+                raise HTTPException(404, "not found")
+            q = q.filter(Schedule.branch_id == branch_id)
         return [_schedule_to_dict(s) for s in q.all()]
     finally:
         session.close()

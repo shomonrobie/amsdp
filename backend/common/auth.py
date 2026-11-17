@@ -311,3 +311,23 @@ def require_branch_access(target_branch_id: Optional[str], service: str = "platf
             raise HTTPException(403, "branch scope required")
         return auth
     return _dependency
+
+
+def branch_accessible(auth: AuthContext, branch_id: Optional[str]) -> bool:
+    """True if the authenticated actor may act on *branch_id*.
+
+    ``org_admin`` and callers holding ``platform.cross_org`` may act on any
+    branch; every other branch-scoped actor must match their token's branch.
+    A ``None`` target imposes no branch constraint.
+
+    The check is deliberate: a caller must never be able to reach another
+    branch's data merely by supplying a branch identifier it is not
+    authorized for.  Organization scope is enforced separately (the queried
+    rows are already filtered to ``auth.organization_id``), so this helper
+    only decides branch reachability within that tenant.
+    """
+    if branch_id is None:
+        return True
+    if auth.is_org_admin or auth.can_cross_org:
+        return True
+    return auth.branch_id == branch_id

@@ -288,3 +288,69 @@ class TestAvailableSlots:
         r = client.get(f"/api/v1/schedules/{sid}/available-slots",
                        params={"date_str": "2026-04-15"})
         assert r.status_code == 401
+
+
+class TestScheduleBranchAuthorization:
+    """P0-6 and finding 8.2: branch scope on schedule creation and listing."""
+
+    def test_p0_6_create_schedule_rejects_foreign_branch(self, client):
+        # ADMIN is a branch_admin scoped to BR; creating a schedule at BR2
+        # (same organisation, other branch) must be denied.
+        ensure_branch("sch-br-2", ORG)
+        r = client.post("/api/v1/schedules",
+            headers=headers(ADMIN),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "sch-br-2",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        assert r.status_code == 404, r.text
+
+    def test_p0_6_create_schedule_own_branch_succeeds(self, client):
+        r = _create(client, user=ADMIN)
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == BR
+
+    def test_p0_6_create_schedule_org_admin_org_wide(self, client):
+        ensure_branch("sch-br-2", ORG)
+        ensure_user("sch_org_adm", "org_admin", ORG, None)
+        # org_admin retains organization-wide access across branches.
+        r = client.post("/api/v1/schedules",
+            headers=headers("sch_org_adm"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "sch-br-2",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        assert r.status_code == 201, r.text
+        assert r.json()["branch_id"] == "sch-br-2"
+
+    def test_p0_6_create_schedule_foreign_doctor_404(self, client):
+        # The doctor must belong to the caller's organisation.
+        r = client.post("/api/v1/schedules",
+            headers=headers(ADMIN),
+            json={"doctor_id": OTHER_DOC, "organization_id": ORG,
+                  "branch_id": BR,
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        assert r.status_code == 404, r.text
+
+    def test_8_2_list_schedules_rejects_foreign_branch(self, client):
+        ensure_branch("sch-br-2", ORG)
+        ensure_user("sch_org_adm2", "org_admin", ORG, None)
+        client.post("/api/v1/schedules",
+            headers=headers("sch_org_adm2"),
+            json={"doctor_id": DOC, "organization_id": ORG,
+                  "branch_id": "sch-br-2",
+                  "effective_from": "2026-01-01",
+                  "slot_templates": MORNING})
+        # RECP scoped to BR must not list BR2 schedules.
+        r = client.get("/api/v1/schedules",
+            params={"branch_id": "sch-br-2"},
+            headers=headers(RECP))
+        assert r.status_code == 404, r.text
+
+    def test_8_2_list_schedules_org_admin_org_wide(self, client):
+        ensure_user("sch_org_adm3", "org_admin", ORG, None)
+        r = client.get("/api/v1/schedules",
+            params={"branch_id": BR},
+            headers=headers("sch_org_adm3"))
+        assert r.status_code == 200, r.text
