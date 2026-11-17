@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **81** markdown documents on disk, every one now accounted for below — **77** in the `docs/` trees (11 at the `docs/` root + 66 across the subject folders, of which 6 are the new `architecture/saas/` set registered in Revision 27) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17: 77 + 4 = 81 on disk, 80 registered rows — the 3 `chatgpt/` rows and 77 `docs/`-tree rows. The earlier count drift remains logged as open item **O-Y**.)*
+> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **81** markdown documents on disk, every one now accounted for below — **77** in the `docs/` trees (11 at the `docs/` root + 66 across the subject folders, of which 6 are the new `architecture/saas/` set registered in Revision 27) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17, Revision 28: 77 + 4 = **81** on disk and **81** registered rows — the 4 `chatgpt/` rows and 77 `docs/`-tree rows, so **every** file on disk now has its own row. `chatgpt/` was the last gap: the Product Owner adopted its two remaining planning documents into the repository on 2026-11-17 (Revision 28). Open item **O-Y** — the `chatgpt/` count drift — is **closed** there: 4 files on disk, 4 rows.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -539,8 +539,31 @@
 > output location. Nothing was staged, committed or pushed. No new index-level open item: the
 > substantive ones are the sixteen `O-SaaS` entries in the architecture specification §14.3, which
 > is where they belong (one registry, one place).
+> **Revision 28 — 2026-11-17**, task `AMSDP-CHATGPT-REFERENCE-DOCS-ADOPTION-2026-11-17` — **no new
+> document written, two existing documents newly tracked and registered**: on owner instruction the
+> two remaining ChatGPT-produced reference documents in `docs/chatgpt/` were added to the repository
+> — `AMSDP_Configurable_Multi-Sector_Architecture_Implementation_Plan.md` (40,267 bytes, 1,337
+> lines, SHA-256 `5a988b00…ade58a3f8`) and
+> `AMSDP_Connect_Proposed_Communication_and_AI_Capabilities.md` (20,944 bytes, 509 lines, SHA-256
+> `4954cf81…7a7bc52e`), both self-dated 2026-11-16. Registered row count **80 → 81** while the
+> on-disk snapshot stays **81** (77 `docs/`-tree rows + 4 `chatgpt/` rows), so for the first time
+> **every** markdown file in `docs/` has a row. Consequences recorded rather than assumed: the
+> `chatgpt/` section heading and prose were rewritten from "three documents, two unregistered" to
+> "four, all registered", and a `Read when`/`Owner` cell was corrected on the multi-sector row —
+> these are table corrections under §12, not a rewrite of any document's content. **O-D** is closed
+> as to *ownership* (the owner supplied these files, so provenance is established) and stays open as
+> to *placement* (folding the folder into `audit/` or `governance/` is still the owner's call);
+> **O-Y** (the `chatgpt/` count drift, open since Revision 24) is **closed** — 4 files on disk, 4
+> rows. **Nothing moved, renamed, overwritten or deleted**, so no migration-manifest entry is
+> required (§11); both files were added byte-for-byte as supplied, which the SHA-256 values above
+> pin. Both remain **reference material, not authority** (§1) and neither authorises implementation
+> — the Connect document says so itself. Credential scan of both files (`ghp_`, `sk-`, `AKIA`,
+> private-key blocks, `api_key`/`password` assignments, long `Bearer` tokens): **0** hits. **No
+> code, schema, migration, endpoint, test or running stack was touched**, so no test suite was run
+> and nothing is claimed `TESTED` or `VERIFIED`; no new index-level open item is raised.
 
 ---
+
 
 ## How to use this index
 
@@ -779,23 +802,31 @@ written there (§11).
 
 ---
 
-## `chatgpt/` — three planning documents, two unregistered, folder ownership unconfirmed (open item O-D)
+## `chatgpt/` — four ChatGPT-produced planning documents, all registered and adopted on 2026-11-17
 
-`find docs -type f -name '*.md'` reports **three** documents in a folder that is **not**
-among the §11 subject folders. One is listed here so the index matches the tree (§12); the
-other two are listed without being adopted, because their ownership is unconfirmed. None of
-them is moved (§11: uncertain ownership → report and leave in place), and none is an
-authority — business rules, MVP scope and the frozen design still govern (§1).
+`find docs -type f -name '*.md'` reports **four** documents in a folder that is **not** among the
+§11 subject folders. On **2026-11-17** the Product Owner instructed that the two planning documents
+below that were still unregistered — the multi-sector plan and the AMSDP Connect proposal — be
+**added to the repository** as ChatGPT-produced reference material; they were committed and are
+registered here in the same task (§12). All four files now have a row. None is moved: the
+instruction was to adopt the documents, not to relocate them, so `docs/chatgpt/` stays exactly
+where it is and no migration entry applies (§11). None of them is an authority — business rules,
+MVP scope and the frozen design still govern (§1) — and none authorises work: the Connect document
+states of its own capabilities that they are *not approved for implementation*, and the
+multi-sector plan is a post-hackathon roadmap.
 
 | File | Size | Read when | Owner |
 |---|---:|---|---|
 | `AMSDP_Hackathon_Implementation_Backlog.md` | 24,229 | Needing the backlog framing that accompanied the 2026-11-14 reconciliation commit — a planning document, **not** an authority: business rules, MVP scope and the frozen design still govern (§1) | unconfirmed — folder outside the §11 set |
 | `AMSDP_Project_Handover_2026-11-12.md` | 28,984 | Needing the 2026-11-12 handover narrative. **Unregistered** by earlier revisions on purpose; listed here only so the tree count is honest | unconfirmed — folder outside the §11 set |
-| `AMSDP_Configurable_Multi-Sector_Architecture_Implementation_Plan.md` | 40,267 | Reading the post-hackathon multi-sector plan. **Unregistered** — found by the Revision 21 maintenance check (2026-11-16). Planning only: it authorizes no hackathon-scope change | unconfirmed — folder outside the §11 set |
+| `AMSDP_Configurable_Multi-Sector_Architecture_Implementation_Plan.md` | 40,267 | Reading the post-hackathon multi-sector plan (private / government / NGO / community / outreach delivery models, microservices direction, phased roadmap). **Registered 2026-11-17** when the owner adopted it into the repository — found by the Revision 21 maintenance check (2026-11-16). Planning only: it authorises no hackathon-scope change | Product Owner — adopted 2026-11-17 (ChatGPT-produced reference); not authoritative |
+| `AMSDP_Connect_Proposed_Communication_and_AI_Capabilities.md` | 20,944 | Reading the proposed communication / voice / AI capability set — hypotheses for customer discovery, explicitly **not** committed Core features (its own header: *"Not approved for implementation"*), and outside the hackathon MVP scope | Product Owner — adopted 2026-11-17 (ChatGPT-produced reference); not authoritative |
 
-Open item: whether `docs/chatgpt/` should be folded into an existing subject folder (`audit/` or
-`governance/`) is the Product Owner's decision. Until then the file stays exactly where it is, and
-no agent may treat `docs/chatgpt/` as an approved output location (§11).
+**O-D status.** The ownership half is **closed**: the Product Owner supplied and adopted these
+documents on 2026-11-17, so their provenance is no longer unknown. Whether the folder should
+eventually be folded into an existing subject folder (`audit/` or `governance/`) remains the Product
+Owner's decision; until it is taken the folder stays exactly where it is, and no agent may treat
+`docs/chatgpt/` as an approved output location (§11).
 
 ---
 
