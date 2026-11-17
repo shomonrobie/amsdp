@@ -12,8 +12,9 @@ from datetime import date, datetime, timezone
 from sqlalchemy import text
 
 from common.database import SessionFactory
-from common.models import (Appointment, Schedule, ScheduleSession, Patient,
-                           QueueEntry, Organization)
+from common.models import (Appointment, Branch, Doctor, Schedule,
+                           ScheduleSession, Patient, QueueEntry, Organization)
+from common.permissions import check as permission_check
 
 from common.auth import AuthContext, require_permission, get_current_user
 from common.config import reserved_for_capacity
@@ -24,6 +25,20 @@ from common.log_redaction import install_token_redaction
 from common.health import install_health
 from common.denial_audit import install_denial_audit
 
+# AMSDP-CALENDAR-FILTER-01 — one predicate set for every appointment read.
+# The grid used to apply no branch scope and no search while the list applied
+# both, so the two views disagreed (diagnosis report F-3/F-4).  The helpers are
+# imported the same two ways as the sibling routers, because this service is
+# copied into its image and run as both a package and a top-level module.
+try:
+    from .appt_filters import (SEARCH_MAX_LENGTH, apply_branch_scope,
+                               apply_filters, appointment_rows, match_index,
+                               parse_day, row_context)
+except ImportError:  # pragma: no cover — top-level module execution
+    from appt_filters import (SEARCH_MAX_LENGTH, apply_branch_scope,  # type: ignore
+                              apply_filters, appointment_rows, match_index,
+                              parse_day, row_context)
+
 try:
     from .dashboard import router as dashboard_router
 except ImportError:
@@ -32,6 +47,15 @@ try:
     from .tracking import router as tracking_router
 except ImportError:
     from tracking import router as tracking_router
+try:
+    from .symptoms import (router as symptoms_router, apply_onset, copy_symptoms,
+                           persist_symptoms, plan_symptoms, symptom_record_payload,
+                           symptoms_by_appointment, validate_onset)
+except ImportError:
+    from symptoms import (router as symptoms_router, apply_onset,  # type: ignore
+                          copy_symptoms, persist_symptoms, plan_symptoms,
+                          symptom_record_payload, symptoms_by_appointment,
+                          validate_onset)
 
 app = FastAPI(title="AMSDP Appointment Service")
 install_health(app, "appointment")
@@ -39,6 +63,8 @@ install_health(app, "appointment")
 install_denial_audit(app, "appointment")
 app.include_router(dashboard_router)
 app.include_router(tracking_router)
+# AMSDP-SYMPTOM-01 — the bilingual catalogue the booking form searches.
+app.include_router(symptoms_router)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +130,12 @@ VALID_TRANSITIONS = {
     "RESCHEDULED": [],# Terminal (original)
 }
 
+#: The status vocabulary the read filters accept.  Derived from the lifecycle
+#: table so a status can never be filterable without being reachable: the
+#: calendar's dropdown and the list's dropdown are built from ``VALID_TRANSITIONS``
+#: in the browser, and an unknown value is a 422 here rather than an empty page.
+APPOINTMENT_STATUSES = tuple(VALID_TRANSITIONS)
+
 BOOKING_SOURCES = ["phone", "in_person", "reception", "assistant", "walk_in", "online"]
 
 WALK_IN_POLICIES = ["end_of_queue", "first_come", "reserved_capacity", "staff_placement"]
@@ -118,6 +150,15 @@ class AppointmentCreate(BaseModel):
     appointment_type: str = "scheduled"
     booking_source: str = "reception"
     notes: str = ""
+    # --- AMSDP-SYMPTOM-01 — all optional, nothing is ever pre-filled ---------
+    # Catalogue entries and free descriptions are separate fields rather than
+    # one mixed list: the receptionist's two acts (pick from the catalogue / type
+    # what the patient said) have to stay distinguishable in the record.
+    symptom_ids: list[str] = []
+    symptom_texts: list[str] = []
+    #: One of ``symptoms.ONSET_CODES``; omitted when the question was not asked.
+    symptom_onset: Optional[str] = None
+    symptom_onset_note: str = ""
 
 class AppointmentStatusUpdate(BaseModel):
     status: str
@@ -141,6 +182,12 @@ class WalkInCreate(BaseModel):
     doctor_id: str
     notes: str = ""
     placement: str = "end_of_queue"  # walk-in policy
+    # AMSDP-SYMPTOM-01 — a walk-in is a visit like any other; the receptionist
+    # asks the same two questions.  Optional here for the same reason.
+    symptom_ids: list[str] = []
+    symptom_texts: list[str] = []
+    symptom_onset: Optional[str] = None
+    symptom_onset_note: str = ""
 
 
 def _location_label(a) -> str:
@@ -149,7 +196,14 @@ def _location_label(a) -> str:
     return " / ".join(parts)
 
 
-def _appt_to_dict(a):
+def _appt_to_dict(a, symptoms):
+    """The canonical appointment payload.
+
+    ``symptoms`` is a required argument, not an optional one: the calendar path
+    batches one query for the whole visible range, and a defaulted ``[]`` would
+    silently report "no symptoms recorded" for an appointment that has some.
+    Passing it explicitly makes a missed call site fail loudly instead.
+    """
     return {"id": a.id, "organization_id": a.organization_id,
         "branch_id": a.branch_id, "patient_id": a.patient_id,
         "doctor_id": a.doctor_id,
@@ -175,6 +229,13 @@ def _appt_to_dict(a):
         "department_name": a.department_name or "",
         "room_id": a.room_id or "", "room_name": a.room_name or "",
         "location_label": _location_label(a),
+        # --- AMSDP-SYMPTOM-01 — recorded complaints and onset ------------------
+        # ``symptoms`` keeps the catalogue/free-text distinction and the
+        # booking-time name snapshot; ``symptom_onset`` is "" when the question
+        # was not answered ("UNKNOWN" is a different, deliberate answer).
+        "symptoms": [symptom_record_payload(row) for row in (symptoms or [])],
+        "symptom_onset": a.symptom_onset_code or "",
+        "symptom_onset_note": a.symptom_onset_note or "",
         "created_at": str(a.created_at) if a.created_at else "",
 
     }
@@ -316,6 +377,15 @@ def create_appointment(
             Patient.organization_id == auth.organization_id).first()
         if not patient: raise HTTPException(422, "patient not found")
 
+        # AMSDP-SYMPTOM-01.  Both optional inputs are validated *before* any row
+        # is created, so an unknown, retired or other-tenant symptom id fails the
+        # whole booking rather than leaving a half-recorded visit behind.
+        symptom_plan = plan_symptoms(
+            session, organization_id=auth.organization_id,
+            symptom_ids=data.symptom_ids, symptom_texts=data.symptom_texts)
+        onset_code, onset_note = validate_onset(
+            data.symptom_onset, data.symptom_onset_note)
+
         # Concurrency-safe capacity check: count existing active appointments
         existing = session.query(Appointment).filter(
             Appointment.doctor_id == data.doctor_id,
@@ -375,7 +445,18 @@ def create_appointment(
             notes=data.notes, created_by=auth.user_id,
         )
         _apply_location(appt, schedule, clinic)
+        # The onset answer is part of the visit, not of any one symptom: it is
+        # recorded even when no symptom was selected.
+        appt.symptom_onset_code = onset_code
+        appt.symptom_onset_note = onset_note or None
         session.add(appt)
+        # Flush before the children: SQLAlchemy orders INSERTs by relationship,
+        # and ``appointment_symptoms`` has a foreign key but no ORM relationship
+        # to lean on, so the parent row must exist first.
+        session.flush()
+        symptom_rows = persist_symptoms(session, appointment=appt,
+                                        plan=symptom_plan,
+                                        recorded_by=auth.user_id)
         record_audit(session, service="appointment", org_id=auth.organization_id,
             action="appointment.created", target_type="appointment", target_id=appt.id,
             actor_id=auth.user_id, actor_role=auth.role, branch_id=branch_for_appt,
@@ -384,12 +465,23 @@ def create_appointment(
                    "status": "BOOKED", "booking_source": data.booking_source,
                    "session_id": appt.session_id or "",
                    "room_id": appt.room_id or "",
-                   "location": _location_label(appt)})
+                   "location": _location_label(appt),
+                   # Symptom *metadata* only: catalogue ids, counts and the onset
+                   # code.  The patient's free-text words stay in the clinical
+                   # record (appointment_symptoms) and are not copied into the
+                   # audit trail — the trail is append-only and permanent, so it
+                   # holds the minimum needed to prove what happened.
+                   "symptom_count": len(symptom_rows),
+                   "symptom_ids": [row.symptom_id for row in symptom_rows
+                                   if row.symptom_id],
+                   "symptom_text_count": sum(1 for row in symptom_rows
+                                             if row.kind == "free_text"),
+                   "symptom_onset": appt.symptom_onset_code or ""})
 
         session.commit()
         # Sequence 3 — N1 confirmation + N2 reminder planning (best effort).
         _notify("on_appointment_booked", appt.id)
-        return _appt_to_dict(appt)
+        return _appt_to_dict(appt, symptom_rows)
     except HTTPException:
         raise
     except Exception:
@@ -405,30 +497,233 @@ def list_appointments(
     patient_id: str = Query(None), doctor_id: str = Query(None),
     date: str = Query(None), status: str = Query(None),
     date_from: str = Query(None), date_to: str = Query(None),
-    auth: AuthContext = Depends(get_current_user),
+    q: str = Query("", max_length=SEARCH_MAX_LENGTH),
+    branch_id: str = Query(None),
+    auth: AuthContext = Depends(require_permission("appointment.read")),
 ):
+    """Every appointment the caller may read in one calendar window.
+
+    This is the Week/Day grid's read.  Since AMSDP-CALENDAR-FILTER-01 it answers
+    the *same* question as the List view — the search box, the status filter, the
+    doctor filter and the branch picker all apply here too — because it runs the
+    same shared predicates in ``appt_filters``.  Before the fix this route took no
+    ``q`` and no ``branch_id`` at all: typing in the search box changed the List
+    view and left the grid untouched (F-1), and the grid ignored the branch scope
+    the token carried (F-3).
+
+    Authorization is unchanged in *kind* and stricter in *reach*:
+
+    * tenant scope is ``organization_id`` from the token;
+    * branch scope is derived from the token; a branch-scoped role naming another
+      branch gets the non-disclosing 404 ``require_branch_access`` gives;
+    * the route now requires ``appointment.read`` like the list does.  It used to
+      accept *any* authenticated principal, so a role with no appointment
+      permission could still read the day's schedule.
+
+    Each row carries the patient/doctor/branch display names, so the grid no
+    longer issues one ``GET /api/v1/patients/{id}`` per patient per week (F-7).
+    """
     session = SessionFactory()
     try:
-        q = session.query(Appointment).filter(
-            Appointment.organization_id == auth.organization_id)
-        if patient_id: q = q.filter(Appointment.patient_id == patient_id)
-        if doctor_id: q = q.filter(Appointment.doctor_id == doctor_id)
+        rows = appointment_rows(session, auth)
+        rows = apply_branch_scope(rows, auth, branch_id)
+        if patient_id:
+            rows = rows.filter(Appointment.patient_id == patient_id)
+        rows = apply_filters(rows, q=q, doctor_id=doctor_id, status=status,
+                             date_from=date_from, date_to=date_to,
+                             statuses=APPOINTMENT_STATUSES)
         if date:
-            try: q = q.filter(Appointment.appointment_date == datetime.strptime(date, "%Y-%m-%d").date())
-            except: pass
-        if status: q = q.filter(Appointment.status == status)
-        # Inclusive calendar window, used by the week/day booking grid.
-        # Malformed bounds answer 422 instead of being ignored: a typo must never
-        # widen the result to "every appointment in the organization".
-        if date_from:
-            try: window_start = datetime.strptime(date_from, "%Y-%m-%d").date()
-            except ValueError: raise HTTPException(422, "invalid date_from, use YYYY-MM-DD")
-            q = q.filter(Appointment.appointment_date >= window_start)
-        if date_to:
-            try: window_end = datetime.strptime(date_to, "%Y-%m-%d").date()
-            except ValueError: raise HTTPException(422, "invalid date_to, use YYYY-MM-DD")
-            q = q.filter(Appointment.appointment_date <= window_end)
-        return [_appt_to_dict(a) for a in q.order_by(Appointment.appointment_date.desc(), Appointment.start_time).all()]
+            rows = rows.filter(Appointment.appointment_date == parse_day(date, "date"))
+        # Chronological, as a calendar reads.  ``id`` breaks the tie so two
+        # appointments at the same minute cannot swap places between polls.
+        rows = rows.order_by(Appointment.appointment_date.asc(),
+                             Appointment.start_time.asc(),
+                             Appointment.id.asc()).all()
+        appts = [row[0] for row in rows]
+        symptom_map = symptoms_by_appointment([a.id for a in appts],
+                                              session=session)
+        can_see_mobile = permission_check("patient.read", auth.role)
+        items = []
+        for row in rows:
+            appt = row[0]
+            payload = _appt_to_dict(appt, symptom_map.get(appt.id, []))
+            payload.update(row_context(row, can_see_mobile))
+            items.append(payload)
+        return items
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Match date index — "your search matched, but not on this page of the calendar"
+# ---------------------------------------------------------------------------
+#
+# Owner decision D-2 (Option B): a search reaches every authorized date.  The
+# grid can only hold one week, so it cannot show a match three months away — but
+# showing nothing and saying nothing is the defect (F-4).  This route answers the
+# missing half of the question with **counts only**:
+#
+#   {"total": 6, "dates": [{"date": "2026-12-01", "count": 2}, ...],
+#    "truncated": false}
+#
+# No patient name, no mobile, no record: the browser learns *where* the matches
+# are, never what they contain, and the grid fetches that week through the normal
+# route when the receptionist navigates there.  The date list is ordered by
+# distance from ``near`` so its cap keeps the dates closest to what is on screen.
+
+@app.get("/api/v1/appointments/matches")
+def appointment_match_dates(
+    q: str = Query("", max_length=SEARCH_MAX_LENGTH),
+    branch_id: str = Query(None),
+    doctor_id: str = Query(None),
+    status: str = Query(None),
+    date_from: str = Query(None), date_to: str = Query(None),
+    near: str = Query(None),
+    auth: AuthContext = Depends(require_permission("appointment.read")),
+):
+    """Where the current search matches, across every date the caller may read.
+
+    Same tenant scope, same branch scope, same filters as the grid and the list —
+    the counts are the counts of the records those routes would return, so the
+    banner can never claim a match the calendar cannot open.
+    """
+    session = SessionFactory()
+    try:
+        return match_index(session, auth, q=q, branch_id=branch_id,
+                           doctor_id=doctor_id, status=status,
+                           date_from=date_from, date_to=date_to, near=near,
+                           statuses=APPOINTMENT_STATUSES)
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Administrative list — AMSDP-CALENDAR-UX-01 §11
+# ---------------------------------------------------------------------------
+#
+# The calendar grid needs "every appointment in this date window", which is what
+# ``GET /api/v1/appointments`` returns.  The List view needs something different:
+# a *searched*, *sorted*, *paged* page of records with a matching-record total.
+# Filtering that client-side would mean downloading the organization's whole
+# history — exactly what the performance rules forbid — so this is the smallest
+# compatible extension: one additive read route that reuses the existing payload
+# (``_appt_to_dict``) instead of inventing a second row shape.
+#
+# Nothing here changes a lifecycle rule, a capacity rule or an authorization
+# boundary that did not already exist:
+#   * tenant scope is still ``organization_id`` (the one tenant key);
+#   * branch scope is derived from the **token**, never from the query string;
+#   * a branch-scoped caller asking for another branch gets the same
+#     non-disclosing 404 ``require_branch_access`` would give;
+#   * the patient's mobile number is only returned to a role that may read
+#     patient records at all.
+
+#: Page sizes the List view offers.  ``limit`` is bounded by ``le=100`` below so a
+#: caller cannot turn this back into an unbounded dump.
+LIST_PAGE_SIZES: tuple[int, ...] = (25, 50, 100)
+
+#: Whitelisted sort keys → ORDER BY columns.  An unknown key answers 422 rather
+#: than silently falling back: a typo must never return a differently ordered
+#: page while the UI claims otherwise.
+LIST_SORT_COLUMNS = {
+    "date": (Appointment.appointment_date,),
+    "patient": (Patient.name,),
+    "doctor": (Doctor.name,),
+    "branch": (Branch.name,),
+    "status": (Appointment.status,),
+}
+
+
+@app.get("/api/v1/appointments/list")
+def list_appointments_page(
+    q: str = Query("", max_length=SEARCH_MAX_LENGTH),
+    branch_id: str = Query(None),
+    doctor_id: str = Query(None),
+    status: str = Query(None),
+    date_from: str = Query(None), date_to: str = Query(None),
+    sort: str = Query("date"), order: str = Query("desc"),
+    page: int = Query(1, ge=1), limit: int = Query(25, ge=1, le=100),
+    auth: AuthContext = Depends(require_permission("appointment.read")),
+):
+    """One page of appointments matching the calendar's search and filters.
+
+    ``q`` matches the patient's name, the patient's mobile number (digits only,
+    so ``017-0000`` and ``0170000`` agree), the appointment reference and the
+    token number — the ways a receptionist identifies an appointment at the desk.
+    Bangla names work because ILIKE on UTF-8 compares bytes: Bengali has no case,
+    so a substring match is exactly what the search box intends.  The symptom
+    catalogue's romanization normaliser is deliberately *not* applied here — that
+    would be a second, divergent name-matching rule.
+
+    The predicates themselves live in ``appt_filters`` and are shared with the
+    Week/Day grid and the match index, so the three views cannot answer the same
+    question differently.  An unknown ``status`` is a **422**, never an empty
+    page: the UI's dropdown is built from the lifecycle table, so a value outside
+    it means the request is wrong (diagnosis report F-6).
+    """
+    # --- filter validation (422, never a silently widened result set) --------
+    # ``sort``/``order`` shape the SQL and are answered here; the toolbar filters
+    # (dates, status, branch) are validated by the shared helpers, so this route
+    # cannot drift from the grid and the match index.  A malformed ``date_from``
+    # is still a 422: ignoring it would turn "this week" into "everything".
+    if sort not in LIST_SORT_COLUMNS:
+        raise HTTPException(
+            422, f"invalid sort, use one of {sorted(LIST_SORT_COLUMNS)}")
+    order = (order or "").lower()
+    if order not in ("asc", "desc"):
+        raise HTTPException(422, "invalid order, use asc or desc")
+    session = SessionFactory()
+    try:
+        # Same join shape, same branch scope, same filters and same search as the
+        # Week/Day grid and the match index — one implementation, in
+        # ``appt_filters``, so "the list shows four and the week shows none"
+        # cannot happen again (diagnosis report F-3).
+        query = appointment_rows(session, auth)
+        query = apply_branch_scope(query, auth, branch_id)
+        query = apply_filters(query, q=q, doctor_id=doctor_id, status=status,
+                              date_from=date_from, date_to=date_to,
+                              statuses=APPOINTMENT_STATUSES)
+
+        total = query.count()
+
+        columns = LIST_SORT_COLUMNS[sort]
+        ordering = [
+            (col.desc() if order == "desc" else col.asc()).nulls_last()
+            for col in columns
+        ]
+        if sort == "date":
+            # Within a day the schedule still reads forwards, as on the grid.
+            ordering.append(Appointment.start_time.asc().nulls_last())
+        else:
+            # Stable tie-break: newest first, then chronological.
+            ordering += [Appointment.appointment_date.desc(),
+                         Appointment.start_time.asc().nulls_last()]
+        ordering.append(Appointment.id)
+
+        rows = (query.order_by(*ordering)
+                .offset((page - 1) * limit).limit(limit).all())
+        appts = [row[0] for row in rows]
+        symptom_map = symptoms_by_appointment([a.id for a in appts],
+                                              session=session)
+        # Contact details follow the *patient-record* permission, not the
+        # appointment permission: a role that may not read patients is not shown
+        # their number in a table.
+        can_see_mobile = permission_check("patient.read", auth.role)
+
+        items = []
+        for row in rows:
+            appt = row[0]
+            payload = _appt_to_dict(appt, symptom_map.get(appt.id, []))
+            payload.update(row_context(row, can_see_mobile))
+            items.append(payload)
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": (total + limit - 1) // limit if total else 0,
+        }
     finally:
         session.close()
 
@@ -440,7 +735,8 @@ def get_appointment(appointment_id: str, auth: AuthContext = Depends(get_current
         a = session.query(Appointment).filter(Appointment.id == appointment_id,
             Appointment.organization_id == auth.organization_id).first()
         if not a: raise HTTPException(404)
-        return _appt_to_dict(a)
+        recorded = symptoms_by_appointment([a.id], session=session).get(a.id, [])
+        return _appt_to_dict(a, recorded)
     finally:
         session.close()
 
@@ -478,7 +774,8 @@ def update_appointment_status(appointment_id: str, data: AppointmentStatusUpdate
         # Sequence 3: cancel any pending confirmation/reminder for this visit.
         if data.status in CLOSING_STATUSES:
             _notify("on_appointment_closed", a.id, f"status -> {data.status}")
-        return _appt_to_dict(a)
+        recorded = symptoms_by_appointment([a.id], session=session).get(a.id, [])
+        return _appt_to_dict(a, recorded)
     except HTTPException:
         raise
     except Exception:
@@ -548,6 +845,13 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
             created_by=auth.user_id)
         _apply_location(new_a, new_schedule, new_clinic)
         session.add(new_a); session.flush()
+        # The complaint does not change because the day did: the recorded
+        # symptoms are carried to the new visit, and the original rows stay on
+        # the original (now RESCHEDULED) appointment as history.
+        carried = copy_symptoms(session, source=orig, target=new_a,
+                                recorded_by=auth.user_id)
+        new_a.symptom_onset_code = orig.symptom_onset_code
+        new_a.symptom_onset_note = orig.symptom_onset_note
 
         orig.rescheduled_to = new_a.id
         record_audit(session, service="appointment", org_id=orig.organization_id,
@@ -566,7 +870,7 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
         _notify("on_appointment_closed", appointment_id, "appointment rescheduled")
         _notify("on_appointment_booked", new_a.id)
         return {"new_appointment_id":new_a.id,"original_appointment_id":appointment_id,
-            "new_appointment":_appt_to_dict(new_a)}
+            "new_appointment":_appt_to_dict(new_a, carried)}
     except HTTPException: raise
     except Exception: session.rollback(); raise
     finally: session.close()
@@ -586,7 +890,9 @@ def check_in_appointment(appointment_id: str, data: AppointmentStatusUpdate,
     # current row instead of failing the receptionist's second click.
     existing = _scoped_appointment(auth, appointment_id)
     if existing is not None and existing.status in ("CHECKED_IN", "IN_QUEUE"):
-        r = _appt_to_dict(existing)
+        r = _appt_to_dict(
+            existing,
+            symptoms_by_appointment([existing.id]).get(existing.id, []))
     else:
         r = update_appointment_status(appointment_id, data, auth)
     # Auto-create the queue entry with the *same* token authority, history and
@@ -699,19 +1005,36 @@ def register_walk_in(data: WalkInCreate,
             token_number=_serial_token(data.doctor_id, count),
             notes=data.notes, created_by=auth.user_id)
         _apply_location(a, w_schedule, w_clinic)
+        symptom_plan = plan_symptoms(
+            session, organization_id=auth.organization_id,
+            symptom_ids=data.symptom_ids, symptom_texts=data.symptom_texts)
+        onset_code, onset_note = validate_onset(
+            data.symptom_onset, data.symptom_onset_note)
+        a.symptom_onset_code = onset_code
+        a.symptom_onset_note = onset_note or None
         session.add(a)
+        session.flush()          # parent row before its symptom rows (see create)
+        symptom_rows = persist_symptoms(session, appointment=a,
+                                        plan=symptom_plan,
+                                        recorded_by=auth.user_id)
         record_audit(session, service="appointment", org_id=auth.organization_id,
             action="appointment.walk_in_created", target_type="appointment", target_id=a.id,
             actor_id=auth.user_id, actor_role=auth.role, branch_id=w_branch,
             after={"patient_id": data.patient_id, "doctor_id": data.doctor_id,
                    "status": "CONFIRMED", "appointment_type": "walk_in", "notes": data.notes,
                    "session_id": a.session_id or "",
-                   "location": _location_label(a)})
+                   "location": _location_label(a),
+                   "symptom_count": len(symptom_rows),
+                   "symptom_ids": [row.symptom_id for row in symptom_rows
+                                   if row.symptom_id],
+                   "symptom_text_count": sum(1 for row in symptom_rows
+                                             if row.kind == "free_text"),
+                   "symptom_onset": a.symptom_onset_code or ""})
 
         session.commit()
         # Sequence 3: hooks decide walk-ins need no message (see hooks.py).
         _notify("on_appointment_booked", a.id)
-        return _appt_to_dict(a)
+        return _appt_to_dict(a, symptom_rows)
     except HTTPException: raise
     except: session.rollback(); raise
     finally: session.close()
@@ -763,6 +1086,11 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             notes=f"Transferred from {orig.doctor_id}", created_by=auth.user_id)
         _apply_location(new_a, t_schedule, t_clinic)
         session.add(new_a); session.flush()
+        # Same reasoning as reschedule: a transfer moves the visit, not the
+        # complaint, so the recorded symptoms and onset go with it.
+        copy_symptoms(session, source=orig, target=new_a, recorded_by=auth.user_id)
+        new_a.symptom_onset_code = orig.symptom_onset_code
+        new_a.symptom_onset_note = orig.symptom_onset_note
 
         orig.rescheduled_to = new_a.id
         record_audit(session, service="appointment", org_id=orig.organization_id,
