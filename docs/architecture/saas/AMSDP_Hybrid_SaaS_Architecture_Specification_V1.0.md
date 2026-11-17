@@ -1,13 +1,17 @@
 # AMSDP — Hybrid SaaS Architecture Specification V1.0
 
 > **Document ID:** `AMSDP_Hybrid_SaaS_Architecture_Specification`
-> **Version:** V1.0 · **Revision 2 (owner decision reconciliation) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `409a929`
+> **Version:** V1.0 · **Revision 3 (post-commit O-SaaS-15 correction) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `597d9b1`
 > **Status:** **SPECIFICATION — DECISION-RECONCILED, NOT IMPLEMENTED.** On 2026-11-17 the Product
 > Owner decided all sixteen `O-SaaS` items and four architectural directions (A1–A4). Those
 > rulings are recorded as `OWNER-APPROVED` in §1.5, §12 and §14.3 and applied throughout this
 > document. Every *mechanism* that implements them remains `SPECIFIED` — written, engineering-owned,
 > not built — unless a section says otherwise. **Nothing here is `IMPLEMENTED`, `TESTED` or
 > `VERIFIED`**, and nothing in this document authorises code.
+> **Revision 3 note (2026-11-17, post-commit):** one record corrected — O-SaaS-15 is a
+> **production-launch requirement** with a temporary, documented, restricted hackathon exception
+> (§1.5, §9.3 rule 7, §14.3), not an indefinite deferral. No mechanism, evidence grade or other
+> ruling changed; operator MFA is `NOT IMPLEMENTED`.
 > **Companion documents (read together):**
 > `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` (evidence base — every fact cited here),
 > `AMSDP_Identity_and_Access_Management_Specification_V1.0.md`,
@@ -103,7 +107,7 @@ mechanism was not decided, it is left `SPECIFIED` and appears as an engineering 
 | **O-SaaS-12** | The operator-assisted reset **may** return the code to the requesting administrator, under the constraints in IAM §6.2 (hashed at rest, single-use, short-lived, audited, never a new password chosen by the operator). | IAM §6.2 |
 | **O-SaaS-13** | Support access requires **explicit `org_admin` consent for every grant**. There is **no pre-approval** for `grace` tenants. | §9.3; IAM §7.3 |
 | **O-SaaS-14** | **Suspension requires second-person (four-eyes) approval**, the same as closure. | §9.3; tenant §5.2, §11.3; IAM §7.3 |
-| **O-SaaS-15** | MFA for platform operators stays **deferred** for the MVP; the residual risk is recorded and accepted, not forgotten. | IAM §13.1; roadmap §8 |
+| **O-SaaS-15** | **Platform operator MFA is required before production launch.** A temporary exception, explicitly documented as a security risk and restricted to a limited authorised operator group, may be used for the hackathon MVP only; it does not satisfy the production requirement, and MFA is not deferred to a post-launch enhancement. | §9.3 rule 7; IAM §13.2; roadmap §9.6 |
 | **O-SaaS-16** | Closure requires **platform administrator approval plus a second approver**. Data is **retained by default**; anonymisation or deletion only with legal approval. | §9.3; tenant §11 |
 | **A1** | **Microservices remain the approved target architecture.** It is not redefined as a modular monolith. Transitional compromises are permitted only when explicitly documented as transitional. | §3.4 |
 | **A2** | Three customer deployment patterns: **Shared Multi-Tenant SaaS**, **Dedicated SaaS**, **Institution-Controlled / Approved Deployment**. "Estate" is an **operator capability**, not a fourth pattern. Dedicated is long-term (§O-SaaS-6). | §2 Axis B, §4.3 |
@@ -781,6 +785,14 @@ any new component is added.
 6. **No single-operator override is specified.** An emergency path that lets one operator bypass
    rule 5 would remove the control precisely in the case it exists for; if such a path is ever
    required it needs an owner decision and is tracked as `EQ-7` (§14.3.1).
+7. **Operator MFA is a production precondition, not a deferral** (O-SaaS-15). Password-only platform
+   authentication is permitted **only** inside a temporary, explicitly documented hackathon
+   exception, restricted to a limited and named authorised operator group. MFA must be enforced for
+   every platform operator account **before production platform access is granted**; the exception
+   does not travel into production, does not satisfy the requirement, and is retired at that gate.
+   No mechanism, provider or enrolment flow is selected here — see IAM §13.2 for the three contexts
+   (hackathon / production launch / post-launch) and roadmap §9.6 for the gate. Operator MFA is
+   `NOT IMPLEMENTED`.
 
 ### 9.4 Transparency: the tenant sees what the platform did
 
@@ -838,7 +850,7 @@ cannot afford on 4 GB VRAM / 16 GB RAM hardware and a single-developer rhythm.
 | Per-tenant theming, custom domains, white-labelling | Not required by any approved interface; large surface for small value |
 | Database-per-tenant or sharding | ADR-SAAS-002: one DB, tenant key. The dedicated pattern (P2) is a separate *deployment*, not a runtime feature |
 | Multi-region, read replicas, horizontal autoscaling | Firmly deferred; current scale does not need it |
-| SSO / SAML / MFA / OIDC federation | Legitimate enterprise requirement, explicitly `DEFERRED` to the IAM spec's roadmap section. This architecture must not *prevent* it (principal model is claim-based) but does not deliver it |
+| SSO / SAML / OIDC federation (enterprise identity federation, tenant and platform) | Legitimate enterprise requirement, explicitly `DEFERRED` to the IAM spec's roadmap section. This architecture must not *prevent* it (principal model is claim-based) but does not deliver it. **Operator MFA is not part of this non-goal:** O-SaaS-15 makes a second factor a precondition of production platform access (§9.3 rule 7; IAM §13.2; roadmap §9.6) — only the *enterprise federation* of identities is deferred |
 | Break-glass data impersonation | §9.3: deliberately absent |
 | Mobile clients, offline mode | Out of scope |
 | Implementing any clinical module | This set of documents specifies the *platform*; clinical modules are product work with their own phases |
@@ -1057,7 +1069,7 @@ ADR-SAAS-002/014–017.
 | O-SaaS-12 | May the operator-assisted reset response return the code to the requesting administrator (V1 assumes yes)? | **Yes**, under the stated constraints: authenticated operator, audited request, one-time code, no logging of the code | IAM §6.2 |
 | O-SaaS-13 | Support-grant acceptance: explicit `org_admin` consent, or policy pre-approval for `grace` tenants? | **Explicit `org_admin` consent for every grant.** No policy pre-approval, including for `grace` tenants — `grace` is normal operation, so it grants no extra operator power | §9.3; IAM §7.3 |
 | O-SaaS-14 | May `platform_ops` suspend a tenant without a second operator (four-eyes)? | **No.** Suspension requires a second approver, exactly like closure — the two irreversible, customer-visible actions share the control | §9.3; tenant spec §5.2 |
-| O-SaaS-15 | MFA for platform operators is `DEFERRED`; accept the resulting risk for MVP launch? | **Risk accepted for MVP**, recorded explicitly; MFA remains the first hardening item after launch | IAM §13.1 |
+| O-SaaS-15 | *(verbatim question, 2026-11-17 — superseded by the ruling in the next column)* MFA for platform operators is `DEFERRED`; accept the resulting risk for MVP launch? | **Required before production launch — not deferred.** MFA must be enforced for every platform operator account before production access; the hackathon MVP may use a **temporary exception**, explicitly documented as a security risk and restricted to a limited authorised operator group. The exception does not satisfy the production requirement, and MFA is not a post-launch enhancement | §9.3 rule 7; IAM §13.2; roadmap §9.6 |
 | O-SaaS-16 | Who may close a tenant, and does closure anonymise clinical data or retain it (BR §39 vs legal review)? | **Platform administrator approval plus a second approver.** Data is **retained by default**; anonymisation or deletion happens only on legal approval, as a separate, audited act. `closed` ≠ deleted | §9.3; tenant spec §11 |
 
 ### 14.3.1 Engineering questions (mechanism only — not owner decisions)
@@ -1096,6 +1108,7 @@ resolved by "check with the platform" — that is the design A4 forbids.
 | No unverified capability claims | every mechanism labelled `SPECIFIED`; decisions labelled `OWNER-APPROVED` and kept on a separate axis from evidence; §13 notes; §14.1 |
 | Owner decisions recorded, not invented | §1.5 (O-SaaS-1…16, A1–A4) and §12 (ADRs), with `SUPERSEDED` records kept verbatim rather than deleted |
 | One tenant key, still | §7.1 D-1, §7.2 note on D-6, §12.2 — `organization_memberships` is a join, not a second tenant column |
+| Production preconditions are not presented as optional | §9.3 rule 7 — O-SaaS-15 separates a documented hackathon exception from the mandatory production MFA requirement; IAM §13.2 and roadmap §9.6 carry the same three contexts |
 
 ---
 
@@ -1117,6 +1130,7 @@ resolved by "check with the platform" — that is the design A4 forbids.
 |---|---|---|---|
 | V1.0 | 2026-11-17 | Initial six-document set; mechanisms `PROPOSED`, four `OPEN` owner decisions | Engineering |
 | **Revision 2** | 2026-11-17 | Reconciled against the owner-approved SaaS decision packet: §1.5 decision record added; two-axis status introduced (decisions `OWNER-APPROVED`/`SPECIFIED`/`OPEN`/`DEFERRED`/`SUPERSEDED` vs evidence `NOT IMPLEMENTED`/`IMPLEMENTED`/`TESTED`/`VERIFIED`); A1 microservices target and transitional compromises (§3.4, ADR-017); A2 three deployment patterns (§2, §4.3, ADR-012); A3 healthcare profiles (§2.2, ADR-015); A4 platform authority (§3.5, ADR-016); O-SaaS-2 audit split; O-SaaS-3 lifecycle cap at `read_only`; O-SaaS-4 Core never sold or gated; O-SaaS-7 multi-membership (ADR-014 supersedes ADR-013); O-SaaS-8/13/14/16 four-eyes and consent; O-SaaS-9 no legacy auto-mapping; §14.3 registry closed with rulings; §14.3.1 engineering questions opened | Product Owner (decisions) + Engineering (mechanisms) |
+| **Revision 3** | 2026-11-17 | Post-commit correction of one record: **O-SaaS-15 restated** — platform operator MFA is a **production-launch requirement** with a temporary, explicitly documented, restricted hackathon exception, not a deferral and not a post-launch enhancement. §1.5 row rewritten; **new §9.3 rule 7**; §14.3 ruling rewritten with the original question marked verbatim; §14.4 self-check row added; §11 non-goal row narrowed to enterprise SSO/federation so it no longer implies MFA is optional. No mechanism, evidence grade, other ruling or `A1–A4` direction changed; operator MFA is `NOT IMPLEMENTED` | Product Owner decision O-SaaS-15, restated without reinterpretation |
 
 ### 15.2 What Revision 2 did **not** do
 
@@ -1128,4 +1142,16 @@ resolved by "check with the platform" — that is the design A4 forbids.
   note and cites §1.5 / §12 / §14.3 by id rather than restating them (one registry, one ADR set).
 - It did not touch `docs/product/`, `docs/architecture/AMSDP_System_Architecture_V1.0.md`,
   `.clinerules`, or any owner-controlled document (`.clinerules` §11).
+
+### 15.3 What Revision 3 did **not** do
+
+- It did not implement, schedule or design MFA: no provider, protocol or enrolment flow was chosen,
+  and no second-factor capability is claimed to exist.
+- It did not change O-SaaS-15's substance, any other `O-SaaS` ruling, any `A1–A4` direction, or any
+  `EQ` question (`EQ-4`, `EQ-5` and `EQ-7` remain open).
+- It did not advance an evidence grade: operator MFA is `NOT IMPLEMENTED` and the platform identity
+  domain is still absent from the tree, exactly as the audit recorded it.
+- It did not touch application code, schema, migrations, deployment files, the frontend or any test.
+- It did not amend the other five documents' substance; each carries its own Revision 3 note and
+  cites §1.5 / §9.3 / §14.3 rather than restating them.
 | Revision | V1.0 — 2026-11-17 |

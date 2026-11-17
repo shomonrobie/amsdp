@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document | Implementation roadmap for the Hybrid SaaS architecture set |
-| Status | **Revision 2** — `SPECIFIED` plan, **not** an acceptance record. Nothing in this document is implemented today. The sixteen `O-SaaS` decisions and directions A1–A4 were made by the Product Owner on 2026-11-17 (architecture specification §1.5, §14.3); this revision sequences the work they authorise. |
+| Status | **Revision 3** — `SPECIFIED` plan, **not** an acceptance record. Nothing in this document is implemented today. The sixteen `O-SaaS` decisions and directions A1–A4 were made by the Product Owner on 2026-11-17 (architecture specification §1.5, §14.3); this revision sequences the work they authorise. **Revision 3 (post-commit, 2026-11-17)** corrects two records only: operator MFA is a **production-launch gate** with a documented hackathon-only exception (§9.6), not a Phase 5+ deferral; and the P3 row in §8 now states A3's five approved profiles instead of the stale "internal/dedicated" wording. No phase, dependency or gate was added elsewhere |
 | Date | 2026-11-17 |
 | Location | `docs/architecture/saas/` |
 | Siblings | `AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` (shape authority), `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` (evidence base), `AMSDP_Identity_and_Access_Management_Specification_V1.0.md`, `AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md`, `AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` |
@@ -55,7 +55,7 @@ That is the whole roadmap; every gate below exists to protect it.
 | 2 | Enforcement on | module/lifecycle/RBAC denials become real; multi-membership lands | **yes** | the demo-flow re-run passes **with** enforcement on; flag deleted; membership switch verified (§5.6) |
 | 3 | Platform operations | a tenant can be sold, changed and closed | no (adds surface) | platform actions fully audited, four-eyes proved (§6.5) |
 | 4 | Notifications and recovery | expiry notices, self-service reset | low | notification worker exists and is deployed (§7.5) |
-| 5+ | Deferred | MFA, P2/P3 deployment, introspection | — | owner decision per item (§8) |
+| 5+ | Deferred | P2/P3 deployment, introspection | — | owner decision per item (§8). Operator MFA is **not** here: it is the production-launch gate (§9.6) |
 
 ### 2.2 Why this order and not another
 
@@ -316,7 +316,7 @@ not through SQL.
 | O-SaaS-13 | **Explicit `org_admin` consent for every support grant**; no policy pre-approval, including for `grace` tenants | 3.6 has one acceptance path and no shortcut |
 | O-SaaS-14 | Suspension requires a **second approver**, exactly like closure | 3.7 and the suspend action are two-person actions; both buttons are gated by the same control |
 | O-SaaS-16 | Closure needs **platform administrator approval plus a second approver**; clinical data is **retained by default**; anonymisation only on legal approval, as a separate audited act; `closed` ≠ deleted | 3.7 exports and retains; it never anonymises |
-| O-SaaS-15 | Operator MFA stays `DEFERRED`, risk accepted for MVP | the operator plane launches without a second factor — recorded, not hidden |
+| O-SaaS-15 | **Platform operator MFA is required before production launch.** The hackathon MVP may run under a temporary exception that is documented as a security risk and restricted to a limited authorised operator group; the exception does **not** satisfy the production requirement and MFA is **not** deferred | the operator plane exists without a second factor **only** for the demo, inside the documented exception (§9.6); no production platform access before the gate is met |
 | O-SaaS-12 | The operator-assisted reset response may return the code to the requesting administrator, under constraints | K-9 becomes a constraint to implement, not an open question |
 
 ### 6.2 Work items
@@ -446,15 +446,19 @@ then the worker. Re-enabling is a deliberate act with an audit row, not a restar
 
 | Item | Canonical id | Why deferred |
 |---|---|---|
-| MFA for platform operators | O-SaaS-15 | Risk **accepted for MVP**; needs a second factor channel, and the worker from Phase 4 is the prerequisite. First hardening item after launch |
 | `staff_password_history` reuse checks | O-SaaS-11 | Post-launch decision; defence in depth with no launch blocker, risk accepted |
 | P2 dedicated deployment and its licence/renewal mechanics | O-SaaS-6 | **Not in MVP.** Long-term direction; `EQ-6` owns it and it may not leak into P1 behaviour |
-| P3 institution-controlled deployment | O-SaaS-6; A2 | Same ruling; additionally requires the internal/dedicated profile work (A3) to mature |
+| P3 institution-controlled deployment | O-SaaS-6; A2 | Same ruling; additionally requires the per-tenant profile configuration that A3 defines (architecture §2.2: `private`, `government`, `ngo`, `community`, `outreach` — presets, never a deployment pattern) to mature |
 | Microservice split (A1) | ADR-SAAS-002 | Target, not MVP; transitional compromises stay until then. It is what turns `EQ-4`'s single transaction into an outbox |
 | Payment integration | ADR-SAAS-008 (`OWNER-APPROVED` out of scope) | V2.5 §21 |
 | Per-tenant custom domains | — | Not required by any approved document |
 
 Multi-membership is **no longer** on this list: O-SaaS-7 adopted it and it moved into Phase 2 (§5.2.1).
+
+**MFA for platform operators is no longer on this list either.** O-SaaS-15 makes it a precondition of
+production platform access, not a post-launch hardening item, so it is gated in §9.6 and carries no
+Phase 5+ entry. A requirement that **blocks** a launch does not belong in a list of items that block
+nothing.
 
 A deferred item is **not** a half-built item: nothing in Phases 0–4 depends on these, and none of them
 leaves a stub in the code. If a deferred item later becomes required, it enters as a new phase with its
@@ -496,7 +500,7 @@ ADR-SAAS-009 resolves) is not shipped — it is deferred to the phase where the 
 | no destructive git operations | `.clinerules` §9: never `reset --hard`, `clean -fd`, `stash`, `checkout .` |
 | rollback by revert | `git revert` of the specific offending commit |
 | a file already dirty before the task is never staged with unrelated work | check `git diff <file>` first |
-| no staging or committing without the owner's instruction | this document set has staged and committed nothing |
+| no staging or committing without the owner's instruction | the set was committed only when the owner instructed it (`597d9b1`, 2026-11-17, branch `hackathon-mvp`, pushed to `origin/hackathon-mvp`); later documentation amendments follow the same rule — see the reconciliation report §M |
 
 ### 9.5 Documentation gate
 
@@ -505,6 +509,39 @@ ADR-SAAS-009 resolves) is not shipped — it is deferred to the phase where the 
 | a new or moved document is registered in `docs/governance/AMSDP_Docs_Index_V1.0.md` in the same task | `.clinerules` §12 |
 | a move or rename has a manifest entry with before/after SHA-256 | `.clinerules` §11 |
 | the phase report goes to `docs/implementation/`, not the repository root and not `ai_factory/docs/` | `.clinerules` §11 |
+
+### 9.6 Production launch gate — platform operator MFA (O-SaaS-15)
+
+O-SaaS-15 is a **launch requirement with a time-boxed exception**. It is the only gate in this
+document not attached to a phase, because it protects a transition no phase performs: from
+*demonstration* to *production platform access*. It is **not** a Phase 5+ item and it is not deferred.
+
+| Context | What is allowed | What is required |
+|---|---|---|
+| **Hackathon MVP** | platform authentication with a password only, **inside a documented exception** | the exception is recorded as a security risk; access under it is restricted to a **limited, authorised operator group** (named accounts, no shared credentials); nothing else in §9.3 is relaxed |
+| **Production launch** | nothing — the exception does not travel | **MFA enforced for every platform operator account before production access is granted** |
+| **Post-launch** | — | MFA is **already in place**. It is not a backlog item and not an optional enhancement |
+
+**Prerequisite, stated without inventing a mechanism.** A second factor needs a channel to deliver
+the factor itself. No provider, protocol or enrolment flow is selected anywhere in this set, and none
+is implemented, tested or verified. The Phase 4 notification worker (§7) is the only delivery path
+this roadmap identifies, which makes it a **candidate** prerequisite, not a chosen design; selecting a
+mechanism is engineering work with its own change record, not an owner decision, and it does not
+reopen O-SaaS-15.
+
+**Gate — production platform launch is blocked until every item is true:**
+
+- [ ] A second factor is required at platform login for **every** platform operator account, enforced
+      server-side — not by hiding or disabling a form field
+- [ ] A platform login attempt without the second factor is **refused and audited** as a denial
+- [ ] The hackathon exception is **retired**: no account, environment or leftover flag keeps it usable
+- [ ] The authorised operator group is documented, and every change to its membership is audited
+- [ ] The evidence is a live attempt recorded against the running build (`VERIFIED`); the gate cannot
+      be satisfied by text in this document
+
+**Evidence status: `NOT IMPLEMENTED`.** No second-factor capability exists in the tree today — the
+platform identity domain itself is absent (audit §4.5). This subsection states a requirement and a
+gate; it claims no implementation, and no phase exit gate above may be read as satisfying it.
 
 ---
 
@@ -655,6 +692,9 @@ without a reason.
   start Phase 1 on a broken baseline.
 - Can a tenant be suspended or closed by one operator? No — O-SaaS-14/16 are sequenced as 3.11 before
   3.12, and §6.5 refuses the phase if a single identity can complete either action.
+- Can a production platform launch happen without a second factor? No — §9.6 is a **gate**, not a
+  phase: MFA blocks production platform access, and the hackathon exception is documented, restricted
+  to a named operator group, and retired at that gate. Nothing in Phases 0–5+ satisfies or replaces it.
 - Is anything in this document already implemented? No.
 
 ---
@@ -671,7 +711,7 @@ without a reason.
 | Code, schema, migration, compose, frontend changes | **none** |
 | Runtime verification | **none claimed** |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation); **Revision 3** — 2026-11-17 (post-commit O-SaaS-15 correction) |
 
 ### 15.1 Revision history
 
@@ -679,6 +719,7 @@ without a reason.
 |---|---|---|---|
 | V1.0 | 2026-11-17 | Initial roadmap: six phases, gates, abort criteria, risk register, traceability; five decision gates left open | specification-only draft |
 | **Revision 2** | 2026-11-17 | Owner decisions applied: §4.1/§5.1/§6.1 converted from "decisions required" to "decisions applied"; **multi-membership moved from Phase 5+ into Phase 2** (2.12–2.14, `EQ-1…3`, §5.2.1); platform audit table 2.15 with `EQ-4`; two-person suspension/closure primitive 3.11 → 3.12 (O-SaaS-14/16); closure retains data (O-SaaS-16); support grants need consent for `grace` tenants too (O-SaaS-13); deferred list re-labelled (MFA, password history, P2/P3 + `EQ-6`, A1, payment); `PROPOSED` → `SPECIFIED`; revision history added | Product Owner, 2026-11-17 |
+| **Revision 3** | 2026-11-17 | Post-commit corrections to two records. **O-SaaS-15 restated** — operator MFA is a **production-launch requirement** with a temporary, documented, restricted hackathon exception, not a Phase 5+ deferral or a post-launch hardening item. Phase table row 5+ no longer lists MFA; §6.1 row rewritten; §8 deferred list entry removed and explained; **new §9.6 production launch gate** (three contexts, candidate prerequisite, five gate checks, evidence `NOT IMPLEMENTED`); §14.1 gained the gate self-check; §8's P3 row replaced the stale "internal/dedicated" A3 wording with the five approved profiles; §9.4 change-control row records the owner-instructed commit `597d9b1`. No phase, dependency or other gate changed; nothing labelled `IMPLEMENTED`, `TESTED` or `VERIFIED` | Product Owner decision O-SaaS-15 and direction A3, restated without reinterpretation |
 
 ### 15.2 What Revision 2 did not do
 
@@ -686,3 +727,12 @@ without a reason.
 - It did not renumber phases — Phase 2 grew, the ordering argument survives, and the demo-breaking
   phase remains Phase 2.
 - It did not answer an `EQ` question; it placed each one where its answer is needed.
+
+### 15.3 What Revision 3 did not do
+
+- It did not add, remove or renumber a phase; §9.6 is a cross-cutting gate, exactly like §9.1–§9.5.
+- It did not implement MFA, choose a provider or protocol, or schedule the work. Every gate box in
+  §9.6 is unsatisfied, and the capability is `NOT IMPLEMENTED`.
+- It did not change O-SaaS-15's substance, any other `O-SaaS` ruling, any `A1–A4` direction, or any
+  `EQ` question (`EQ-4`, `EQ-5` and `EQ-7` are still open).
+- It did not touch application code, schema, migrations, deployment files, tests or any phase report.

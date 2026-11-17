@@ -1,11 +1,15 @@
 # AMSDP — Identity and Access Management Specification V1.0
 
 > **Document ID:** `AMSDP_Identity_and_Access_Management_Specification`
-> **Version:** V1.0 · **Revision 2 (owner decision reconciliation) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `409a929`
+> **Version:** V1.0 · **Revision 3 (post-commit O-SaaS-15 correction) — 2026-11-17** · **Branch:** `hackathon-mvp` @ `597d9b1`
 > **Status:** **SPECIFICATION — DECISION-RECONCILED, NOT IMPLEMENTED.** The sixteen `O-SaaS` items and
 > the four directions A1–A4 were decided by the Product Owner on 2026-11-17 (architecture
 > specification §1.5). This document applies those rulings. Model decisions are `OWNER-APPROVED`;
 > every mechanism here remains `SPECIFIED` and unbuilt. Nothing here authorises implementation.
+> **Revision 3 note (2026-11-17, post-commit):** one record corrected and nothing else — O-SaaS-15 is
+> restated as a **production-launch requirement** carrying a documented, temporary hackathon-only
+> exception, not as an indefinite deferral (§13, §13.1, §13.2). No mechanism, no evidence grade and no
+> other ruling changed; multi-factor authentication is **`NOT IMPLEMENTED`** and stays so.
 > **Evidence base:** `AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` §4 (identity as built) — every
 > "today" statement below is sourced there, not re-derived.
 > **Companion documents:** architecture specification (planes, pipeline, ADRs), tenant &
@@ -678,14 +682,20 @@ the ruling, not a question.
 | O-SaaS-12 | The operator-assisted reset **may** return the code under the stated constraints | §6.2 as written |
 | O-SaaS-13 | Explicit `org_admin` consent for every support grant; no `grace` pre-approval | §7.3 |
 | O-SaaS-14 | Suspension requires second-person approval | §7.3; tenant spec §5.2 |
-| O-SaaS-15 | MFA deferred for MVP with risk recorded and accepted | §13.1 item 1 |
+| O-SaaS-15 | **Platform operator MFA is required before production launch.** A temporary, explicitly documented exception may be used for the hackathon MVP only, restricted to a limited authorised operator group; it does not satisfy the production requirement, and MFA is not deferred | §13.2 (three contexts); §13.1 item 1; roadmap §9.6 |
 | O-SaaS-16 | Closure needs platform admin + second approver; data retained by default | §7.3; tenant spec §11 |
 
 ### 13.1 Residual risks accepted by this specification
 
-1. **No MFA.** A stolen platform password grants 30 minutes of platform authority. **Accepted for the
-   MVP by O-SaaS-15** because the platform operator population is tiny and known; MFA remains the
-   first post-launch hardening item, and the acceptance is recorded rather than assumed.
+1. **No MFA in the hackathon MVP — a documented exception, not a deferral.** A stolen platform
+   password currently grants 30 minutes of platform authority. O-SaaS-15 states the production
+   requirement (**MFA before any platform operator receives production access**) and permits a
+   *temporary* exception for the hackathon MVP only. The exception is accepted **because it is
+   time-boxed, documented and restricted**, not because a second factor became optional: the
+   operator population is tiny and known, and the authorised set is named and limited (§13.2).
+   The exception does **not** satisfy the production requirement, does not carry into production,
+   and is not permanently accepted — MFA is `NOT IMPLEMENTED`, `SPECIFIED` in requirement only,
+   and is a **launch gate** (roadmap §9.6), not a post-launch enhancement.
 2. **No e-mail channel.** Reset is operator-assisted (O-SaaS-12). The trade-off is documented
    rather than hidden behind a flow that cannot run.
 3. **One access token per plane, no central introspection.** Revocation is bounded by the access
@@ -695,6 +705,32 @@ the ruling, not a question.
    owner accepted the trade for clinician usability (O-SaaS-7). Mitigation is structural: the active
    organization comes from the token, is re-verified against a live membership on every request
    (§8.1), and a switch is its own authorised, audited act — never a client-supplied value.
+
+### 13.2 Platform operator MFA — the O-SaaS-15 requirement, stated precisely
+
+O-SaaS-15 (`OWNER-APPROVED`) is a **launch requirement with a time-boxed exception**, not a
+deferral. The three contexts must not be conflated:
+
+| Context | Requirement | Status |
+|---|---|---|
+| **Hackathon MVP** | A temporary exception may be used. It must be **explicitly documented as a security risk**, and platform access under it must be **restricted to a limited, authorised operator group** (named accounts only — no ad-hoc additions, no shared credentials) | exception in force; MFA `NOT IMPLEMENTED` |
+| **Production launch** | MFA is **mandatory before any platform operator receives production access**. The requirement is not satisfied by the hackathon exception | requirement `OWNER-APPROVED`; implementation `NOT IMPLEMENTED` |
+| **Post-launch** | MFA is **already in place**. It is not delivered after launch, and it is not an optional enhancement | not applicable until the launch gate is met |
+
+The exception's boundaries, all of which are obligations rather than suggestions:
+
+1. It applies to the **hackathon MVP demonstration only** and expires with it. It is not a
+   permanent acceptance of password-only platform access.
+2. It is **documented as a security risk** — this section, §13.1 item 1 and roadmap §9.6 are that
+   record; a risk that stops being written down is not an accepted exception.
+3. It is **restricted**: only the named, authorised operator accounts that exist for the
+   demonstration may authenticate under it. It authorises no additional operator account and no
+   production tenant data.
+4. **It does not satisfy, waive or postpone the production requirement.** A production platform
+   launch that has not implemented MFA is a **BLOCKED** launch, not a launch with a known risk.
+5. **No delivery mechanism is specified here.** No provider, protocol or enrolment flow is chosen,
+   and none is implemented, tested or verified. The mechanism remains `SPECIFIED` engineering
+   work; the roadmap owns its gate (§9.6), and this document claims no implementation status.
 
 ---
 
@@ -711,6 +747,7 @@ the ruling, not a question.
 | `.clinerules` §11 output location | written to `docs/architecture/saas/` — one new leaf under the existing `architecture/` subject folder (rule applied; see §15) |
 | `.clinerules` §12 reading policy | audit read before writing; index consulted; citations are paths opened in this session |
 | Revision 2 reconciliation | O-SaaS-1/2/7/8/10/11/12/13/14/15/16 and A1–A4 applied; ADR-SAAS-013 `SUPERSEDED` by 014; `EQ-1…3` cited for the membership shape; no evidence label advanced by any decision |
+| Revision 3 correction | O-SaaS-15 restated: production MFA requirement, documented and restricted hackathon exception, **not** a deferral and **not** an optional post-launch item (§13, §13.1, §13.2). No evidence label changed; MFA remains `NOT IMPLEMENTED` |
 
 ### 14.1 Self-check
 
@@ -719,9 +756,11 @@ the ruling, not a question.
 - Does anything here grant a new privilege to an existing role? No — `super_admin` loses nothing
   until R-3, which O-SaaS-1 makes conditional on the replacement being `TESTED` and `VERIFIED`.
 - Is any claim marked VERIFIED without a second artefact? No.
-- Does any mechanism depend on an absent capability (mailer, MFA, introspection)? Yes, three times,
-  and each is labelled: MFA deferred by O-SaaS-15, reset operator-assisted by O-SaaS-12,
-  introspection `DEFERRED` in §13.1.
+- Does any mechanism depend on an absent capability (mailer, MFA, introspection)? Yes, three, and each
+  is labelled rather than hidden: reset is operator-assisted by O-SaaS-12, introspection is `DEFERRED`
+  in §13.1, and **MFA is not deferred** — it is a production-launch requirement with a documented,
+  restricted hackathon-only exception (§13.2), so the absent capability is a launch gate, never a
+  silent gap.
 
 ---
 
@@ -734,7 +773,7 @@ the ruling, not a question.
 | Code/schema/deployment changes | **none** |
 | Runtime verification | **none claimed** |
 | Index registration | `docs/governance/AMSDP_Docs_Index_V1.0.md` |
-| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation) |
+| Revision | V1.0 — 2026-11-17; **Revision 2** — 2026-11-17 (owner decision reconciliation); **Revision 3** — 2026-11-17 (post-commit O-SaaS-15 correction) |
 
 ### 15.1 Revision history
 
@@ -742,6 +781,7 @@ the ruling, not a question.
 |---|---|---|---|
 | V1.0 | 2026-11-17 | Initial identity/access specification; ADR-SAAS-013 left `OPEN` | specification-only draft |
 | **Revision 2** | 2026-11-17 | Owner decisions `O-SaaS-1…16` and A1–A4 applied. §8.1 rewritten to multi-membership (ADR-SAAS-014, supersedes 013) with `EQ-1…3` for the physical shape; §7.4 R-3 made conditional on tested replacement; §2.1 annotated as as-built baseline; §1.2/§1.3 moved to the two-axis vocabulary; §13 converted from open items to applied rulings; §13.1 gained the multi-membership risk and the O-SaaS-15 acceptance; `PROPOSED`/bare `APPROVED` labels normalised | Product Owner, 2026-11-17 |
+| **Revision 3** | 2026-11-17 | Post-commit correction of one record: **O-SaaS-15 restated as a production-launch requirement** — MFA is mandatory before platform operators receive production access, the hackathon MVP may use a temporary exception that must be documented as a security risk and restricted to a limited authorised operator group, and MFA is **not** deferred to a post-launch enhancement. §13 row rewritten; §13.1 item 1 rewritten; **new §13.2** with the three-context table and the exception's boundaries; §14.1 self-check corrected. No mechanism, evidence grade or other ruling changed; MFA remains `NOT IMPLEMENTED` | Product Owner decision O-SaaS-15, restated without reinterpretation |
 
 ### 15.2 What Revision 2 did not do
 
@@ -751,3 +791,13 @@ the ruling, not a question.
   `EQ-1`, `EQ-2`, `EQ-3` (architecture spec §14.3.1) and remain engineering questions.
 - It did not touch `common/auth.py`, `common/permissions.py`, `identity/main.py`, any migration,
   `docker-compose.yml`, the frontend or any test.
+
+### 15.3 What Revision 3 did not do
+
+- It did not implement, enable or schedule MFA, and it did not choose a mechanism, provider or
+  enrolment flow for it.
+- It did not change O-SaaS-15's substance, any other `O-SaaS` ruling, any `A1–A4` direction, or any
+  `EQ` question (`EQ-4`, `EQ-5` and `EQ-7` remain open).
+- It did not promote any evidence grade: MFA is still `NOT IMPLEMENTED`, and the platform identity
+  domain is still absent from the tree exactly as the audit recorded it.
+- It did not touch application code, schema, migrations, deployment files or tests.

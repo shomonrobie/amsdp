@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **82** markdown documents on disk, every one now accounted for below — **78** in the `docs/` trees (11 at the `docs/` root + 67 across the subject folders, of which 6 are the `architecture/saas/` set registered in Revision 27 and 1 is the SaaS reconciliation report registered in Revision 29) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17, Revision 29: 78 + 4 = **82** on disk and **82** registered rows. Revision 27 registered the six-document SaaS set → 81; Revision 28 closed open item **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → **82**.)*
+> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **82** markdown documents on disk, every one now accounted for below — **78** in the `docs/` trees (11 at the `docs/` root + 67 across the subject folders, of which 6 are the `architecture/saas/` set registered in Revision 27 and 1 is the SaaS reconciliation report registered in Revision 29) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17, Revision 29: 78 + 4 = **82** on disk and **82** registered rows. Revision 27 registered the six-document SaaS set → 81; Revision 28 closed open item **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → **82**. Revision 30 corrected three records in place — O-SaaS-15/MFA, the A3 profiles and the report's commit status — with **no** row-count change: still **82**.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -588,6 +588,37 @@
 > committed or pushed. Index-level open items: none raised — the set's open questions are `EQ-1…8`
 > (engineering) plus `EQ-7`, which is explicitly an **owner** question, both already registered in
 > architecture specification §14.3.1 rather than here.
+> *(Post-commit note, 2026-11-17 — the owner subsequently instructed the commit: the reconciliation
+> landed as `597d9b1`, `docs(saas): reconcile the six-document SaaS set with the owner decision
+> packet`, 8 files / +1,220 −346, pushed to `origin/hackathon-mvp` and verified after the push. The
+> clause above recording "nothing staged, committed or pushed" is the state **at the end of that
+> task**, kept as written; Revision 30 records what followed. See
+> `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` §M.1.)*
+> **Revision 30 — 2026-11-17**, task `AMSDP-SAAS-POST-COMMIT-CORRECTION-2026-11-17` — **no new
+> document, no move, no rename**: a documentation-only correction of three records in the six-document
+> SaaS set and its reconciliation report. (1) **O-SaaS-15 / MFA.** The set had described operator MFA
+> as `DEFERRED` with the risk "accepted for MVP" and MFA as the "first post-launch hardening item",
+> which reads as optional or permanently accepted. It now separates three contexts — **hackathon MVP**
+> (temporary exception, explicitly documented as a security risk, restricted to a limited authorised
+> operator group), **production launch** (MFA **mandatory before any platform operator receives
+> production access**) and **post-launch** (MFA already in place) — in architecture §1.5, the new
+> §9.3 rule 7, §11's non-goal row, §14.3 and §14.4; IAM §13, §13.1, the new **§13.2** and §14.1; and
+> the roadmap's phase table, §6.1, §8, §9.4, the new **§9.6 production-launch gate** and §14.1. No
+> provider, protocol, enrolment flow, implementation status or test result was invented: MFA remains
+> `NOT IMPLEMENTED` and every §9.6 gate box is unsatisfied. (2) **A3 profiles.** The report and one
+> roadmap line still said "internal/dedicated"; both now state the approved set — `private`,
+> `government`, `ngo`, `community`, `outreach` — as configurable presets independent of deployment
+> pattern. Architecture §2.2 was already correct and was not rewritten. (3) **Commit status.** The
+> report's header, §B, §E, §H, §K and §L no longer describe the reconciliation as uncommitted,
+> unpushed or "sitting in the working tree"; §M records the commit, the push and this amendment as a
+> subsequent documentation-only act, without rewriting the original task narrative. All three changed
+> documents carry a **Revision 3** history entry (architecture §15.1/§15.3, IAM §15.1/§15.3, roadmap
+> §15.1/§15.3); this index updated only their size cells, their *Read when* text, the report row and
+> this revision block. **No decision, `A1–A4` direction or `EQ` question changed** (`EQ-4`, `EQ-5`,
+> `EQ-7` remain open), **no document moved, renamed, overwritten or deleted** (no manifest entry,
+> §11), and **no code, schema, migration, endpoint, component, test or running stack was touched**, so
+> no suite was run and nothing is claimed `TESTED` or `VERIFIED`. Row count unchanged at **82**. No
+> new index-level open item.
 
 ---
 
@@ -680,12 +711,12 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 
 | File | Size (Rev 2) | Read when | Owner |
 |---|---:|---|---|
-| `saas/AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | 98,511 | Starting **any** SaaS, tenancy, entitlement or platform-plane task — the request pipeline (§5), the fixed module keys (§6), the ADR register (§12), traceability (§13), the decision registry and rulings (§14.3), the engineering questions (§14.3.1), revision history (§15) | — |
+| `saas/AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | 102,190 | Starting **any** SaaS, tenancy, entitlement or platform-plane task — the request pipeline (§5), the fixed module keys (§6), the ADR register (§12), traceability (§13), the decision registry and rulings (§14.3), the engineering questions (§14.3.1), **the O-SaaS-15 MFA production precondition (§9.3 rule 7)**, revision history (§15) | — |
 | `saas/AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` | 46,232 | Establishing what the tree actually does **today** before claiming a gap — findings R-01…R-18, corrections C-1…C-9, the §4.6 table of claims that were wrong, and the 2026-11-17 correction notes (evidence unchanged; the questions it raised are now decided) | — |
-| `saas/AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | 46,345 | Authentication, login, sessions, principals, RBAC, plane separation, and **multi-membership** (§8, ADR-SAAS-014) — §9 is the single authorisation chain (9 factors) | — |
+| `saas/AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | 51,470 | Authentication, login, sessions, principals, RBAC, plane separation, **multi-membership** (§8, ADR-SAAS-014) and **the three MFA contexts — hackathon exception, production launch, post-launch (§13.2)** — §9 is the single authorisation chain (9 factors) | — |
 | `saas/AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md` | 39,178 | Organization/branch lifecycle, suspension and closure (both **two-person**, O-SaaS-14/16), the platform metadata surface, tenant-switch rules, operator disclosure | — |
 | `saas/AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` | 37,293 | Plans, entitlements, the module gate, numeric limits, the `entitlements_version` cache contract, entitlement failure modes, the settled platform-audit split (§9.3) | — |
-| `saas/AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | 43,005 | Sequencing delivery — Phases 0–5+, flag-on/flag-off gates, multi-membership in Phase 2 (§5.2.1), the two-person primitive (§6.2 3.11), risk register K-1…K-11, abort criteria, requirement traceability R-01…R-18 / C-1…C-9 | — |
+| `saas/AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | 48,538 | Sequencing delivery — Phases 0–5+, flag-on/flag-off gates, multi-membership in Phase 2 (§5.2.1), the two-person primitive (§6.2 3.11), **the production-launch MFA gate (§9.6)**, risk register K-1…K-11, abort criteria, requirement traceability R-01…R-18 / C-1…C-9 | — |
 
 > These six are **specification and planning documents only**. They change no code, schema,
 > migration, endpoint or test; every claim in them is graded per `.clinerules` §7 (IMPLEMENTED /
@@ -693,10 +724,13 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 > `VERIFIED` unless a second artefact confirms them.
 >
 > **Revision 2 of all six (2026-11-17)** reconciled them against the owner's decision packet. Sizes
-> above are the post-revision `wc -c` values (they were 57,124 / 41,705 / 41,112 / 34,421 / 33,204 /
-> 35,588 at Revision 27). No new file was created inside `architecture/saas/`, so this sub-table keeps
-> six rows; the reconciliation report itself is registered under `governance/` (Revision 29). Nothing
-> was moved, renamed, overwritten or deleted, so no migration-manifest entry is required (§11).
+> above are the current `wc -c` values after **Revision 3** of three of them (architecture, IAM,
+> roadmap) and are: 102,190 / 46,232 / 51,470 / 39,178 / 37,293 / 48,538. They were
+> 57,124 / 41,705 / 41,112 / 34,421 / 33,204 / 35,588 at Revision 27 and
+> 98,511 / 46,232 / 46,345 / 39,178 / 37,293 / 43,005 at Revision 29. No new file was created inside
+> `architecture/saas/`, so this sub-table keeps six rows; the reconciliation report itself is
+> registered under `governance/` (Revision 29, re-sized in Revision 30). Nothing was moved, renamed,
+> overwritten or deleted, so no migration-manifest entry is required (§11).
 
 ---
 
@@ -808,7 +842,7 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_Docs_Inventory_and_Migration_Manifest_V1.0.md` | 24,959 | Establishing where a document came from, or the authority for its location | — |
 | `AMSDP_Docs_Output_Policy_Verification_Report_V1.0.md` | 22,021 | Confirming that the output-location policy was actually installed and verified | — |
 | `AMSDP_Owner_Decisions_O1_O6_Implementation_Report_V1.0.md` | 35,361 | Confirming how owner decisions O-1…O-6 were implemented; the 36-reference register; relocation evidence | — |
-| `AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` | 25,554 | Confirming how the six `architecture/saas/` documents were reconciled against owner decisions `O-SaaS-1…16` and A1–A4 — what changed per document, the six conflicts and their dispositions, the residue scan, and the evidence status (nothing `TESTED`/`VERIFIED`). **Registered 2026-11-17** (Revision 29) | — |
+| `AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` | 33,007 | Confirming how the six `architecture/saas/` documents were reconciled against owner decisions `O-SaaS-1…16` and A1–A4 — what changed per document, the six conflicts and their dispositions, the residue scan, the evidence status (nothing `TESTED`/`VERIFIED`), **and §M: the post-commit record (`597d9b1`, pushed) plus the 2026-11-17 O-SaaS-15 / A3 / commit-status amendments**. **Registered 2026-11-17** (Revision 29; amended in Revision 30) | — |
 
 ---
 
