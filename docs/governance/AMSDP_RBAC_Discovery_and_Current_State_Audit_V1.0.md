@@ -798,3 +798,37 @@ Additional findings classified:
 - R-07 frontend `super_admin` wildcard bypass: presentation only, not an authorization boundary; no code change.
 
 Verification: `backend/queuing/tests/test_queue.py` 41 passed; `backend/scheduling/tests/test_scheduling.py` 36 passed; `tests/test_security.py`, `patient/tests/`, `identity/tests/` 59 passed; `appointment/tests/` 108 passed. Total: 244 passed, 0 failed.
+
+## 13. Phase 1C Implementation Outcome (dated)
+
+**Recorded implementation date: 2026-11-17.** This section records the outcome of the remaining Operational RBAC authorization closure work (AMSDP Phase 1C).
+
+### C1 — Queue history branch authorization (VERIFIED DEFECT — FIXED)
+- **Finding:** `GET /api/v1/queue/history` accepted caller-supplied `branch_id` without validating authorization via `branch_accessible()`. Branch-scoped users could request history for another branch in the same organization. When `branch_id` was omitted, branch-scoped users could see all branches.
+- **Fix:** `backend/queuing/main.py` (`queue_history` endpoint): Validate caller-supplied `branch_id` via `branch_accessible()`. When `branch_id` omitted, restrict branch-scoped users to their token branch via `auth.branch_id`. `org_admin` retains organization-wide access.
+- **Tests:** `TestQueueHistoryBranchAuth` — 5 tests covering own-branch history, foreign-branch denial, branch_id omission scoping, org-admin org-wide access, cross-tenant branch rejection.
+
+### C2 — Doctor and assistant ownership across all queue actions (VERIFIED DEFECT — FIXED)
+- **Finding:** Phase 1B only checked doctor ownership for `start_consultation`/`complete_consultation` in `queue_action()`. Other actions (`call`, `cancel`, `mark_no_show`, `reinsert`) and other endpoints (`check_in_appointment`, `enqueue_patient`, `reorder_queue`, `queue/recover`) did not enforce doctor ownership for doctor/assistant roles.
+- **Fix:** 
+  - `backend/common/auth.py`: Added `AuthContext.can_access_doctor(doctor_id)` method — returns `False` for doctor/assistant roles when `auth.doctor_id` is unset (fail closed); returns `True` for all other roles.
+  - `backend/queuing/main.py`: Applied `can_access_doctor()` to `get_queue`, `queue_history`, `check_in_appointment`, `enqueue_patient`, `reorder_queue`, and `queue_action` (all actions, not just consult).
+  - `backend/queuing/recovery.py`: Applied `can_access_doctor()` to `_scoped_entry()` for recover/reposition actions.
+- **Tests:** `TestQueueRecoveryDoctorAuth` — 1 test covering doctor cannot recover another doctor's entry. Combined with existing `TestQueueDoctorAssistantOwnership` — 8 tests covering doctor cross-queue denial, own queue access, cross-doctor consultation denial, own consultation, assistant unassigned denial, assistant assigned access, assistant consultation denial (403).
+
+### C3 — Missing or invalid doctor assignment fails closed (VERIFIED DEFECT — FIXED)
+- **Finding:** Phase 1B skipped doctor/assistant ownership checks when `auth.doctor_id` was unset, potentially granting unrestricted access to doctor-specific resources for users with doctor/assistant roles but no assignment.
+- **Fix:** `backend/common/auth.py` `can_access_doctor()` returns `False` when `auth.doctor_id` is unset for doctor/assistant roles. All callers in `queuing/main.py` and `recovery.py` now fail closed.
+- **Tests:** `TestQueueMissingDoctorAssignment` — 3 tests covering doctor with no assignment denied, assistant with no assignment denied, valid assignment allowed.
+
+### C4 — Assistant assignment architecture limitation (BLOCKED — PRODUCT DECISION REQUIRED)
+- **Finding:** `StaffUser.doctor_id` is a single nullable foreign key. BR §7.5 states assistants may support "assigned doctor(s)" and "Platform policy may allow one or multiple doctors per assistant."
+- **Disposition:** Multi-doctor assistant assignment is UNSUPPORTED in the current data model. Single-doctor assignment via `StaffUser.doctor_id` is enforced. No new assignment model or migration created. Multi-doctor support requires explicit Product Owner/architecture decision.
+- **Status:** BLOCKED — pending explicit Product Owner decision on multi-doctor assistant assignment policy.
+
+### Additional findings classified:
+- R-13 patient update `patient.create` vs `patient.update`: NOT A CODE CHANGE — correct role policy unclear; left blocked for product-owner decision.
+- R-15 self-escalation / R-16 last-admin protection: NOT IMPLEMENTED — no existing approved rule; reported unresolved.
+- R-07 frontend `super_admin` wildcard bypass: presentation only, not an authorization boundary; no code change.
+
+Verification: `backend/queuing/tests/test_queue.py` 50 passed; `backend/scheduling/tests/test_scheduling.py` 36 passed; `tests/test_security.py`, `patient/tests/`, `identity/tests/` 59 passed; `appointment/tests/` 108 passed. Total: 253 passed, 0 failed.

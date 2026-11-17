@@ -120,10 +120,9 @@ def get_queue(doctor_id: str = Query(...), date: str = Query(...),
         # RBAC-R3: a doctor or assistant may only view their own assigned
         # doctor's queue.  A caller-supplied doctor_id must match their
         # staff_user.doctor_id assignment; it cannot be used to expand access.
-        # When auth.doctor_id is unset (not assigned to a doctor record), the
-        # check is skipped for backward compatibility.
-        if auth.role in ("doctor", "assistant") and auth.doctor_id:
-            if doctor_id != auth.doctor_id:
+        # When auth.doctor_id is unset (no doctor assignment), fail closed.
+        if auth.role in ("doctor", "assistant"):
+            if not auth.can_access_doctor(doctor_id):
                 raise HTTPException(404, "not found")
         q = session.query(QueueEntry).filter(
             QueueEntry.organization_id == auth.organization_id,
@@ -187,6 +186,11 @@ def check_in_appointment(data: CheckInRequest,
             raise HTTPException(404, "not found")
         if not branch_accessible(auth, target_branch):
             raise HTTPException(404, "not found")
+        # C2: a doctor or assistant may check in only their own assigned
+        # doctor's appointments.  Fail closed when no assignment exists.
+        if auth.role in ("doctor", "assistant"):
+            if not auth.can_access_doctor(appt.doctor_id):
+                raise HTTPException(404, "appointment not found")
         day = appt.appointment_date
         seq = _next_sequence(session, appt.doctor_id, day)
         token = _token_for(appt.doctor_id, seq)
@@ -259,6 +263,11 @@ def enqueue_patient(data: QueueEnqueueRequest,
             Doctor.id == data.doctor_id,
             Doctor.organization_id == auth.organization_id).first()
         if not doctor: raise HTTPException(422, "doctor not found")
+        # C2: a doctor or assistant may enqueue only for their own assigned
+        # doctor.  Fail closed when no assignment exists.
+        if auth.role in ("doctor", "assistant"):
+            if not auth.can_access_doctor(data.doctor_id):
+                raise HTTPException(404, "doctor not found")
         # RBAC-R1: enforce the caller's branch scope.  A caller-supplied
         # branch_id is validated before use; an unauthorized branch selection
         # is rejected (non-disclosing 404).  The fallback is the caller's own
@@ -346,11 +355,12 @@ def queue_action(entry_id: str, data: QueueAction,
     session = SessionFactory()
     try:
         entry = _scoped_entry_or_404(session, auth, entry_id)
-        # RBAC-R3: a doctor may perform consultation actions only on their own
-        # assigned doctor's queue entries.  When auth.doctor_id is unset, the
-        # check is skipped for backward compatibility.
-        if data.action in ("start_consultation", "complete_consultation") and auth.doctor_id:
-            if entry.doctor_id != auth.doctor_id:
+        # RBAC-R3: a doctor or assistant may act only on their own assigned
+        # doctor's queue entries.  When auth.doctor_id is unset (no doctor
+        # assignment), fail closed.  Applies to all actions, not just
+        # consultation.
+        if auth.role in ("doctor", "assistant"):
+            if not auth.can_access_doctor(entry.doctor_id):
                 raise HTTPException(404, "queue entry not found")
         allowed = _TRANSITIONS.get(entry.status, ())
         if data.action not in allowed:
@@ -433,6 +443,11 @@ def reorder_queue(data: QueueReorder,
                 raise HTTPException(422, f"entry {eid} is not in a reorderable state")
             if not branch_accessible(auth, entry.branch_id):
                 raise HTTPException(404, "queue entry not found")
+            # C2: a doctor or assistant may reorder only their own assigned
+            # doctor's entries.
+            if auth.role in ("doctor", "assistant"):
+                if not auth.can_access_doctor(entry.doctor_id):
+                    raise HTTPException(404, "queue entry not found")
             key = (entry.branch_id, entry.doctor_id, entry.date)
             if queue_context is None:
                 queue_context = key
@@ -487,16 +502,26 @@ def queue_history(doctor_id: str = Query(...), date: str = Query(...),
         try: day = datetime.strptime(date, "%Y-%m-%d").date()
         except: raise HTTPException(422, "invalid date")
         # RBAC-R3: doctor/assistant may only view their own assigned doctor's
-        # queue history.  When auth.doctor_id is unset, the check is skipped
-        # for backward compatibility.
-        if auth.role in ("doctor", "assistant") and auth.doctor_id:
-            if doctor_id != auth.doctor_id:
+        # queue history.  When auth.doctor_id is unset (no doctor assignment),
+        # fail closed.
+        if auth.role in ("doctor", "assistant"):
+            if not auth.can_access_doctor(doctor_id):
                 raise HTTPException(404, "not found")
         q = session.query(QueueEntry).filter(
             QueueEntry.organization_id == auth.organization_id,
             QueueEntry.doctor_id == doctor_id, QueueEntry.date == day)
         if status: q = q.filter(QueueEntry.status == status)
-        if branch_id: q = q.filter(QueueEntry.branch_id == branch_id)
+        if branch_id:
+            # C1: validate the caller-supplied branch against authenticated
+            # scope.  Reject unauthorized branch selection (non-disclosing
+            # 404).
+            if not branch_accessible(auth, branch_id):
+                raise HTTPException(404, "not found")
+            q = q.filter(QueueEntry.branch_id == branch_id)
+        elif not auth.is_super_admin and not auth.is_org_admin and auth.branch_id:
+            # C1: branch-scoped users restricted to their token branch when
+            # branch_id is omitted.
+            q = q.filter(QueueEntry.branch_id == auth.branch_id)
         entries = q.order_by(QueueEntry.position).all()
         return [_entry_to_dict(e) for e in entries]
     finally:

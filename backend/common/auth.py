@@ -86,6 +86,24 @@ class AuthContext:
         self.token_payload = token_payload
         self.doctor_id = doctor_id
 
+    def can_access_doctor(self, doctor_id: Optional[str]) -> bool:
+        """Check if the authenticated user may access resources for *doctor_id*.
+
+        BR §8 rule 5: enforce branch and doctor assignment scopes in addition
+        to role permissions.  BR §7.4/§7.5: a doctor may access only their own
+        operational records; an assistant may operate only for their assigned
+        doctor(s).
+
+        For ``doctor``/``assistant`` roles, a missing assignment (``doctor_id``
+        unset on the token) must fail closed — it must not grant unrestricted
+        doctor access.  For all other roles, no doctor restriction applies.
+        """
+        if self.role in ("doctor", "assistant"):
+            if not self.doctor_id:
+                return False
+            return doctor_id == self.doctor_id
+        return True
+
     @property
     def is_super_admin(self) -> bool:
         """Platform administrator, derived from the explicit capability matrix.

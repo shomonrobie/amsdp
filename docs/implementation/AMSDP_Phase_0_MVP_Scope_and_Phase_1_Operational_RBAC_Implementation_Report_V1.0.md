@@ -236,3 +236,45 @@ SaaS Platform RBAC, `super_admin` migration, last-admin/self-escalation protecti
 
 ### Disposition
 **IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).
+
+---
+
+## Phase 1C — Operational RBAC Authorization Closure (Recorded 2026-11-17)
+
+### Scope
+Three remaining authorization areas (C1, C2, C3) plus one architecture limitation (C4) identified during independent review of commit `d7a1c90`. All corrections are server-side, preserve existing roles and permission matrix, and introduce no SaaS Platform RBAC.
+
+### C1 — Queue history branch authorization (VERIFIED DEFECT — FIXED)
+- **File:** `backend/queuing/main.py`
+- **Fix:** `GET /api/v1/queue/history` now validates caller-supplied `branch_id` via `branch_accessible()`. When `branch_id` omitted, branch-scoped users are restricted to their token branch via `auth.branch_id`. `org_admin` retains organization-wide access.
+- **Tests:** `TestQueueHistoryBranchAuth` — 5 tests (all passing)
+
+### C2 — Doctor and assistant ownership across all queue actions (VERIFIED DEFECT — FIXED)
+- **Files:** `backend/common/auth.py`, `backend/queuing/main.py`, `backend/queuing/recovery.py`
+- **Fix:** 
+  - `AuthContext.can_access_doctor(doctor_id)` added — returns `False` for doctor/assistant roles when `auth.doctor_id` is unset (fail closed); returns `True` for all other roles
+  - `get_queue`, `queue_history`, `check_in_appointment`, `enqueue_patient`, `reorder_queue`, `queue_action` all check `can_access_doctor()`
+  - `recovery.py` `_scoped_entry()` checks `can_access_doctor()` for recover/reposition actions
+- **Tests:** `TestQueueRecoveryDoctorAuth` — 1 test (doctor cannot recover another doctor's entry). Combined with existing `TestQueueDoctorAssistantOwnership` — 8 tests (all passing)
+
+### C3 — Missing or invalid doctor assignment fails closed (VERIFIED DEFECT — FIXED)
+- **File:** `backend/common/auth.py`
+- **Fix:** `can_access_doctor()` returns `False` when `auth.doctor_id` is unset for doctor/assistant roles. All callers now fail closed.
+- **Tests:** `TestQueueMissingDoctorAssignment` — 3 tests (doctor no assignment denied, assistant no assignment denied, valid assignment allowed)
+
+### C4 — Assistant assignment architecture limitation (BLOCKED — PRODUCT DECISION REQUIRED)
+- **Finding:** `StaffUser.doctor_id` is a single nullable foreign key. BR §7.5 states assistants may support "assigned doctor(s)" and "Platform policy may allow one or multiple doctors per assistant."
+- **Disposition:** Multi-doctor assistant assignment is UNSUPPORTED in the current data model. Single-doctor assignment via `StaffUser.doctor_id` is enforced. No new assignment model or migration created. Multi-doctor support requires explicit Product Owner/architecture decision.
+- **Status:** BLOCKED — pending explicit Product Owner decision on multi-doctor assistant assignment policy.
+
+### Test results (all suites)
+| Suite | Result |
+|---|---|
+| `queuing/tests/test_queue.py` | 50 passed |
+| `scheduling/tests/test_scheduling.py` | 36 passed |
+| `tests/test_security.py`, `patient/tests/`, `identity/tests/` | 59 passed |
+| `appointment/tests/` | 108 passed |
+| **Total** | **253 passed, 0 failed** |
+
+### Disposition
+**IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).

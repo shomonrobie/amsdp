@@ -86,6 +86,11 @@ def _scoped_entry(session, auth: AuthContext, entry_id: str) -> QueueEntry:
     if not (auth.is_super_admin or auth.is_org_admin):
         if not auth.branch_id or entry.branch_id != auth.branch_id:
             raise HTTPException(404, "queue entry not found")
+    # C2: a doctor or assistant may recover only their own assigned doctor's
+    # entries.  Fail closed when no assignment exists.
+    if auth.role in ("doctor", "assistant"):
+        if not auth.can_access_doctor(entry.doctor_id):
+            raise HTTPException(404, "queue entry not found")
     return entry
 
 

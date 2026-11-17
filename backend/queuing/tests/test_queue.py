@@ -28,13 +28,17 @@ def _ensure_org():
 _ensure_org()
 
 
-def _mk_user(session, username, role):
+def _mk_user(session, username, role, doctor_id=None):
     existing = session.query(StaffUser).filter(StaffUser.username == username).first()
-    if existing: return existing
+    if existing:
+        existing.doctor_id = doctor_id
+        existing.role = role
+        session.commit()
+        return existing
     pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
     u = StaffUser(id=str(uuid.uuid4()), organization_id="m5-org", branch_id="m5-branch",
                   username=username, password_hash=pw, display_name=username,
-                  role=role, status="active")
+                  role=role, doctor_id=doctor_id, status="active")
     session.add(u); session.commit()
     return u
 
@@ -77,7 +81,7 @@ def receptionist():
 @pytest.fixture(scope="module")
 def doctor_user():
     session = SessionFactory()
-    u = _mk_user(session, "m5_docu", "doctor")
+    u = _mk_user(session, "m5_docu", "doctor", doctor_id="m5-doc")
     session.close(); return u
 
 
@@ -829,3 +833,187 @@ class TestQueueDoctorAssistantOwnership:
             headers=_auth(tok_asst_i),
             json={"action": "start_consultation"})
         assert r.status_code == 403, r.text
+
+
+class TestQueueHistoryBranchAuth:
+    """C1: Queue history endpoint branch authorization."""
+
+    def _mk_branch(self, session, branch_id, org_id="m5-org"):
+        b = session.query(Branch).filter(Branch.id == branch_id).first()
+        if b is None:
+            session.add(Branch(id=branch_id, organization_id=org_id,
+                               name=branch_id, code=branch_id.upper()))
+            session.commit()
+        return b
+
+    def _mk_patient_c1(self, session, org_id="m5-org"):
+        p = Patient(id=str(uuid.uuid4()), organization_id=org_id,
+                    name="C1 Patient", mobile="01777777777")
+        session.add(p); session.commit(); return p
+
+    def test_c1_receptionist_own_branch_history(self, receptionist):
+        self._mk_branch(SessionFactory(), "c1-br-2")
+        p = self._mk_patient_c1(SessionFactory())
+        client.post("/api/v1/queue/enqueue",
+            headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id,
+                  "entry_source": "walk_in", "branch_id": "m5-branch"})
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id=m5-branch",
+            headers=_auth(_token(receptionist)))
+        assert r.status_code == 200, r.text
+
+    def test_c1_receptionist_cannot_another_branch_history(self, receptionist):
+        self._mk_branch(SessionFactory(), "c1-br-2")
+        p = self._mk_patient_c1(SessionFactory())
+        client.post("/api/v1/queue/enqueue",
+            headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id,
+                  "entry_source": "walk_in", "branch_id": "c1-br-2"})
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id=c1-br-2",
+            headers=_auth(_token(receptionist)))
+        assert r.status_code == 404, r.text
+
+    def test_c1_receptionist_omits_branch_id_limited_to_own(self, receptionist):
+        self._mk_branch(SessionFactory(), "c1-br-2")
+        p = self._mk_patient_c1(SessionFactory())
+        client.post("/api/v1/queue/enqueue",
+            headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id,
+                  "entry_source": "walk_in", "branch_id": "m5-branch"})
+        client.post("/api/v1/queue/enqueue",
+            headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id,
+                  "entry_source": "walk_in", "branch_id": "c1-br-2"})
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(_token(receptionist)))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert all(e["branch_id"] == "m5-branch" for e in body)
+
+    def test_c1_org_admin_authorized_branch_history(self, receptionist):
+        session = SessionFactory()
+        try:
+            self._mk_branch(session, "c1-br-3")
+            u = _mk_user(session, "c1_org_adm", "org_admin", None)
+        finally:
+            session.close()
+        p = self._mk_patient_c1(SessionFactory())
+        client.post("/api/v1/queue/enqueue",
+            headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id,
+                  "entry_source": "walk_in", "branch_id": "c1-br-3"})
+        tok = jwt.encode({"sub": u.id, "org": "m5-org", "branch": None,
+                          "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id=c1-br-3",
+            headers=_auth(tok))
+        assert r.status_code == 200, r.text
+
+    def test_c1_cross_tenant_branch_id(self, receptionist):
+        foreign_org = f"c1-foreign-{uuid.uuid4().hex[:8]}"
+        foreign_br = f"c1-foreign-br-{uuid.uuid4().hex[:8]}"
+        foreign_code = f"FORGN-{uuid.uuid4().hex[:8]}"
+        session = SessionFactory()
+        try:
+            session.add(Organization(id=foreign_org, name="Foreign", code=foreign_code))
+            session.add(Branch(id=foreign_br, organization_id=foreign_org,
+                               name="Foreign Br", code=foreign_code))
+            session.commit()
+        finally:
+            session.close()
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id={foreign_br}",
+            headers=_auth(_token(receptionist)))
+        assert r.status_code == 404, r.text
+
+
+class TestQueueMissingDoctorAssignment:
+    """C3: Missing or invalid doctor assignment must fail closed."""
+
+    def test_c3_doctor_no_assignment_denied(self):
+        session = SessionFactory()
+        try:
+            u = _mk_user(session, "c3_doc_noassign", "doctor", None)
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": u.id, "org": "m5-org", "branch": "m5-branch",
+                          "role": "doctor",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
+    def test_c3_assistant_no_assignment_denied(self):
+        session = SessionFactory()
+        try:
+            u = _mk_user(session, "c3_asst_noassign", "assistant", None)
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": u.id, "org": "m5-org", "branch": "m5-branch",
+                          "role": "assistant",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
+    def test_c3_valid_assignment_allowed(self, doctor_user, receptionist):
+        session = SessionFactory()
+        try:
+            p = _mk_patient(session)
+            client.post("/api/v1/queue/enqueue",
+                headers=_auth(_token(receptionist)),
+                json={"doctor_id": "m5-doc", "patient_id": p.id,
+                      "entry_source": "walk_in"})
+            session.close()
+        finally:
+            session.close()
+        tok = _token(doctor_user)
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 200, r.text
+
+
+class TestQueueRecoveryDoctorAuth:
+    """C2: Doctor ownership across queue recovery actions."""
+
+    def test_c2_doctor_cannot_recover_another_doctor_entry(self):
+        da_id = f"c2-doc-a-{uuid.uuid4().hex[:8]}"
+        db_id = f"c2-doc-b-{uuid.uuid4().hex[:8]}"
+        session = SessionFactory()
+        try:
+            da = Doctor(id=da_id, organization_id="m5-org", name="Doctor A",
+                       mobile="01700000001")
+            db = Doctor(id=db_id, organization_id="m5-org", name="Doctor B",
+                       mobile="01700000002")
+            session.add(da); session.add(db); session.commit()
+            user_a = _mk_user(session, "c2_doc_a", "doctor", doctor_id=da_id)
+            user_b = _mk_user(session, "c2_doc_b", "doctor", doctor_id=db_id)
+            recp = _mk_user(session, "c2_recp", "receptionist", None)
+            p = _mk_patient(session)
+            r = client.post("/api/v1/queue/enqueue",
+                headers=_auth(_token(recp, branch="m5-branch")),
+                json={"doctor_id": db_id, "patient_id": p.id,
+                      "entry_source": "walk_in"})
+            assert r.status_code == 201, r.text
+            entry_b = r.json()
+            client.patch(f"/api/v1/queue/{entry_b['id']}",
+                headers=_auth(_token(recp, branch="m5-branch")),
+                json={"action": "cancel", "reason": "test"})
+            session.close()
+        finally:
+            session.close()
+
+        tok_a = jwt.encode({"sub": user_a.id, "org": "m5-org",
+                            "branch": "m5-branch", "role": "doctor",
+                            "exp": int((datetime.now(timezone.utc)
+                                        + timedelta(hours=1)).timestamp())},
+                           _SECRET, algorithm=_ALGO)
+        r = client.post(f"/api/v1/queue/recover/{entry_b['id']}",
+            headers=_auth(tok_a),
+            json={"reason": "test"})
+        assert r.status_code == 404, r.text
