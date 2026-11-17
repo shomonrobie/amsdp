@@ -278,3 +278,20 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 
 ### Disposition
 **IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).
+
+## Phase 1C Follow-up — Queue History Branch Ownership Authorization Closure (Recorded 2026-11-17)
+
+### Finding — Queue history caller-supplied `branch_id` lacks organization ownership validation (VERIFIED DEFECT — FIXED)
+- **Root cause:** `GET /api/v1/queue/history` (`backend/queuing/main.py`) used `branch_accessible(auth, branch_id)` to validate caller-supplied `branch_id`. While `branch_accessible()` enforces role-based branch reachability, it intentionally permits `org_admin` to access any branch ID without verifying that the branch belongs to `auth.organization_id`. An `org_admin` could submit a foreign or nonexistent branch ID and receive an empty successful response instead of a non-disclosing `404`.
+- **Fix:** `backend/queuing/main.py` — When `branch_id` is supplied to `GET /api/v1/queue/history`, the endpoint now:
+  1. Validates the branch exists (`Branch.id == branch_id`).
+  2. Validates the branch belongs to the caller's organization (`Branch.organization_id == auth.organization_id`).
+  3. Validates caller authorization via `branch_accessible(auth, branch_id)`.
+  4. Returns non-disclosing `404` if any check fails, before applying the branch filter to the query.
+  - Organization ownership check applies to **all roles**, including `org_admin`.
+- **Tests:** `TestQueueHistoryBranchAuth` — added 2 new tests:
+  - `test_c1_org_admin_other_org_branch_denied` — org admin requesting another org's branch history → 404.
+  - `test_c1_org_admin_nonexistent_branch_denied` — org admin requesting nonexistent branch → 404.
+- **Verification:** All 52 queue tests pass. Cross-tenant organization data is never returned for unauthorized branch IDs.
+
+### Not implemented (out of scope): Same as Phase 1C — multi-doctor assistant assignment remains BLOCKED pending Product Owner decision.

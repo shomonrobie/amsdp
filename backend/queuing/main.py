@@ -514,8 +514,14 @@ def queue_history(doctor_id: str = Query(...), date: str = Query(...),
         if branch_id:
             # C1: validate the caller-supplied branch against authenticated
             # scope.  Reject unauthorized branch selection (non-disclosing
-            # 404).
-            if not branch_accessible(auth, branch_id):
+            # 404).  The branch must exist and belong to the caller's
+            # organization -- org_admin cannot select a branch in another
+            # tenant merely because branch_accessible() permits any branch.
+            branch_row = session.query(Branch).filter(
+                Branch.id == branch_id,
+                Branch.organization_id == auth.organization_id,
+            ).first()
+            if not branch_row or not branch_accessible(auth, branch_id):
                 raise HTTPException(404, "not found")
             q = q.filter(QueueEntry.branch_id == branch_id)
         elif not auth.is_super_admin and not auth.is_org_admin and auth.branch_id:

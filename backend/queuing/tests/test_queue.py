@@ -927,6 +927,34 @@ class TestQueueHistoryBranchAuth:
             headers=_auth(_token(receptionist)))
         assert r.status_code == 404, r.text
 
+    def test_c1_org_admin_other_org_branch_denied(self, receptionist):
+        foreign_org = f"c1-foreign-org-{uuid.uuid4().hex[:8]}"
+        foreign_br = f"c1-foreign-br-{uuid.uuid4().hex[:8]}"
+        session = SessionFactory()
+        try:
+            session.add(Organization(id=foreign_org, name="Foreign Org", code=f"FORG-{uuid.uuid4().hex[:8]}"))
+            session.add(Branch(id=foreign_br, organization_id=foreign_org,
+                               name="Foreign Br", code=f"FORB-{uuid.uuid4().hex[:8]}"))
+            session.commit()
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org", "branch": "m5-branch",
+                          "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id={foreign_br}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
+    def test_c1_org_admin_nonexistent_branch_denied(self, receptionist):
+        tok = jwt.encode({"sub": receptionist.id, "org": "m5-org", "branch": "m5-branch",
+                          "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue/history?doctor_id=m5-doc&date={date.today().isoformat()}&branch_id=does-not-exist",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
 
 class TestQueueMissingDoctorAssignment:
     """C3: Missing or invalid doctor assignment must fail closed."""

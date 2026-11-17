@@ -832,3 +832,22 @@ Verification: `backend/queuing/tests/test_queue.py` 41 passed; `backend/scheduli
 - R-07 frontend `super_admin` wildcard bypass: presentation only, not an authorization boundary; no code change.
 
 Verification: `backend/queuing/tests/test_queue.py` 50 passed; `backend/scheduling/tests/test_scheduling.py` 36 passed; `tests/test_security.py`, `patient/tests/`, `identity/tests/` 59 passed; `appointment/tests/` 108 passed. Total: 253 passed, 0 failed.
+
+## 14. Phase 1C Follow-up Implementation Outcome (dated)
+
+**Recorded implementation date: 2026-11-17.** This section records the outcome of the Queue History branch ownership authorization closure work (AMSDP Phase 1C Follow-up).
+
+### Finding — Queue history caller-supplied `branch_id` lacks organization ownership validation (VERIFIED DEFECT — FIXED)
+- **Root cause:** `GET /api/v1/queue/history` (`backend/queuing/main.py`) used `branch_accessible(auth, branch_id)` to validate caller-supplied `branch_id`. While `branch_accessible()` enforces role-based branch reachability, it intentionally permits `org_admin` to access any branch ID without verifying that the branch belongs to `auth.organization_id`. An `org_admin` could submit a foreign or nonexistent branch ID and receive an empty successful response instead of a non-disclosing `404`.
+- **Fix:** `backend/queuing/main.py` — When `branch_id` is supplied to `GET /api/v1/queue/history`, the endpoint now:
+  1. Validates the branch exists (`Branch.id == branch_id`).
+  2. Validates the branch belongs to the caller's organization (`Branch.organization_id == auth.organization_id`).
+  3. Validates caller authorization via `branch_accessible(auth, branch_id)`.
+  4. Returns non-disclosing `404` if any check fails, before applying the branch filter to the query.
+  - Organization ownership check applies to **all roles**, including `org_admin`.
+- **Tests:** `TestQueueHistoryBranchAuth` — added 2 new tests:
+  - `test_c1_org_admin_other_org_branch_denied` — org admin requesting another org's branch history → 404.
+  - `test_c1_org_admin_nonexistent_branch_denied` — org admin requesting nonexistent branch → 404.
+- **Verification:** All 52 queue tests pass. Cross-tenant organization data is never returned for unauthorized branch IDs.
+
+### Not implemented (out of scope): Same as Phase 1C — multi-doctor assistant assignment remains BLOCKED pending Product Owner decision.
