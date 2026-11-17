@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-15) · **Snapshot:** 69 markdown documents (per-file sizes below; recompute with the *Maintenance* command)
+> **Date:** 2026-11-10 (revised 2026-11-17) · **Snapshot:** **81** markdown documents on disk, every one now accounted for below — **77** in the `docs/` trees (11 at the `docs/` root + 66 across the subject folders, of which 6 are the new `architecture/saas/` set registered in Revision 27) plus the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-17: 77 + 4 = 81 on disk, 80 registered rows — the 3 `chatgpt/` rows and 77 `docs/`-tree rows. The earlier count drift remains logged as open item **O-Y**.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -308,6 +308,238 @@
 > moved, renamed or deleted, so no manifest entry is due. The work is committed as
 > `729054c`, `7f681c4` and `3875f18` on `hackathon-mvp` and pushed to `origin`.
 
+> **Revision 20 — 2026-11-16**, task `AMSDP-FRONTEND-UX-DEMO-01` (demo readiness: the
+> dialog focus defect, the shared design system, the Doctor/Facility redesigns, calendar
+> polish and a realistic demo dataset). One new document is registered —
+> `implementation/AMSDP_Frontend_Usability_Shared_Design_System_and_Demo_Readiness_V1.0.md`
+> — and the registered row count grows from 68 to **69**. In outline: the committed
+> `Modal` ran `useEffect(() => el.focus(), [onClose])`, so an inline `onClose` prop made
+> every keystroke re-focus the panel and a receptionist could type exactly one character;
+> `Modal` is now a thin wrapper over a Radix-based `Dialog` that focuses once on open, and
+> `frontend/tests/dialog-focus.test.mjs` guards the defect class (no component or page may
+> call `.focus()` inside an effect). A shadcn-style token layer plus 13 primitives replaced
+> per-page inline styling; `/doctors` and `/facilities` were rebuilt on it; the appointment
+> calendar was re-paletted onto the same tokens without breaking its SSR markup contract.
+> `components/AppShell.js` now reads the `sessionStorage` session after mount, removing one
+> React #418/#423 hydration failure; the page-level remainder is open item **O-1**.
+> `backend/seed/seed_demo.py` gained a facility tree, a bilingual speciality catalogue, ten
+> doctors, thirty patients, ten schedules, a rolling −3…+7-day appointment week and a
+> guarded `--reset`; the development database went from 60 organisations / 596 staff / 295
+> doctors / 1 632 patients to 54 / 6 / 10 / 30, and the reset **refused to delete
+> `audit_events`** (4 646 rows intact), which is why 54 audit-only husk organisations
+> survive — owner decision needed (**O-4**).
+> Verified in this session: frontend **96/96** `node --test`, backend **216 passed** on a
+> scratch `amsdp_test` database, `next build` **exit 0**, the frontend **image rebuilt** and
+> serving the new UI (container healthy), `_tools/verify_demo_login.sh` **6/6**, and a
+> headless-Chrome acceptance run that drove the real UI — signing in through the login
+> form, typing `রহ` → `রহিম ` → `রহিম উদ্দিন` into the add-doctor dialog while asserting the
+> caret stayed in the field after every chunk, then opening the facility tree, the calendar,
+> a doctor's queue and a patient search: **12/12 checks pass**. Two layout defects were
+> found only because that run rendered the pages — the legacy `.flex` alias in
+> `styles/global.css` was silently applying `gap` and `align-items:center` to every Tailwind
+> `flex` container (centring and shrink-wrapping the facility card stack and the dialog
+> body), and `Field` labels inherited ambient alignment; both are fixed and both are
+> recorded with before/after evidence. A jsdom-based DOM test was attempted first and
+> abandoned after repeated OOM kills on this host; that is stated in the report rather than
+> hidden. Nothing was moved, renamed or deleted, so no manifest entry is due. Nothing was
+> staged, committed or pushed; `docs/chatgpt/` is still unregistered (carried as **O-7**).
+
+> **Revision 21 — 2026-11-16**, task `AMSDP-SYMPTOM-01` (optional bilingual symptom
+> recording and the onset question in the appointment booking form). One new document is
+> registered —
+> `implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` —
+> and the registered row count grows from 69 to **70**. In outline: a new
+> `symptom_catalog` table carries 79 curated, patient-reported symptoms in both scripts
+> with synonyms, category, speciality *ranking hints*, source and review status
+> (`curated`, **not** clinically validated); a new `appointment_symptoms` table records
+> each selected symptom as `kind = catalogue | free_text` with a booking-time **name
+> snapshot**, a shape `CHECK` and two partial unique indexes for duplicate suppression;
+> and `appointments` gains `symptom_onset_code` (a closed seven-answer vocabulary — never
+> a forced date) plus an optional note. Migration `b3d7e91f6a24` (guarded, forward-only,
+> no backfill). Two routes were added (`GET /api/v1/symptoms`,
+> `GET /api/v1/symptoms/onset-options`) and the two booking payloads gained four optional
+> fields; every appointment payload now carries `symptoms[]` and the onset answer.
+> Reschedule and transfer copy the complaint forward while the original visit keeps its
+> own rows. The browser-side search **reuses** `lib/bangla-name-sense/normalize.js` and
+> adds only multi-alias lookup plus a speciality *tie-break*; nothing is pre-selected and
+> neither age nor sex is passed to the picker. Verified in this session: **25** new
+> appointment integration tests and **9** shipped-catalogue data tests pass, the
+> appointment module is **50 passed**, the full backend suite is **389 passed / 9 failed**
+> where all nine failures are a pre-existing isolation defect in
+> `backend/doctor/tests/test_doctor.py` (unmodified, last committed 2026-11-12; recorded
+> as the report's **O-2**), frontend **135/135** `node --test` (39 new) and `next build`
+> **exit 0**. **No browser run was performed for this feature** and the running demo
+> containers still carry the previous images, both stated in the report (§12). Nothing was
+> moved, renamed or deleted, so no manifest entry is due. Nothing was staged, committed or
+> pushed.
+> While reconciling, the maintenance check found **index drift**: `find docs -type f -name
+> '*.md'` reports **72** files while 69 were registered. One is the report added above
+> (rows 69 → **70** in the subject trees); the other two are `docs/chatgpt/` planning
+> documents that the `chatgpt/` section described as "one unregistered document".
+> `AMSDP_Configurable_Multi-Sector_Architecture_Implementation_Plan.md` had never been
+> mentioned at all; `AMSDP_Project_Handover_2026-11-12.md` is unregistered by an earlier
+> revision on purpose. Both are now listed in that section, neither is moved or adopted,
+> and the snapshot line states the on-disk total (72) with that split made explicit.
+
+> **Revision 22 — 2026-11-16**, task `AMSDP-SYMPTOM-01`, **Phase 1 (runtime)** — no new
+> document, so the registered row count stays **70**; the existing
+> `implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md`
+> gained a §18 ("Phase 1 — demo runtime rebuild and browser verification") and its row
+> now records the real size, **67,128** bytes from `wc -c`. In outline: migration
+> `b3d7e91f6a24` verified applied, 79 catalogue rows untouched, 5 320 audit rows intact
+> and **no database reset**; `amsdp-appointment` and `amsdp-frontend` rebuilt and only
+> those two containers recreated (the other seven were deliberately left running — no
+> other service enforces `symptom.*` or maps the new tables, recorded as O-15); both
+> healthy, `/health` and `/health/ready` 200. Verified through the **frontend proxy**
+> (the browser's own path): 79 items, 79 `name_bn` and 79 `name_en`, 13 categories,
+> seven onset codes, 401 unauthenticated, 403 for `include_inactive` as `receptionist`
+> versus 200 as `org_admin`. Six bookings covering no symptom / one / three / free text
+> / onset-only / mixed all returned **201** with the expected rows and audit metadata
+> (counts, ids and the onset code — never the patient's words); an unknown symptom id
+> and an invalid onset code both returned **422** without leaving a partial record. The
+> shipped matcher, run against the live entries, resolves `জ্বর`→`fever`,
+> `fever`→`fever` and the synonym `গা গরম`→`fever`. A **real-Chrome** run (Playwright
+> 1.63 driving the installed Google Chrome) signed in through the login form and drove
+> the picker by keyboard: focus sampled after every keystroke of `জ্বর` stayed in
+> `book-symptoms-input`; `ArrowDown`/`Enter` added chips for Bangla, English and the
+> patient's own words; chip removal returned the caret; and the booking reached the
+> server as `POST /api/v1/appointments` **201** with the free text verbatim —
+> **34/35 checks**, the single failure being the app-wide pre-existing React hydration
+> errors (#418/#423) that also fire on `/dashboard` and `/patients` (new **O-12**). The
+> detail-dialog read-back was **7/7**. O-1 and O-3 are now closed; new O-11 (Banglish
+> queries do not match), O-13 (token numbers collide across doctors on one date), O-14
+> (seven verification appointments left in the demo DB) and O-15 (seven images still
+> carry the pre-change `common/`) are recorded for the owner. Nothing was moved,
+> renamed or deleted, so no manifest entry is due; `git status` is byte-identical to
+> the pre-phase snapshot, nothing staged, nothing committed, nothing pushed, `HEAD`
+> still `133ce83`.
+
+> **Revision 23 — 2026-11-16**, task `AMSDP-APPT-LIST-UX` — appointment UX refactor
+> (cards, toolbar, server-paged list). **No new document**, so the registered row count
+> stays **70**: the existing
+> `implementation/AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` gained a
+> §11 and its row now records the real size, **40,404** bytes from `wc -c`. In outline: the
+> calendar card became a patient-first four-row card (name + token, `time · doctor`, the
+> status **in words** as well as colour, the chamber snapshot), with the fourth card in a
+> week cell replaced by an `আরও N` control (`chipLayout()`/`moreLabel()` in
+> `lib/calendar/grid.js`, pure and tested); the ad-hoc header became `PageHeader` +
+> `Toolbar`/`Filter`/`SearchInput`/`Select`/`BranchSelect` with a 300 ms debounced search
+> and a clear-filters action that appears only when something is filtered; and `তালিকা`
+> became a server-paged view over one new read-only route,
+> `GET /api/v1/appointments/list` (search on name/mobile/token, doctor/status/branch/date
+> filters, whitelisted sort with `422` on anything else, `25/50/100` pages, envelope
+> `{items,total,page,limit,pages}`, branch scope from the token with a non-disclosing
+> `404`), behind a new pure client model `frontend/lib/calendar/list.js`. **No scheduling,
+> lifecycle or queue rule changed**; no migration; no write path added. Verified: frontend
+> **146/146** `node --test` (8 new `calendar-list`, 2 new render, 1 new contract test),
+> `next build` **exit 0** (`ƒ /appointments 18.5 kB`), backend appointment suite
+> **76/76** (26 in the new `test_appointment_list.py`), both images rebuilt and healthy,
+> live probes `200/42` rows with `pages=9`, page 2 → 17 rows, `sort=patient` → A→Z,
+> `422` on bad sort/order/date/limit, `404` on an out-of-scope branch, `401` without a
+> token, `q=%`/`q=_` → 0 rows, and a **real-Chrome** run of the shipped page at **22/22**
+> checks (cards, `আরও 1`, sortable headers with `aria-sort`, search 25→2, clear-filters).
+> One measured inconsistency is recorded as **O-S**: the grid endpoint is
+> organization-scoped (41 rows over two branches) while the new list is branch-scoped
+> (37 rows), because `.clinerules` §3 requires the latter — so the header now prints the
+> grid count only while the calendar is visible. New **O-T** (a chip falls back to
+> `#<id>` for doctors absent from `/api/v1/doctors`; demo data), **O-U** (pager digits stay
+> Latin beside API-valued dates) and **O-V** (preflight off ⇒ the shared `Button` keeps the
+> UA border; predates this task) are recorded; **O-N** is narrowed by the Chrome pass but
+> not closed. Nothing moved, renamed or deleted, so no manifest entry is due; nothing
+> staged, committed or pushed.
+
+> **Revision 24 — 2026-11-16**, task `AMSDP-RESTART-RUNBOOK` — **one new document**, so the
+> registered row count goes **70 → 71**: `deployment/AMSDP_Platform_Restart_and_Redeploy_Runbook_V1.0.md`
+> (14,427 bytes, `wc -c`), with a new row under `deployment/`. It answers the owner's
+> question *"do I have to restart the whole platform to see a code change?"*: **no for the
+> change already delivered** — `amsdp-frontend-1` and `amsdp-appointment-1` were recreated after
+> the code changed (up 49 min / ~1 h while the other eight had been up 11–29 h), all ten
+> `healthy`, `GET /api/v1/appointments/list` without a token answers `401` (so the route is in
+> the running image), `/appointments` answers `200`, and the Chrome pass was 22/22 — and **yes
+> for any further change**, because the source is `COPY`ied into the images and compose mounts no
+> code, so `docker compose restart` is a no-op for code and `backend/common/` forces all eight
+> backend rebuilds. It ships `_tools/amsdp_rebuild.sh` (auto-detects changed services, rebuilds
+> only those, waits for readiness, then verifies; `--check` and `--verify` are read-only and were
+> the modes run here — the apply path was not re-run because nothing needed rebuilding). No
+> schema change, no migration, no data touched; nothing staged, committed or pushed. New open
+> items **O-W** (`_tools/` is untracked), **O-X** (readiness is not behavioural proof) and
+> **O-Y** (this index recorded 2 `docs/chatgpt/` files; the tree holds 4 — header corrected to
+> the verified **74 = 70 + 4**, and the drift left visible for the owner). `README.md` also gained
+> two rows in its command table so the new script is discoverable from where restarts are already
+> documented.
+
+> **Revision 25 — 2026-11-16**, task `AMSDP-APPT-FILTER-DIAGNOSIS` — **one new document**, so the
+> registered row count goes **71 → 72** and the on-disk snapshot **74 → 75**
+> (72 in the `docs/` trees + 4 `docs/chatgpt/`):
+> `audit/AMSDP_Appointment_Calendar_Filter_Diagnosis_V1.0.md`, with a new row under `audit/`. It
+> answers the owner's question *"why doesn't the search box or the Status/Branch filter change the
+> appointments on the calendar?"* with a diagnosis only: **in Week and Day view the search box and
+> both pickers write only into the paged list's query state, while the grid is rendered from a
+> separate `GET /api/v1/appointments` request built solely from the calendar window and the doctor**
+> — measured as **0** `/appointments` requests after typing a name (chips stayed at 40) and a
+> correct `GET /appointments/list?q=Tariqul&status=CANCELLED&branch_id=…` on switching to List.
+> Findings F-1…F-9 (the grid endpoint has no `q`/`branch_id` and the page never sends the `status`
+> the endpoint does support; grid is org-scoped while the list is branch-scoped, 47 vs 42 for a
+> receptionist; the list silently clamps to the visible week; no highlighting; an unknown status
+> returns `200`/0 rows; no names in the grid payload; a source-contract test that **asserts** the
+> defective request shape and a therefore green 146/146 suite; Bangla-name search unverified for
+> lack of data), per-filter and per-view evidence matrices, four root-cause classes, minimal
+> correction options with blast radius, and two owner decisions it deliberately does not take —
+> **O-AA** (should the calendar be branch-scoped like the list?) and **O-AB** (may a search leave
+> the visible week?). No code, data, schema or migration was changed; the diagnosis tooling lives in
+> `/tmp/amsdp_diag/` and was not committed; nothing staged, committed or pushed. New open items
+> **O-Z** (filters do not reach Week/Day), **O-AC** (test-contract gap) and **O-AD** (Bengali-name
+> data gap).
+> **Revision 26 — 2026-11-16**, task `AMSDP-CALENDAR-FILTER-01` — **no new document**, so the
+> registered row count stays **72** and the on-disk snapshot stays **75**; two registered
+> documents gained an appended section (nothing moved, renamed, deleted or rewritten):
+> `implementation/AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` (**§12**, file
+> 40,404 → 67,732 bytes) and `audit/AMSDP_Appointment_Calendar_Filter_Diagnosis_V1.0.md`
+> (**Part I — Resolution**, 45,613 → 50,236 bytes, plus a `RESOLVED` line in its header). The task
+> implements the correction the Revision 25 diagnosis only described: the toolbar's search box and
+> its **Status**/**Branch** pickers now reach **Week and Day** as well as the list, from one shared
+> predicate module (`backend/appointment/appt_filters.py`) and one client filter builder
+> (`buildFilterParams`), with a new counts-only `GET /api/v1/appointments/matches` date index that
+> tells the calendar *where else* a search matched (`near` ordering, cap 120 + `truncated`), a
+> banner with a one-click route to the nearest other date, `<mark class="appt-cal-hit">`
+> highlighting on the name and the token, **422** for an unknown status or a malformed date
+> instead of a silent empty grid, names joined into the grid payload (replacing the 30 per-week
+> patient lookups the diagnosis measured), and `appointment.read` required on the grid route. The two decisions the diagnosis
+> left open were taken as **D-1 branch-scoped** (the calendar follows the token's branch — 37 rows
+> for the demo receptionist, `404` for an out-of-scope branch) and **D-2 the search may leave the
+> week** (the banner says so). Evidence: frontend **167 passed / 0 failed**, backend **108 passed**,
+> live API probes (10 cases incl. no-token `401`, out-of-scope `404`, `q=%` literal, unknown
+> status `422`), and a real-Chrome run of **24 recorded steps across two roles** with
+> `consoleErrors: []` / `failedResponses: []` — which is also what caught a sentence defect the
+> counts could not (`"1 more matches on 1 other dates"`), fixed by `matchesBannerKey` plus three
+> EN/BN keys. No schema change, no migration, no product rule changed; nothing staged, committed
+> or pushed. New open items **O-AG** (D-1/D-2 not yet filed in `docs/decisions/`), **O-AH** (the
+> 120-date index cap) and **O-AI** (cards-per-cell under a filter); **O-S**, **O-T**, **O-Z**,
+> **O-AA**, **O-AB** and **O-AC** are closed, **O-AD** and **O-N** remain open.
+> **Revision 27 — 2026-11-17**, task `AMSDP-HYBRID-SAAS-ARCH-2026-11-17` — **six new documents**,
+> so the registered row count goes **74 → 80** (the 74 rows before included 3 `chatgpt/` planning
+> files; 71 were `docs/`-tree documents, and 71 + 6 = **77** `docs/`-tree files on disk, verified
+> with `find`; plus 4 `docs/chatgpt/` = **81** total on disk against **80** registered rows).
+> All six live in a **new subfolder**, `architecture/saas/`, registered above as its own sub-table
+> rather than as six rows in the `architecture/` table — the folder is one coordinated set, not six
+> independent documents. Sizes are `wc -c`: architecture specification **57,124**, current-state
+> audit **41,705**, IAM specification **41,112**, tenant/organization specification **34,421**,
+> subscription/entitlement specification **33,204**, implementation roadmap **35,588**.
+> What the set is: a single, mutually cross-referenced specification of the multi-tenant SaaS
+> layer — the request pipeline and module keys, a corrected audit of what the tree does today
+> (R-01…R-18, C-1…C-9), identity and authorisation, tenant lifecycle, subscription/entitlement
+> (including the `entitlements_version` cache contract and the numeric-limit model) and a phased
+> roadmap (Phases 0–5+, risk register K-1…K-11, abort criteria, requirement traceability).
+> **One canonical open-item registry** — `O-SaaS-1…O-SaaS-16`, defined once in the architecture
+> specification §14.3; every other document cites those ids and none mints its own.
+> Nothing was implemented: **no code, schema, migration, endpoint, component, test or running stack
+> was touched**, so no test suite was run and nothing is claimed as `TESTED` or `VERIFIED` from this
+> task. No existing document was moved, renamed, overwritten or deleted, so no manifest entry is
+> required (§11); `architecture/saas/` is a subfolder **inside** the §11 tree, not a new top-level
+> output location. Nothing was staged, committed or pushed. No new index-level open item: the
+> substantive ones are the sixteen `O-SaaS` entries in the architecture specification §14.3, which
+> is where they belong (one registry, one place).
+
 ---
 
 ## How to use this index
@@ -330,7 +562,7 @@ side.
 | Folder | Answers the question | Read when the task involves |
 |---|---|---|
 | `docs/` (root) | What is approved? What is in scope? | Business behaviour, scope, feature set, UI/UX design intent, hackathon framing |
-| `architecture/` | How is the system and the AI tooling structured? | Service boundaries, data model, agent roles, AI Factory internals, dev workflow |
+| `architecture/` | How is the system and the AI tooling structured? | Service boundaries, data model, agent roles, AI Factory internals, dev workflow — and, in `architecture/saas/`, the Hybrid SaaS set: tenancy, IAM, entitlements, tenant lifecycle, delivery roadmap |
 | `product/` | What was decided, and what is being built next? | Business rules, MVP scope, product decisions, positioning, next-milestone readiness |
 | `security/` | What security guarantees exist and how? | Auth, RBAC, tenancy enforcement, secrets handling, penetration findings |
 | `implementation/` | What was built, and how was it tested? | Any change to an existing milestone/sequence feature; regression risk |
@@ -385,6 +617,28 @@ side.
 | `AMSDP_AI_Factory_Architecture_V1.0.md` | 56,079 | Touching `ai_factory/` internals (engine, harness, routing) | R |
 | `AMSDP_AI_Factory_Implementation_Prompt_V1.0.md` | 44,288 | Prompt/behaviour changes inside the AI Factory | R |
 
+### `architecture/saas/` — the Hybrid SaaS architecture set (six coordinated documents)
+
+One mutually cross-referenced set specifying the multi-tenant SaaS layer **before** any code is
+written. `AMSDP_System_Architecture_V1.0.md` (above, **R**) remains the frozen design of record;
+this set extends it and never overrides it (§1). **One canonical open-item registry:**
+`O-SaaS-1…O-SaaS-16` is defined once, in the architecture specification §14.3 — every other
+document in the set cites those ids and mints none.
+
+| File | Size | Read when | Owner |
+|---|---:|---|---|
+| `saas/AMSDP_Hybrid_SaaS_Architecture_Specification_V1.0.md` | 57,124 | Starting **any** SaaS, tenancy, entitlement or platform-plane task — the request pipeline (§5), the fixed module keys (§6), ADRs §10, traceability §13, the canonical open items (§14.3) | — |
+| `saas/AMSDP_Hybrid_SaaS_Current_State_Audit_V1.0.md` | 41,705 | Establishing what the tree actually does **today** before claiming a gap — findings R-01…R-18, corrections C-1…C-9, and the §4.6 table of claims that were wrong | — |
+| `saas/AMSDP_Identity_and_Access_Management_Specification_V1.0.md` | 41,112 | Authentication, login, sessions, principals, RBAC, plane separation — §9 is the single authorisation chain (9 factors) | — |
+| `saas/AMSDP_Tenant_and_Organization_Management_Specification_V1.0.md` | 34,421 | Organization/branch lifecycle, suspension, closure and anonymisation, the platform metadata surface, tenant-switch rules | — |
+| `saas/AMSDP_Subscription_and_Entitlement_Management_Specification_V1.0.md` | 33,204 | Plans, entitlements, the module gate, numeric limits, the `entitlements_version` cache contract, entitlement failure modes | — |
+| `saas/AMSDP_Hybrid_SaaS_Implementation_Roadmap_V1.0.md` | 35,588 | Sequencing delivery — Phases 0–5+, flag-on/flag-off gates, risk register K-1…K-11, abort criteria, requirement traceability R-01…R-18 / C-1…C-9 | — |
+
+> These six are **specification and planning documents only**. They change no code, schema,
+> migration, endpoint or test; every claim in them is graded per `.clinerules` §7 (IMPLEMENTED /
+> TESTED / VERIFIED / ACCEPTED), and the audit's findings are `static` or `reported`, never
+> `VERIFIED` unless a second artefact confirms them.
+
 ---
 
 ## `product/` — business rules, scope and decisions
@@ -433,8 +687,10 @@ side.
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
 | `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 22,388 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
 | `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` | 25,424 | Diagnosing why the CI pipeline fails, `alembic`/`python -m` invocation questions, or the frontend test failures in `banglanamesense-integration.test.mjs` | — |
-| `AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` | 20,982 | Appointment booking UI, the week/day calendar grid, `lib/calendar/grid.js`, slot capacity, the `date_from`/`date_to` window on `GET /api/v1/appointments`, or how the component's markup is asserted without a browser (§7.4) | — |
+| `AMSDP_Appointment_Calendar_View_Implementation_Report_V1.0.md` | 67,732 | Appointment booking UI, the week/day calendar grid and card anatomy, `lib/calendar/grid.js` + `lib/calendar/list.js`, `chipLayout()` overflow, slot capacity, the `date_from`/`date_to` window on `GET /api/v1/appointments`, the paged `GET /api/v1/appointments/list` (search/sort/paging/scope, §11.4) and how the component's markup is asserted without a browser (§7.4, §11.5); **§12** — the toolbar's search/status/branch now reach Week and Day through one shared filter builder, the counts-only `GET /api/v1/appointments/matches` date index, the "matched elsewhere" banner, hit highlighting, and the 167/108 + 24-step browser evidence | — |
 | `AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` | 20,296 | Doctor Management (`/doctors`), chamber assignment (`/schedules`), the facility tree (`/facilities`), `lib/phone.js`, `lib/facility.js`, BMDC verification UI, why a conflicting session is warned about client-side but still decided by the server, and what the post-rebuild runtime probes do and do not prove (§5.4) | — |
+| `AMSDP_Frontend_Usability_Shared_Design_System_and_Demo_Readiness_V1.0.md` | 45,536 | **Before touching a dialog, a form field, the shared UI primitives, `/doctors`, `/facilities`, the appointment calendar, or the demo dataset** — the focus-loss root cause (`useEffect(… el.focus() …, [onClose])`) and why the Radix rewrite removes it, the token/Tailwind layer and the 14 primitives, the legacy `.flex` alias that shadowed Tailwind and the two layout defects it caused (§6), what was redesigned where, the calendar polish that keeps its SSR contract green, the hydrated-session fix and the page-level hydration remainder (**O-1**), the reset+reseed of the developer database with its audit-preserving `--reset` (54 husk organisations, **O-4**), and the full evidence set: 96/96 frontend, 216 backend, build exit 0, 6/6 demo logins, and the headless-Chrome run that typed three chunks into a real dialog while asserting the caret stayed — **12/12 checks**. §9.7 explains what the shipped focus test does and does not prove | — |
+| `AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` | 67,128 | **Before touching the booking form's symptom control, the symptom catalogue, the onset question, or any appointment payload** — why the catalogue is one API response searched in memory (and why server-side search would fork the Bengali normaliser), the `symptom_catalog` / `appointment_symptoms` model with its booking-time name snapshot and two partial unique indexes, the closed onset vocabulary versus a forced date, the four optional booking fields and the three response keys, the copy-forward rule for reschedule/transfer, the ranking order (`rank → speciality tie-break → sort_order → code`) and why age/sex are never used, the 79-entry curated catalogue and its `curated` (not clinically validated) review status, the authorization matrix, the exact test/build results including the **9 pre-existing doctor-module failures**, the explicit statement that **no browser run was performed** in the morning (§12, superseded by §18), and open items O-1…O-10; **§18 is the Phase-1 runtime record** — rebuilt `appointment`/`frontend` images, only those two containers recreated, the six booking cases with their HTTP/DB/audit evidence, the Bangla/English search matrix executed against the live 79 entries, and the real-Chrome keyboard/focus run (34/35 checks, 7/7 on the detail read path), plus the O-1/O-3 closures and new items O-11…O-15 | — |
 
 ---
 
@@ -457,6 +713,7 @@ side.
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **History only — superseded by the V1.1 proposal below.** V1.0's §3 misdescribes D-01/D-02/D-03 and is not to be used for the decision records; read it only to see what changed between versions | — |
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` | 115,496 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` / decision-register correction** — the corrected D-01…D-03 records (two permitted payment answers; `.clinerules` §1/§10 authority references; authorisation to prepare this material), the restated decisions R-1…R-4, the evidence-checked capability status table, the C-01…C-09 matrix with exact replacement wording, the six verified patches and the combined patch in Appendix A, the near-misses checked and left alone, and the open items U-1…U-7 (U-1/U-2 closed). Proposal only: nothing in it is applied and no capability in it is implemented | — |
 | `AMSDP_Current_State_Demo_Diagnosis_and_Feature_Audit_V1.0.md` | 60,907 | **Before any attempt to "fix the demo" or to claim the demo is ready** — why the demo fails and staff cannot sign in (D1 frontend container absent since the stack-wide stop of 2026-11-12 and skipped in the 2026-11-14 nine-of-ten restart; D2 host-level container↔container forwarding dropped after the 2026-11-14 Docker daemon restarts with `ufw` active; D3 the isolated `amsdp_demo` stack never created, queue empty and appointments stale-dated; D4 the `/orgs` SSR `sessionStorage` crash), the evidence that the demo credentials are **correct** and **demonstrably worked** (6/6 bcrypt verifications; authenticated `super_admin` audit events at 2026-11-12T20:46:41Z), the 64-route / 14-page / 311-test matrix graded IMPLEMENTED / TESTED / VERIFIED, the prioritised repair plan R-1…R-10 with exact verification gates, the evidence appendix (26 rows), the actions deliberately not performed, the open items O-A…O-I, and **Part G** — reconciliation with the owner's account, the four corrections to Parts A–C, and the container-level timeline. Read-only: nothing was fixed | — |
+| `AMSDP_Appointment_Calendar_Filter_Diagnosis_V1.0.md` | 50,236 | **Before wiring or "fixing" the appointment calendar's search box or its Status/Branch filters** — why they do nothing in Week and Day view: the toolbar writes only the paged list's query state while the grid is rendered from a separate `GET /api/v1/appointments` request built from the window and doctor alone (measured: 0 requests after typing a name, chips unchanged at 40, while switching to List issues the correct `?q=…&status=…&branch_id=…`); the grid endpoint has no `q`/`branch_id` and the page never sends the `status` it does support; grid 47 rows (org) vs list 42 (branch) for one receptionist; the list silently clamps to the visible week; no highlighting; unknown status → `200`/0 rows; no names in the grid payload (30 lookups per week); the source-contract test that **asserts** the defective request shape and the therefore-green 146/146 suite; Bangla-name search unverified (no such data). Includes the per-filter and per-view evidence matrices, four root-cause classes, minimal correction options with blast radius, and the two decisions left to the owner — **O-AA** (calendar branch scope) and **O-AB** (may a search leave the visible week). **Part I (2026-11-16)** records the resolution: both decisions taken, every finding F-1…F-9 mapped to the correction that shipped and to its evidence, and the one sentence defect the browser run of the fix caught | — |
 
 ---
 
@@ -467,6 +724,7 @@ side.
 | `AMSDP_M8_Cloud_Deployment_Architecture.md` | 29,056 | Any Docker/compose/port/environment change | — |
 | `AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md` | 43,270 | Infra hardening, restart policy, health checks, container limits | — |
 | `AMSDP_Auto_Start_and_Demo_Data_Recovery_V1.0.md` | 16,196 | **Before restarting, reseeding, rebooting or re-diagnosing the local stack** — why two containers could not reach each other across the Docker bridge and the network-recreate fix (no `sudo`, no `ufw` change); the two auto-restart layers (`restart: unless-stopped` ×10 and the systemd user unit `amsdp-autostart.service`) and how they supersede the earlier deferral; the `/orgs` SSR fix; the new `_tools/` scripts (`amsdp_autostart.sh`, `install_autostart.sh`, `verify_demo_login.sh`); the live evidence (10/10 healthy, **6/6 demo logins**, 10/10 pages 200, `restarts=7`, data counts identical); and the open items **O-J**/**O-K**/**O-L**, plus carried **O-H**/**O-I** and new **O-M** | — |
+| `AMSDP_Platform_Restart_and_Redeploy_Runbook_V1.0.md` | 14,427 | **After any code change, before claiming a change is live** — why code is baked into the images and `docker compose restart` therefore redeploys nothing; the minimum action per changed path (`backend/common/` ⇒ all eight backends); `_tools/amsdp_rebuild.sh` (`--check` / `--verify` / `--all`, rebuilds only what changed, waits for `/health/ready`); the full-platform commands via `_tools/amsdp_stack.sh` and in raw compose; what a restart never does (no migrations, no re-seed, no `.env` change); the L0–L5 verification ladder; a symptom→fix table; open items **O-W** (untracked `_tools/`) and **O-X** (readiness ≠ behaviour) | — |
 
 ---
 
@@ -521,15 +779,19 @@ written there (§11).
 
 ---
 
-## `chatgpt/` — one unregistered document, folder ownership unconfirmed (open item O-D)
+## `chatgpt/` — three planning documents, two unregistered, folder ownership unconfirmed (open item O-D)
 
-`find docs -type f -name '*.md'` reports one document in a folder that is **not** among the §11
-subject folders. It is registered here so the index matches the tree (§12), but it is **not** moved
-and its ownership is not asserted (§11: uncertain ownership → report and leave in place).
+`find docs -type f -name '*.md'` reports **three** documents in a folder that is **not**
+among the §11 subject folders. One is listed here so the index matches the tree (§12); the
+other two are listed without being adopted, because their ownership is unconfirmed. None of
+them is moved (§11: uncertain ownership → report and leave in place), and none is an
+authority — business rules, MVP scope and the frozen design still govern (§1).
 
 | File | Size | Read when | Owner |
 |---|---:|---|---|
 | `AMSDP_Hackathon_Implementation_Backlog.md` | 24,229 | Needing the backlog framing that accompanied the 2026-11-14 reconciliation commit — a planning document, **not** an authority: business rules, MVP scope and the frozen design still govern (§1) | unconfirmed — folder outside the §11 set |
+| `AMSDP_Project_Handover_2026-11-12.md` | 28,984 | Needing the 2026-11-12 handover narrative. **Unregistered** by earlier revisions on purpose; listed here only so the tree count is honest | unconfirmed — folder outside the §11 set |
+| `AMSDP_Configurable_Multi-Sector_Architecture_Implementation_Plan.md` | 40,267 | Reading the post-hackathon multi-sector plan. **Unregistered** — found by the Revision 21 maintenance check (2026-11-16). Planning only: it authorizes no hackathon-scope change | unconfirmed — folder outside the §11 set |
 
 Open item: whether `docs/chatgpt/` should be folded into an existing subject folder (`audit/` or
 `governance/`) is the Product Owner's decision. Until then the file stays exactly where it is, and
