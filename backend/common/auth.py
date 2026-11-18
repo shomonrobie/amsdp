@@ -34,11 +34,21 @@ logger = logging.getLogger(__name__)
 
 # PO-RBAC-01: load active doctor assignments, resilient to missing table
 # (before the f8a1b2c3d4e5 migration is applied).
-def _load_assigned_doctor_ids(session, staff_user_id: str) -> list[str]:
+#
+# Return contract:
+#   - None: the ``staff_doctor_assignments`` table does not exist yet
+#     (pre-migration).  Callers may fall back to legacy ``StaffUser.doctor_id``.
+#   - list[str]: the table exists; may be an empty list meaning "no active
+#     assignments".  Callers must NOT fall back to legacy ``doctor_id``.
+def _load_assigned_doctor_ids(session, staff_user_id: str) -> Optional[list[str]]:
     """Return active doctor assignment IDs for a staff member.
 
-    Returns [] if the assignment table does not yet exist (pre-migration) or
-    if the staff member has no active assignments.
+    Returns None if the assignment table does not yet exist (pre-migration),
+    signalling that callers may fall back to legacy ``StaffUser.doctor_id``.
+
+    Returns an empty list if the table exists but the staff member has no
+    active assignments.  In that case callers must NOT fall back to legacy
+    ``doctor_id`` — an explicit revocation must remain effective.
 
     If the table exists but the query fails, the exception propagates so the
     caller fails closed rather than silently falling back to legacy
@@ -46,7 +56,7 @@ def _load_assigned_doctor_ids(session, staff_user_id: str) -> list[str]:
     """
     from sqlalchemy import inspect as sa_inspect
     if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
-        return []
+        return None
     rows = session.execute(
         sa.text("""
             SELECT doctor_id FROM staff_doctor_assignments
@@ -222,9 +232,11 @@ def get_current_user(
             raise HTTPException(403, "account is not active")
         # PO-RBAC-01: load explicit doctor assignments for this staff member.
         assigned = _load_assigned_doctor_ids(session, uid)
-        # Fall back to the legacy single doctor_id when no assignment rows exist,
-        # so existing users created before this migration keep working.
-        if not assigned and user.doctor_id:
+        # Fall back to the legacy single doctor_id only when the table does not
+        # exist yet (pre-migration).  When the table exists but no active rows
+        # are found (assigned == []), legacy doctor_id must NOT be used — an
+        # explicit revocation must remain effective.
+        if assigned is None and user.doctor_id:
             assigned = [user.doctor_id]
     finally:
         session.close()
@@ -256,8 +268,11 @@ def get_optional_user(
                 return None
             # PO-RBAC-01: load explicit doctor assignments for this staff member.
             assigned = _load_assigned_doctor_ids(session, uid)
-            # Fall back to the legacy single doctor_id when no assignment rows exist.
-            if not assigned and user.doctor_id:
+            # Fall back to the legacy single doctor_id only when the table does not
+            # exist yet (pre-migration).  When the table exists but no active rows
+            # are found (assigned == []), legacy doctor_id must NOT be used — an
+            # explicit revocation must remain effective.
+            if assigned is None and user.doctor_id:
                 assigned = [user.doctor_id]
         finally:
             session.close()

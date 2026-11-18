@@ -6,7 +6,7 @@ PostgreSQL-backed using the shared common.models.StaffUser model.
 import logging
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 import uuid, bcrypt, jwt
 import sqlalchemy as sa
 
@@ -26,11 +26,14 @@ from common.health import install_health
 from common.denial_audit import install_denial_audit
 
 # PO-RBAC-01: load active doctor assignments for a staff member.
-def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
+def _assigned_doctor_ids(staff_user_id: str) -> Optional[list[str]]:
     """Return the list of actively assigned doctor IDs for a staff member.
 
-    Resilient to missing table (pre-migration): returns [] if the table does
-    not exist yet.
+    Return contract:
+      - None: the ``staff_doctor_assignments`` table does not exist yet
+        (pre-migration).  Callers may fall back to legacy ``StaffUser.doctor_id``.
+      - list[str]: the table exists; may be an empty list meaning "no active
+        assignments".  Callers must NOT fall back to legacy ``doctor_id``.
 
     If the table exists but the query fails, the exception propagates so the
     caller fails closed rather than silently falling back to legacy
@@ -40,7 +43,7 @@ def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
     try:
         from sqlalchemy import inspect as sa_inspect
         if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
-            return []
+            return None
         rows = session.execute(
             sa.text("""
                 SELECT doctor_id FROM staff_doctor_assignments
@@ -66,8 +69,11 @@ app.include_router(identity_router)
 
 def _user_to_response(user: StaffUser) -> StaffUserResponse:
     assigned = _assigned_doctor_ids(user.id)
-    # Fall back to legacy single doctor_id when no assignment rows exist.
-    if not assigned and user.doctor_id:
+    # Fall back to legacy single doctor_id only when the table does not exist
+    # yet (pre-migration).  When the table exists but no active rows are found
+    # (assigned == []), legacy doctor_id must NOT be used — an explicit
+    # revocation must remain effective.
+    if assigned is None and user.doctor_id:
         assigned = [user.doctor_id]
     return StaffUserResponse(
         id=user.id,
