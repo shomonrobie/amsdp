@@ -21,7 +21,15 @@ router = APIRouter()
 
 # PO-RBAC-01: load active doctor assignments for a staff member.
 def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
-    """Return the list of actively assigned doctor IDs for a staff member."""
+    """Return the list of actively assigned doctor IDs for a staff member.
+
+    Resilient to missing table (pre-migration): returns [] if the table does
+    not exist yet.
+
+    If the table exists but the query fails, the exception propagates so the
+    caller fails closed rather than silently falling back to legacy
+    ``StaffUser.doctor_id`` (which could restore access after revocation).
+    """
     session = SessionFactory()
     try:
         from sqlalchemy import inspect as sa_inspect
@@ -34,8 +42,6 @@ def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
             """), {"uid": staff_user_id}
         ).scalars().all()
         return list(rows)
-    except Exception:
-        return []
     finally:
         session.close()
 

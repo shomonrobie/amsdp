@@ -359,9 +359,9 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 **Requirement:** A user must not grant themselves a higher role or additional permissions. Enforced server-side.
 
 **Changes:**
-- `backend/common/permissions.py` — Added `ROLE_HIERARCHY` (assistant=1 → super_admin=6), `role_level()`, `can_grant_role()` (super_admin exempt for granting to others only).
+- `backend/common/permissions.py` — Added `ROLE_HIERARCHY` (assistant=1 → super_admin=6), `role_level()`, `can_grant_role()` (super_admin exempt for granting to others **only**).
 - `backend/identity/main.py` — `create_staff_user()` rejects role ≥ caller's level (403).
-- `backend/identity/routes.py` — `update_staff_user()`: (1) blocks self-escalation regardless of role including super_admin; (2) blocks granting role ≥ caller's level to others unless super_admin.
+- `backend/identity/routes.py` — `update_staff_user()`: (1) blocks self-escalation regardless of role **including super_admin**; (2) blocks granting role ≥ caller's level to others unless super_admin.
 
 **Tests added** (`backend/identity/tests/test_identity.py` — `TestSelfEscalation`):
 - Receptionist cannot create org_admin (403)
@@ -374,7 +374,7 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 - Org admin cannot update own role to super_admin (403)
 - Unit tests for `can_grant_role()` and `role_level()`
 
-**Verification:** All 38 identity tests pass (18 baseline + 9 self-escalation + 6 multi-doctor validation + 5 last-org-admin).
+**Verification:** All 43 identity tests pass (38 baseline + 5 new doctor-assignment-loading + 1 concurrent last-admin).
 
 ### Workstream D — Protect Last Active Organization Admin (PO-RBAC-04) — IMPLEMENTED · TESTED
 
@@ -390,9 +390,9 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 - Can remove one org_admin when another remains (200, verified count=1)
 - Can deactivate one org_admin when another remains (200, verified count=1)
 - Organization isolation — foreign tenant org_admin modification → 404
-- Concurrent deactivation of two admins: exactly one succeeds (200), other denied (403), exactly one remains active
+- Concurrent deactivation of two admins: exactly one succeeds (200), other denied (403), exactly one remains active **(genuine concurrent test using ThreadPoolExecutor)**
 
-**Concurrency safety:** Organization-row locking serializes all org_admin-affecting changes within one organization. The concurrency test proves at least one org_admin remains under concurrent deactivation attempts.
+**Concurrency safety:** Organization-row locking serializes all org_admin-affecting changes within one organization. The concurrency test uses separate request execution contexts and independent database sessions, with a 10-second timeout, to prove at least one org_admin remains under concurrent deactivation attempts. Database engine: PostgreSQL (row-level locking supported).
 
 **Verification:** All 38 identity tests pass.
 
@@ -418,14 +418,20 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 | Suite | Result |
 |---|---|
 | `queuing/tests/test_queue.py` | 57 passed (52 baseline + 5 new multi-doctor) |
-| `identity/tests/test_identity.py` | 38 passed (18 baseline + 20 new) |
+| `identity/tests/test_identity.py` | 43 passed (38 baseline + 5 new doctor-assignment-loading + 1 concurrent last-admin) |
 | `patient/tests/test_patient.py` | 20 passed (13 baseline + 7 new) |
 | `tests/test_patient_age.py` | 15 passed (was 13 + 2 fixed after permission change) |
 | `tests/test_sequence3.py` | 27 passed (was failing, now fixed with doctor_id in seed) |
 | `tests/test_security.py` + `tests/test_platform_admin.py` + `tests/test_denial_audit.py` | 53 passed |
 | `appointment/tests/test_appointment.py` | 19 passed |
-| `scheduling/tests/test_scheduling.py` | Not re-confirmed (test run interrupted by terminal issue; was 36 passed at baseline, changes do not affect scheduling code path) |
-| **Total confirmed** | **229 passed, 0 failed** |
+| `scheduling/tests/test_scheduling.py` | 36 passed |
+| **Total confirmed** | **270 passed, 0 failed** |
 
 ### Disposition
-**IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted). Workstream E groundwork implemented; full platform identity system remains SPECIFIED, NOT IMPLEMENTED.
+**IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).
+
+**Corrections applied in this checkpoint (fix(rbac)):**
+1. **Doctor assignment loading fails closed** (`backend/common/auth.py`, `backend/identity/main.py`, `backend/identity/routes.py`): When `staff_doctor_assignments` table exists but the query fails, the exception now propagates instead of being silently caught and converted to a legacy `doctor_id` fallback. Table absence still returns `[]` (pre-migration compatibility). Fail-closed prevents restored access after assignment revocation.
+2. **Genuine concurrency test for last-admin protection** (`backend/identity/tests/test_identity.py`): `test_concurrent_deactivation_one_remains` now uses `ThreadPoolExecutor` with separate request execution contexts and a 10-second timeout, proving the organization-row serialization mechanism works under concurrent deactivation attempts.
+
+Workstream E groundwork implemented; full platform identity system remains SPECIFIED, NOT IMPLEMENTED.

@@ -38,23 +38,22 @@ def _load_assigned_doctor_ids(session, staff_user_id: str) -> list[str]:
     """Return active doctor assignment IDs for a staff member.
 
     Returns [] if the assignment table does not yet exist (pre-migration) or
-    if the staff member has no active assignments.  Never raises.
+    if the staff member has no active assignments.
+
+    If the table exists but the query fails, the exception propagates so the
+    caller fails closed rather than silently falling back to legacy
+    ``StaffUser.doctor_id`` (which could restore access after revocation).
     """
-    try:
-        from sqlalchemy import inspect as sa_inspect
-        if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
-            return []
-        rows = session.execute(
-            sa.text("""
-                SELECT doctor_id FROM staff_doctor_assignments
-                WHERE staff_user_id = :uid AND status = 'active'
-            """), {"uid": staff_user_id}
-        ).scalars().all()
-        return list(rows)
-    except Exception:
-        logger.debug("staff_doctor_assignments table not available yet; "
-                     "falling back to legacy doctor_id only")
+    from sqlalchemy import inspect as sa_inspect
+    if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
         return []
+    rows = session.execute(
+        sa.text("""
+            SELECT doctor_id FROM staff_doctor_assignments
+            WHERE staff_user_id = :uid AND status = 'active'
+        """), {"uid": staff_user_id}
+    ).scalars().all()
+    return list(rows)
 
 
 # PO-RBAC-04: protect the last active Organization Admin.

@@ -31,6 +31,10 @@ def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
 
     Resilient to missing table (pre-migration): returns [] if the table does
     not exist yet.
+
+    If the table exists but the query fails, the exception propagates so the
+    caller fails closed rather than silently falling back to legacy
+    ``StaffUser.doctor_id`` (which could restore access after revocation).
     """
     session = SessionFactory()
     try:
@@ -44,9 +48,6 @@ def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
             """), {"uid": staff_user_id}
         ).scalars().all()
         return list(rows)
-    except Exception:
-        # Table not yet created by migration; legacy doctor_id still works.
-        return []
     finally:
         session.close()
 

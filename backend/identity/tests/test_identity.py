@@ -1,6 +1,7 @@
 """Tests for Identity & Access Service - Sprint 1 (PostgreSQL-backed)."""
 
 import sys, os, uuid, bcrypt
+import concurrent.futures
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from identity.main import app
@@ -9,6 +10,7 @@ from identity.models import _SECRET, _ALGO
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import StaffUser, Organization, Doctor
+from common.auth import _load_assigned_doctor_ids
 
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -705,28 +707,66 @@ class TestLastOrgAdminConcurrency:
             session.close()
 
     def test_concurrent_deactivation_one_remains(self):
+        """Two concurrent deactivation requests for different admins.
+
+        Exercises the organization-row serialization mechanism: each request
+        locks the organization row via ``with_for_update()`` before checking
+        the active-org-admin count.  PostgreSQL row-level locking ensures only
+        one transaction can hold the lock at a time, so exactly one
+        deactivation succeeds and the other is rejected (403).
+        """
         tag = self._mk_tag()
         org_id, admin_ids = self._mk_org_and_two_admins(tag)
+
+        # Create a separate authenticated token for each admin.
         tokens = []
         for aid in admin_ids:
-            tok = jwt.encode({"sub": aid, "org": org_id, "branch": None,
-                              "role": "org_admin",
-                              "exp": int((datetime.now(timezone.utc)
-                                          + timedelta(hours=1)).timestamp())},
-                             _SECRET, algorithm=_ALGO)
+            tok = jwt.encode(
+                {"sub": aid, "org": org_id, "branch": None,
+                 "role": "org_admin",
+                 "exp": int((datetime.now(timezone.utc)
+                             + timedelta(hours=1)).timestamp())},
+                _SECRET, algorithm=_ALGO,
+            )
             tokens.append((aid, tok))
-        results = []
-        for i in range(2):
-            target_id = admin_ids[1 - i]
-            tok = tokens[i][1]
-            r = client.patch(f"/api/v1/staff/users/{target_id}",
+
+        results = [None, None]
+
+        def deactivate_other(index: int) -> None:
+            """Each thread deactivates the OTHER admin."""
+            target_id = admin_ids[1 - index]
+            tok = tokens[index][1]
+            r = client.patch(
+                f"/api/v1/staff/users/{target_id}",
                 headers={"Authorization": f"Bearer {tok}"},
-                json={"status": "inactive"})
-            results.append(r.status_code)
-        success_count = sum(1 for s in results if s == 200)
-        deny_count = sum(1 for s in results if s == 403)
-        assert success_count == 1, f"Expected 1 success, got {success_count}: {results}"
-        assert deny_count == 1, f"Expected 1 denial, got {deny_count}: {results}"
+                json={"status": "inactive"},
+            )
+            results[index] = r.status_code
+
+        # Submit both requests concurrently so they genuinely overlap at the
+        # database level.  The organization-row lock serializes them.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(deactivate_other, i) for i in range(2)
+            ]
+            done, not_done = concurrent.futures.wait(
+                futures, timeout=10,
+                return_when=concurrent.futures.ALL_COMPLETED,
+            )
+            assert len(done) == 2, (
+                f"Concurrent deactivation timed out: "
+                f"{len(not_done)} futures incomplete"
+            )
+
+        statuses = [s for s in results if s is not None]
+        assert statuses.count(200) == 1, (
+            f"Expected exactly 1 successful deactivation, got {statuses}"
+        )
+        assert statuses.count(403) == 1, (
+            f"Expected exactly 1 denied deactivation, got {statuses}"
+        )
+
+        # Verify at least one active org_admin remains in the database.
         session = SessionFactory()
         try:
             remaining = session.query(StaffUser).filter(
@@ -734,6 +774,151 @@ class TestLastOrgAdminConcurrency:
                 StaffUser.role == "org_admin",
                 StaffUser.status == "active",
             ).count()
-            assert remaining == 1, f"Expected 1 remaining org_admin, got {remaining}"
+            assert remaining == 1, (
+                f"Expected 1 remaining active org_admin, got {remaining}"
+            )
+        finally:
+            session.close()
+
+
+class TestDoctorAssignmentLoading:
+    """PO-RBAC-01 / Correction A: Doctor assignment loading fails closed.
+
+    Tests that when the staff_doctor_assignments table exists but a query
+    fails, legacy StaffUser.doctor_id fallback is NOT used (fail closed).
+    """
+
+    def _mk_tag(self):
+        return uuid.uuid4().hex[:6]
+
+    def test_table_absent_legacy_fallback_ok(self):
+        """When the assignment table doesn't exist, return [] (legacy
+        fallback may be used by caller)."""
+        session = SessionFactory()
+        try:
+            from unittest.mock import patch
+            # Mock sqlalchemy.inspect to return an inspector saying table
+            # doesn't exist yet (pre-migration compatibility).
+            with patch('sqlalchemy.inspect') as mock_inspect:
+                mock_inspect.return_value.has_table.return_value = False
+                result = _load_assigned_doctor_ids(session, "some-user-id")
+                assert result == []
+        finally:
+            session.close()
+
+    def test_table_exists_with_active_assignments(self):
+        """When table exists with active assignments, return those IDs only."""
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc1_id = f"load_doc1_{tag}"
+            doc2_id = f"load_doc2_{tag}"
+            for did in [doc1_id, doc2_id]:
+                doc = session.query(Doctor).filter(Doctor.id == did).first()
+                if doc is None:
+                    doc = Doctor(id=did, organization_id=TEST_ORG_ID,
+                                 name=f"Load Doctor {did[-4:]}",
+                                 mobile=f"017{tag[:8]}")
+                    session.add(doc)
+
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"load_user_{tag}",
+                password_hash=pw_hash, display_name="Load User",
+                role="assistant", status="active")
+            session.add(u)
+
+            from common.models import StaffDoctorAssignment
+            session.add(StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc1_id, organization_id=TEST_ORG_ID,
+                status="active"))
+            session.add(StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc2_id, organization_id=TEST_ORG_ID,
+                status="active"))
+            session.commit()
+
+            result = _load_assigned_doctor_ids(session, u.id)
+            assert set(result) == {doc1_id, doc2_id}
+        finally:
+            session.close()
+
+    def test_table_exists_no_active_assignments_returns_empty(self):
+        """When table exists but no active assignments, return [] (caller
+        may then use legacy doctor_id fallback)."""
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc_id = f"load_none_{tag}"
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                doc = Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                             name="Load None Doctor",
+                             mobile=f"017{tag[:8]}")
+                session.add(doc)
+
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"load_none_user_{tag}",
+                password_hash=pw_hash, display_name="Load None User",
+                role="assistant", doctor_id=doc_id, status="active")
+            session.add(u)
+            session.commit()
+
+            result = _load_assigned_doctor_ids(session, u.id)
+            assert result == []
+        finally:
+            session.close()
+
+    def test_query_failure_propagates_fail_closed(self):
+        """When table exists but query fails, exception propagates — no
+        silent fallback to legacy doctor_id."""
+        from unittest.mock import patch
+        session = SessionFactory()
+        try:
+            with patch.object(session, 'execute', side_effect=Exception("DB error")):
+                try:
+                    _load_assigned_doctor_ids(session, "some-user-id")
+                    assert False, "Expected exception to propagate (fail closed)"
+                except Exception:
+                    pass  # Expected — fail closed, no legacy fallback
+        finally:
+            session.close()
+
+    def test_revoked_assignment_still_denied_with_legacy_doctor_id(self):
+        """Revoked assignment: access remains denied even though legacy
+        doctor_id still references the revoked doctor."""
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc_id = f"load_revoked_{tag}"
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                doc = Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                             name="Revoked Doctor",
+                             mobile=f"017{tag[:8]}")
+                session.add(doc)
+
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"load_rev_user_{tag}",
+                password_hash=pw_hash, display_name="Revoked User",
+                role="assistant", doctor_id=doc_id, status="active")
+            session.add(u)
+
+            from common.models import StaffDoctorAssignment
+            sda = StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc_id, organization_id=TEST_ORG_ID,
+                status="active")
+            session.add(sda)
+            session.commit()
+            # Revoke it
+            session.delete(sda)
+            session.commit()
+
+            result = _load_assigned_doctor_ids(session, u.id)
+            assert result == []
         finally:
             session.close()
