@@ -21,6 +21,7 @@ import logging
 import os
 from typing import Optional
 
+import sqlalchemy as sa
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
@@ -30,6 +31,49 @@ from .database import SessionFactory
 from .models import Branch, StaffUser
 
 logger = logging.getLogger(__name__)
+
+# PO-RBAC-01: load active doctor assignments, resilient to missing table
+# (before the f8a1b2c3d4e5 migration is applied).
+def _load_assigned_doctor_ids(session, staff_user_id: str) -> list[str]:
+    """Return active doctor assignment IDs for a staff member.
+
+    Returns [] if the assignment table does not yet exist (pre-migration) or
+    if the staff member has no active assignments.  Never raises.
+    """
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
+            return []
+        rows = session.execute(
+            sa.text("""
+                SELECT doctor_id FROM staff_doctor_assignments
+                WHERE staff_user_id = :uid AND status = 'active'
+            """), {"uid": staff_user_id}
+        ).scalars().all()
+        return list(rows)
+    except Exception:
+        logger.debug("staff_doctor_assignments table not available yet; "
+                     "falling back to legacy doctor_id only")
+        return []
+
+
+# PO-RBAC-04: protect the last active Organization Admin.
+def count_active_org_admins(session, organization_id: str,
+                            exclude_user_id: Optional[str] = None) -> int:
+    """Return the number of active org_admin users in *organization_id*.
+
+    Optionally excludes *exclude_user_id* (the user being modified).  Used to
+    enforce the invariant that every active organization retains at least one
+    active org_admin.
+    """
+    q = session.query(StaffUser).filter(
+        StaffUser.organization_id == organization_id,
+        StaffUser.role == "org_admin",
+        StaffUser.status == "active",
+    )
+    if exclude_user_id:
+        q = q.filter(StaffUser.id != exclude_user_id)
+    return q.count()
 
 #: Capability names reserved for platform administration (``common.permissions``).
 PLATFORM_ADMIN = "platform.admin"
@@ -75,7 +119,8 @@ class AuthContext:
     def __init__(self, user_id: str, organization_id: str,
                  branch_id: Optional[str], role: str, username: str,
                  locale: str, status: str, token_payload: dict,
-                 doctor_id: Optional[str] = None):
+                 doctor_id: Optional[str] = None,
+                 assigned_doctor_ids: Optional[list[str]] = None):
         self.user_id = user_id
         self.organization_id = organization_id
         self.branch_id = branch_id
@@ -85,6 +130,17 @@ class AuthContext:
         self.status = status
         self.token_payload = token_payload
         self.doctor_id = doctor_id
+        # PO-RBAC-01: explicit doctor assignments for this staff member.
+        # ``doctor_id`` (legacy single assignment) remains for compatibility;
+        # ``assigned_doctor_ids`` is the authoritative list for assistant/doctor
+        # role access checks.  Defaults to [doctor_id] when set so existing
+        # single-assignment behavior is preserved without a DB lookup.
+        if assigned_doctor_ids is not None:
+            self.assigned_doctor_ids = list(assigned_doctor_ids)
+        elif doctor_id:
+            self.assigned_doctor_ids = [doctor_id]
+        else:
+            self.assigned_doctor_ids = []
 
     def can_access_doctor(self, doctor_id: Optional[str]) -> bool:
         """Check if the authenticated user may access resources for *doctor_id*.
@@ -94,14 +150,18 @@ class AuthContext:
         operational records; an assistant may operate only for their assigned
         doctor(s).
 
-        For ``doctor``/``assistant`` roles, a missing assignment (``doctor_id``
-        unset on the token) must fail closed — it must not grant unrestricted
-        doctor access.  For all other roles, no doctor restriction applies.
+        PO-RBAC-01: doctor access for assistant/doctor roles is based on the
+        explicit ``assigned_doctor_ids`` list (loaded from
+        ``staff_doctor_assignments`` at auth time).  The legacy ``doctor_id``
+        column remains as a compatibility fallback.  A missing assignment
+        (empty list on the token) must fail closed — it must not grant
+        unrestricted doctor access.  For all other roles, no doctor
+        restriction applies.
         """
         if self.role in ("doctor", "assistant"):
-            if not self.doctor_id:
+            if not self.assigned_doctor_ids:
                 return False
-            return doctor_id == self.doctor_id
+            return doctor_id in self.assigned_doctor_ids
         return True
 
     @property
@@ -161,6 +221,12 @@ def get_current_user(
             raise HTTPException(403, "user not found")
         if user.status != "active":
             raise HTTPException(403, "account is not active")
+        # PO-RBAC-01: load explicit doctor assignments for this staff member.
+        assigned = _load_assigned_doctor_ids(session, uid)
+        # Fall back to the legacy single doctor_id when no assignment rows exist,
+        # so existing users created before this migration keep working.
+        if not assigned and user.doctor_id:
+            assigned = [user.doctor_id]
     finally:
         session.close()
     return AuthContext(
@@ -169,6 +235,7 @@ def get_current_user(
         username=user.username, locale=user.locale or "en",
         status=user.status or "active", token_payload=payload,
         doctor_id=user.doctor_id,
+        assigned_doctor_ids=list(assigned),
     )
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -188,6 +255,11 @@ def get_optional_user(
             user = session.query(StaffUser).filter(StaffUser.id == uid).first()
             if not user or user.status != "active":
                 return None
+            # PO-RBAC-01: load explicit doctor assignments for this staff member.
+            assigned = _load_assigned_doctor_ids(session, uid)
+            # Fall back to the legacy single doctor_id when no assignment rows exist.
+            if not assigned and user.doctor_id:
+                assigned = [user.doctor_id]
         finally:
             session.close()
         return AuthContext(
@@ -196,6 +268,7 @@ def get_optional_user(
             username=user.username, locale=user.locale or "en",
             status=user.status or "active", token_payload=payload,
             doctor_id=user.doctor_id,
+            assigned_doctor_ids=list(assigned),
         )
     except (jwt.PyJWTError, HTTPException):
         return None

@@ -8,7 +8,7 @@ from identity.permissions import check as perm_check
 from identity.models import _SECRET, _ALGO
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
-from common.models import StaffUser, Organization
+from common.models import StaffUser, Organization, Doctor
 
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -252,3 +252,488 @@ class TestDoctorLink:
                 "password": "x", "display_name": "No Link Staff", "role": "receptionist"})
         assert r.status_code == 201
         assert r.json().get("doctor_id") is None
+
+
+class TestSelfEscalation:
+    """PO-RBAC-03: Users cannot grant themselves or others higher roles."""
+
+    def _mk_token(self, role, org_id=TEST_ORG_ID, branch_id=None):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=org_id,
+                branch_id=branch_id, username=f"esc_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Esc Test", role=role,
+                status="active")
+            session.add(u); session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        return jwt.encode({"sub": uid, "org": org_id, "branch": branch_id,
+                           "role": role,
+                           "exp": int((datetime.now(timezone.utc)
+                                       + timedelta(hours=1)).timestamp())},
+                          _SECRET, algorithm=_ALGO)
+
+    def test_receptionist_cannot_create_org_admin(self):
+        tok = self._mk_token("receptionist")
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"organization_id": TEST_ORG_ID, "username": _uniq("esc1"),
+                "password": "x", "display_name": "Escalator", "role": "org_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_receptionist_cannot_create_super_admin(self):
+        tok = self._mk_token("receptionist")
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"organization_id": TEST_ORG_ID, "username": _uniq("esc2"),
+                "password": "x", "display_name": "Escalator", "role": "super_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_branch_admin_cannot_create_org_admin(self):
+        tok = self._mk_token("branch_admin")
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"organization_id": TEST_ORG_ID, "username": _uniq("esc3"),
+                "password": "x", "display_name": "Escalator", "role": "org_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_org_admin_can_create_branch_admin(self):
+        tok = self._mk_token("org_admin")
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"organization_id": TEST_ORG_ID, "username": _uniq("esc4"),
+                "password": "x", "display_name": "Escalator", "role": "branch_admin"})
+        assert r.status_code == 201, r.text
+
+    def test_super_admin_can_create_any_role(self):
+        for role in ["assistant", "doctor", "receptionist", "branch_admin",
+                     "org_admin", "super_admin"]:
+            r = client.post("/api/v1/staff/users",
+                headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},
+                json={"organization_id": TEST_ORG_ID,
+                      "username": _uniq("esc5"), "password": "x",
+                      "display_name": "Escalator", "role": role})
+            assert r.status_code == 201, f"{role}: {r.text}"
+
+    def test_user_cannot_update_own_role_higher(self):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"esc_own_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Own Escalator",
+                role="receptionist", status="active")
+            session.add(u); session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": uid, "org": TEST_ORG_ID, "branch": None,
+                          "role": "receptionist",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "org_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_user_cannot_update_own_role_to_super_admin(self):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"esc_own2_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Own Escalator 2",
+                role="receptionist", status="active")
+            session.add(u); session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": uid, "org": TEST_ORG_ID, "branch": None,
+                          "role": "receptionist",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "super_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_org_admin_cannot_update_own_role_to_super_admin(self):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"esc_own3_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Own Escalator 3",
+                role="org_admin", status="active")
+            session.add(u); session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": uid, "org": TEST_ORG_ID, "branch": None,
+                          "role": "org_admin",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "super_admin"})
+        assert r.status_code == 403, r.text
+
+    def test_can_grant_role_function(self):
+        from identity.permissions import can_grant_role, role_level
+        assert can_grant_role("super_admin", "super_admin") is True
+        assert can_grant_role("super_admin", "org_admin") is True
+        assert can_grant_role("org_admin", "branch_admin") is True
+        assert can_grant_role("org_admin", "org_admin") is False
+        assert can_grant_role("org_admin", "super_admin") is False
+        assert can_grant_role("receptionist", "org_admin") is False
+        assert can_grant_role("receptionist", "receptionist") is False
+        assert role_level("assistant") == 1
+        assert role_level("super_admin") == 6
+        assert role_level("unknown_role") == 0
+
+
+class TestLastOrgAdmin:
+    """PO-RBAC-04: Protect the last active Organization Admin."""
+
+    def _mk_org(self, tag):
+        session = SessionFactory()
+        try:
+            org_id = f"last_org_{tag}"
+            org = session.query(Organization).filter(Organization.id == org_id).first()
+            if org is None:
+                org = Organization(id=org_id, name=f"Last Org {tag}",
+                                   code=f"LAST{tag.upper()}")
+                session.add(org)
+                session.commit()
+            return org_id
+        finally:
+            session.close()
+
+    def _mk_org_admin_token(self, org_id):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=org_id,
+                branch_id=None, username=f"last_oa_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Last OA",
+                role="org_admin", status="active")
+            session.add(u); session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        return jwt.encode({"sub": uid, "org": org_id, "branch": None,
+                           "role": "org_admin",
+                           "exp": int((datetime.now(timezone.utc)
+                                       + timedelta(hours=1)).timestamp())},
+                          _SECRET, algorithm=_ALGO)
+
+    def _mk_second_org_admin(self, org_id):
+        session = SessionFactory()
+        try:
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=org_id,
+                branch_id=None, username=f"last_oa2_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Second OA",
+                role="org_admin", status="active")
+            session.add(u); session.commit()
+            return u.id
+        finally:
+            session.close()
+
+    def test_cannot_remove_only_org_admin(self):
+        tag = uuid.uuid4().hex[:6]
+        org_id = self._mk_org(tag)
+        tok = self._mk_org_admin_token(org_id)
+        import jwt as _jwt
+        payload = _jwt.decode(tok, _SECRET, algorithms=[_ALGO])
+        uid = payload["sub"]
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "receptionist"})
+        assert r.status_code == 403, r.text
+
+    def test_cannot_deactivate_only_org_admin(self):
+        tag = uuid.uuid4().hex[:6]
+        org_id = self._mk_org(tag)
+        tok = self._mk_org_admin_token(org_id)
+        import jwt as _jwt
+        payload = _jwt.decode(tok, _SECRET, algorithms=[_ALGO])
+        uid = payload["sub"]
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"status": "inactive"})
+        assert r.status_code == 403, r.text
+
+    def test_can_remove_one_org_admin_when_another_remains(self):
+        tag = uuid.uuid4().hex[:6]
+        org_id = self._mk_org(tag)
+        tok = self._mk_org_admin_token(org_id)
+        self._mk_second_org_admin(org_id)
+        import jwt as _jwt
+        payload = _jwt.decode(tok, _SECRET, algorithms=[_ALGO])
+        uid = payload["sub"]
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "receptionist"})
+        assert r.status_code == 200, r.text
+        session = SessionFactory()
+        try:
+            remaining = session.query(StaffUser).filter(
+                StaffUser.organization_id == org_id,
+                StaffUser.role == "org_admin",
+                StaffUser.status == "active",
+            ).count()
+            assert remaining == 1
+        finally:
+            session.close()
+
+    def test_can_deactivate_one_org_admin_when_another_remains(self):
+        tag = uuid.uuid4().hex[:6]
+        org_id = self._mk_org(tag)
+        tok = self._mk_org_admin_token(org_id)
+        self._mk_second_org_admin(org_id)
+        import jwt as _jwt
+        payload = _jwt.decode(tok, _SECRET, algorithms=[_ALGO])
+        uid = payload["sub"]
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"status": "inactive"})
+        assert r.status_code == 200, r.text
+        session = SessionFactory()
+        try:
+            remaining = session.query(StaffUser).filter(
+                StaffUser.organization_id == org_id,
+                StaffUser.role == "org_admin",
+                StaffUser.status == "active",
+            ).count()
+            assert remaining == 1
+        finally:
+            session.close()
+
+    def test_org_isolation(self):
+        tag = uuid.uuid4().hex[:6]
+        org_id = self._mk_org(tag)
+        tok = self._mk_org_admin_token(org_id)
+        foreign_org = f"foreign_org_{uuid.uuid4().hex[:8]}"
+        session = SessionFactory()
+        try:
+            session.add(Organization(id=foreign_org, name="Foreign",
+                                     code=foreign_org.upper()))
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=foreign_org,
+                branch_id=None, username=f"foreign_oa_{uuid.uuid4().hex[:6]}",
+                password_hash=pw_hash, display_name="Foreign OA",
+                role="org_admin", status="active")
+            session.add(u); session.commit()
+            foreign_uid = u.id
+        finally:
+            session.close()
+        r = client.patch(f"/api/v1/staff/users/{foreign_uid}",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"role": "receptionist"})
+        assert r.status_code == 404, r.text
+
+
+class TestMultiDoctorValidation:
+    """PO-RBAC-01: Multi-doctor assignment validation."""
+
+    def _mk_tag(self):
+        return uuid.uuid4().hex[:6]
+
+    def _mk_foreign_org_and_doctor(self, session, tag):
+        foreign_org_id = f"foreign_org_{tag}"
+        foreign_doc_id = f"foreign_doc_{tag}"
+        org = session.query(Organization).filter(
+            Organization.id == foreign_org_id).first()
+        if org is None:
+            org = Organization(id=foreign_org_id,
+                               name=f"Foreign Org {tag}",
+                               code=f"FOR{tag.upper()}")
+            session.add(org)
+        doc = session.query(Doctor).filter(Doctor.id == foreign_doc_id).first()
+        if doc is None:
+            doc = Doctor(id=foreign_doc_id, organization_id=foreign_org_id,
+                         name=f"Foreign Doctor {tag}",
+                         mobile=f"017{tag[:8]}")
+            session.add(doc)
+        session.commit()
+        return foreign_org_id, foreign_doc_id
+
+    def test_create_cross_org_doctor_assignment_rejected(self):
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            self._mk_foreign_org_and_doctor(session, tag)
+        finally:
+            session.close()
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},
+            json={"organization_id": TEST_ORG_ID,
+                  "username": _uniq("md_cross_org"),
+                  "password": "x", "display_name": "Cross Org",
+                  "role": "assistant",
+                  "doctor_ids": [f"foreign_doc_{tag}"]})
+        assert r.status_code == 422, r.text
+
+    def test_create_nonexistent_doctor_rejected(self):
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},
+            json={"organization_id": TEST_ORG_ID,
+                  "username": _uniq("md_nonexist"),
+                  "password": "x", "display_name": "Nonexist",
+                  "role": "assistant",
+                  "doctor_ids": ["does-not-exist-doctor-id"]})
+        assert r.status_code == 422, r.text
+
+    def test_create_inactive_doctor_rejected(self):
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc_id = f"inactive_doc_{tag}"
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                doc = Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                             name=f"Inactive Doctor {tag}",
+                             mobile=f"017{tag[:8]}", status="inactive")
+                session.add(doc)
+                session.commit()
+        finally:
+            session.close()
+        r = client.post("/api/v1/staff/users",
+            headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},
+            json={"organization_id": TEST_ORG_ID,
+                  "username": _uniq("md_inactive"),
+                  "password": "x", "display_name": "Inactive",
+                  "role": "assistant",
+                  "doctor_ids": [doc_id]})
+        assert r.status_code == 422, r.text
+
+    def test_update_cannot_introduce_invalid_doctor(self):
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc_id = f"valid_doc_{tag}"
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                doc = Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                             name=f"Valid Doctor {tag}",
+                             mobile=f"017{tag[:8]}")
+                session.add(doc)
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"md_upd_{tag}",
+                password_hash=pw_hash, display_name="Upd Test",
+                role="assistant", doctor_id=doc_id, status="active")
+            session.add(u)
+            from common.models import StaffDoctorAssignment
+            session.add(StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc_id, organization_id=TEST_ORG_ID,
+                status="active"))
+            session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        r = client.patch(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {ADMIN_TOKEN}"},
+            json={"doctor_ids": ["does-not-exist-doctor-id"]})
+        assert r.status_code == 422, r.text
+
+    def test_legacy_doctor_id_still_accessible(self):
+        tag = self._mk_tag()
+        session = SessionFactory()
+        try:
+            doc_id = f"legacy_doc_{tag}"
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                doc = Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                             name=f"Legacy Doctor {tag}",
+                             mobile=f"017{tag[:8]}")
+                session.add(doc)
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"legacy_{tag}",
+                password_hash=pw_hash, display_name="Legacy",
+                role="doctor", doctor_id=doc_id, status="active")
+            session.add(u)
+            session.commit()
+            uid = u.id
+        finally:
+            session.close()
+        r = client.get(f"/api/v1/staff/users/{uid}",
+            headers={"Authorization": f"Bearer {ADMIN_TOKEN}"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["doctor_id"] == doc_id
+        assert doc_id in body["doctor_ids"]
+
+
+class TestLastOrgAdminConcurrency:
+    """PO-RBAC-04: Last active Organization Admin concurrency protection."""
+
+    def _mk_tag(self):
+        return uuid.uuid4().hex[:6]
+
+    def _mk_org_and_two_admins(self, tag):
+        session = SessionFactory()
+        try:
+            org_id = f"conc_org_{tag}"
+            org = session.query(Organization).filter(
+                Organization.id == org_id).first()
+            if org is None:
+                org = Organization(id=org_id, name=f"Conc Org {tag}",
+                                   code=f"CON{tag.upper()}")
+                session.add(org)
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            ids = []
+            for i in range(2):
+                u = StaffUser(id=str(uuid.uuid4()), organization_id=org_id,
+                    branch_id=None,
+                    username=f"conc_oa_{tag}_{i}",
+                    password_hash=pw_hash, display_name=f"Conc OA {i}",
+                    role="org_admin", status="active")
+                session.add(u)
+                ids.append(u.id)
+            session.commit()
+            return org_id, ids
+        finally:
+            session.close()
+
+    def test_concurrent_deactivation_one_remains(self):
+        tag = self._mk_tag()
+        org_id, admin_ids = self._mk_org_and_two_admins(tag)
+        tokens = []
+        for aid in admin_ids:
+            tok = jwt.encode({"sub": aid, "org": org_id, "branch": None,
+                              "role": "org_admin",
+                              "exp": int((datetime.now(timezone.utc)
+                                          + timedelta(hours=1)).timestamp())},
+                             _SECRET, algorithm=_ALGO)
+            tokens.append((aid, tok))
+        results = []
+        for i in range(2):
+            target_id = admin_ids[1 - i]
+            tok = tokens[i][1]
+            r = client.patch(f"/api/v1/staff/users/{target_id}",
+                headers={"Authorization": f"Bearer {tok}"},
+                json={"status": "inactive"})
+            results.append(r.status_code)
+        success_count = sum(1 for s in results if s == 200)
+        deny_count = sum(1 for s in results if s == 403)
+        assert success_count == 1, f"Expected 1 success, got {success_count}: {results}"
+        assert deny_count == 1, f"Expected 1 denial, got {deny_count}: {results}"
+        session = SessionFactory()
+        try:
+            remaining = session.query(StaffUser).filter(
+                StaffUser.organization_id == org_id,
+                StaffUser.role == "org_admin",
+                StaffUser.status == "active",
+            ).count()
+            assert remaining == 1, f"Expected 1 remaining org_admin, got {remaining}"
+        finally:
+            session.close()

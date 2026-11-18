@@ -8,13 +8,14 @@ from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 import uuid, bcrypt, jwt
+import sqlalchemy as sa
 
 from models import (
     StaffUserCreate, StaffUserLogin, StaffUserUpdate,
     StaffUserResponse, TokenResponse, PermissionCheck,
     _SECRET, _ALGO, _TOKEN_HOURS,
 )
-from permissions import check as perm_check, PERMISSIONS
+from permissions import check as perm_check, PERMISSIONS, can_grant_role
 
 from common.database import SessionFactory
 from common.models import StaffUser
@@ -23,6 +24,31 @@ from common.audit import record_audit
 from common import login_throttle
 from common.health import install_health
 from common.denial_audit import install_denial_audit
+
+# PO-RBAC-01: load active doctor assignments for a staff member.
+def _assigned_doctor_ids(staff_user_id: str) -> list[str]:
+    """Return the list of actively assigned doctor IDs for a staff member.
+
+    Resilient to missing table (pre-migration): returns [] if the table does
+    not exist yet.
+    """
+    session = SessionFactory()
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
+            return []
+        rows = session.execute(
+            sa.text("""
+                SELECT doctor_id FROM staff_doctor_assignments
+                WHERE staff_user_id = :uid AND status = 'active'
+            """), {"uid": staff_user_id}
+        ).scalars().all()
+        return list(rows)
+    except Exception:
+        # Table not yet created by migration; legacy doctor_id still works.
+        return []
+    finally:
+        session.close()
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +64,17 @@ app.include_router(identity_router)
 
 
 def _user_to_response(user: StaffUser) -> StaffUserResponse:
+    assigned = _assigned_doctor_ids(user.id)
+    # Fall back to legacy single doctor_id when no assignment rows exist.
+    if not assigned and user.doctor_id:
+        assigned = [user.doctor_id]
     return StaffUserResponse(
         id=user.id,
         organization_id=user.organization_id,
         branch_id=user.branch_id,
         doctor_id=user.doctor_id or None,
+        # PO-RBAC-01: all active doctor assignments for this staff member.
+        doctor_ids=assigned,
         username=user.username,
         display_name=user.display_name,
         role=user.role,
@@ -138,21 +170,43 @@ def create_staff_user(
     # Enforce org scope: non-super-admin can only create users in their own org
     if not auth.is_super_admin and data.organization_id != auth.organization_id:
         raise HTTPException(422, "cannot create user in a different organization")
-    if data.doctor_id:
-        from common.models import Doctor
-        doc = SessionFactory().query(Doctor).filter(
-            Doctor.id == data.doctor_id,
-            Doctor.organization_id == data.organization_id).first()
-        if not doc:
-            raise HTTPException(422, "doctor_id must reference a doctor in the same organization")
+    # PO-RBAC-03: prevent self-escalation — a caller cannot create a user
+    # with a role at or above their own level (super_admin excepted).
+    if not auth.is_super_admin and not can_grant_role(auth.role, data.role):
+        raise HTTPException(403, "cannot grant a role at or above your own level")
+
+    # PO-RBAC-01: resolve the doctor assignment list.
+    # ``doctor_ids`` (list) takes precedence; legacy ``doctor_id`` is a fallback.
+    doctor_ids = list(data.doctor_ids) if data.doctor_ids else (
+        [data.doctor_id] if data.doctor_id else []
+    )
+    # Validate every doctor: exists, active, same organization.
+    from common.models import Doctor, StaffDoctorAssignment
+    session = SessionFactory()
+    try:
+        for did in doctor_ids:
+            doc = session.query(Doctor).filter(
+                Doctor.id == did,
+                Doctor.organization_id == data.organization_id,
+                Doctor.status == "active",
+            ).first()
+            if not doc:
+                raise HTTPException(
+                    422, f"doctor_id {did} must reference an active doctor "
+                         f"in the same organization")
+    finally:
+        session.close()
+
     pw_hash = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
     session = SessionFactory()
     try:
+        # Legacy single field: keep the first assigned doctor for compatibility.
+        legacy_doctor_id = doctor_ids[0] if doctor_ids else None
         user = StaffUser(
             id=str(uuid.uuid4()),
             organization_id=data.organization_id,
             branch_id=data.branch_id,
-            doctor_id=data.doctor_id,
+            doctor_id=legacy_doctor_id,
             username=data.username,
             password_hash=pw_hash,
             display_name=data.display_name,
@@ -164,11 +218,24 @@ def create_staff_user(
         )
         session.add(user)
         session.flush()
+        # Create explicit assignment rows for every validated doctor.
+        # Resilient to missing table (pre-migration): check first.
+        from sqlalchemy import inspect as sa_inspect
+        if sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
+            for did in doctor_ids:
+                session.add(StaffDoctorAssignment(
+                    id=str(uuid.uuid4()),
+                    staff_user_id=user.id,
+                    doctor_id=did,
+                    organization_id=data.organization_id,
+                    status="active",
+                ))
         record_audit(session, service="identity", org_id=user.organization_id,
             action="staff.created", target_type="staff_user", target_id=user.id,
             actor_id=auth.user_id, actor_role=auth.role, branch_id=user.branch_id or "",
             after={"username": user.username, "display_name": user.display_name,
-                   "role": user.role, "status": user.status})
+                   "role": user.role, "status": user.status,
+                   "doctor_ids": doctor_ids})
         session.commit()
         return {"user_id": user.id, "display_name": user.display_name, "role": user.role}
     except Exception as exc:

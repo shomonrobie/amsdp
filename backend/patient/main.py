@@ -192,7 +192,7 @@ def get_patient(
 @app.patch("/api/v1/patients/{patient_id}")
 def update_patient(
     patient_id: str, data: PatientUpdate,
-    auth: AuthContext = Depends(require_permission("patient.create")),
+    auth: AuthContext = Depends(require_permission("patient.update")),
 ):
     session = SessionFactory()
     try:

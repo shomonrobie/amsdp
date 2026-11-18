@@ -1045,3 +1045,160 @@ class TestQueueRecoveryDoctorAuth:
             headers=_auth(tok_a),
             json={"reason": "test"})
         assert r.status_code == 404, r.text
+
+
+class TestQueueMultiDoctorAssignments:
+    """PO-RBAC-01: An assistant may be assigned to multiple doctors within
+    the same organization.  Doctor access is based on explicit assignment."""
+
+    def _mk_multi_doc_user(self, session, username, role, doctor_ids):
+        pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
+        u = StaffUser(id=str(uuid.uuid4()), organization_id="m5-org",
+                      branch_id="m5-branch", username=username,
+                      password_hash=pw, display_name=username,
+                      role=role,
+                      doctor_id=doctor_ids[0] if doctor_ids else None,
+                      status="active")
+        session.add(u)
+        session.flush()
+        try:
+            from sqlalchemy import inspect as sa_inspect
+            if sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
+                from common.models import StaffDoctorAssignment
+                for did in doctor_ids:
+                    session.add(StaffDoctorAssignment(
+                        id=str(uuid.uuid4()), staff_user_id=u.id,
+                        doctor_id=did, organization_id="m5-org",
+                        status="active"))
+        except Exception:
+            pass
+        session.commit()
+        return u
+
+    def _mk_multi_doc_doctors(self, session):
+        for i, (did, name) in enumerate([
+            ("md-doc-a", "Dr Multi A"), ("md-doc-b", "Dr Multi B"),
+            ("md-doc-c", "Dr Multi C")]):
+            d = session.query(Doctor).filter(Doctor.id == did).first()
+            if d is None:
+                d = Doctor(id=did, organization_id="m5-org",
+                           name=name, mobile=f"017000000{i+1}")
+                session.add(d)
+        session.commit()
+
+    def _enqueue_md(self, tok, doctor_id, patient_id):
+        return client.post("/api/v1/queue/enqueue",
+            headers=_auth(tok),
+            json={"doctor_id": doctor_id, "patient_id": patient_id,
+                  "entry_source": "walk_in", "branch_id": "m5-branch"})
+
+    def test_assistant_assigned_to_multiple_doctors(self):
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            self._mk_multi_doc_doctors(session)
+            asst = self._mk_multi_doc_user(session, f"md_asst_multi_{tag}",
+                                           "assistant",
+                                           ["md-doc-a", "md-doc-b", "md-doc-c"])
+            recp = _mk_user(session, f"md_recp_multi_{tag}", "receptionist")
+            p = _mk_patient(session)
+            for did in ["md-doc-a", "md-doc-b", "md-doc-c"]:
+                self._enqueue_md(_token(recp), did, p.id)
+            session.close()
+        finally:
+            session.close()
+
+        tok = _token(asst)
+        for did in ["md-doc-a", "md-doc-b", "md-doc-c"]:
+            r = client.get(f"/api/v1/queue?doctor_id={did}"
+                           f"&date={date.today().isoformat()}",
+                headers=_auth(tok))
+            assert r.status_code == 200, f"denied access to {did}: {r.text}"
+            body = r.json()
+            assert all(e["doctor_id"] == did for e in body["entries"])
+
+    def test_assistant_cannot_access_unassigned_doctor(self):
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            self._mk_multi_doc_doctors(session)
+            asst = self._mk_multi_doc_user(session, f"md_asst_single_{tag}",
+                                           "assistant", ["md-doc-a"])
+            recp = _mk_user(session, f"md_recp_single_{tag}", "receptionist")
+            p = _mk_patient(session)
+            self._enqueue_md(_token(recp), "md-doc-b", p.id)
+            session.close()
+        finally:
+            session.close()
+
+        tok = _token(asst)
+        r = client.get(f"/api/v1/queue?doctor_id=md-doc-b"
+                       f"&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
+    def test_assignment_revocation_denies_access(self):
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            self._mk_multi_doc_doctors(session)
+            asst = self._mk_multi_doc_user(session, f"md_asst_revoke_{tag}",
+                                           "assistant",
+                                           ["md-doc-a", "md-doc-b"])
+            asst_id = asst.id
+            recp = _mk_user(session, f"md_recp_revoke_{tag}", "receptionist")
+            p = _mk_patient(session)
+            self._enqueue_md(_token(recp), "md-doc-b", p.id)
+            from common.models import StaffDoctorAssignment
+            try:
+                session.query(StaffDoctorAssignment).filter(
+                    StaffDoctorAssignment.staff_user_id == asst_id,
+                    StaffDoctorAssignment.doctor_id == "md-doc-b").delete(
+                        synchronize_session=False)
+                session.commit()
+            except Exception:
+                session.rollback()
+            session.close()
+        finally:
+            session.close()
+
+        tok = jwt.encode({"sub": asst_id, "org": "m5-org",
+                          "branch": "m5-branch", "role": "assistant"},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=md-doc-b"
+                       f"&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+        r2 = client.get(f"/api/v1/queue?doctor_id=md-doc-a"
+                        f"&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r2.status_code == 200, r2.text
+
+    def test_assistant_no_assignment_fail_closed(self):
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            u = _mk_user(session, f"md_asst_none_{tag}", "assistant", None)
+        finally:
+            session.close()
+        tok = jwt.encode({"sub": u.id, "org": "m5-org", "branch": "m5-branch",
+                          "role": "assistant",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text
+
+    def test_single_doctor_assignment_still_works(self):
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            u = _mk_user(session, f"md_asst_single_legacy_{tag}", "assistant",
+                         doctor_id="m5-doc")
+        finally:
+            session.close()
+        tok = _token(u)
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 200, r.text

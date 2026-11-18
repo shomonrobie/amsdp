@@ -525,9 +525,9 @@ MFA is NOT IMPLEMENTED, NOT TESTED, NOT VERIFIED.
 
 | Area | Current state | Target state (approved) | Gap |
 |---|---|---|---|
-| Identity model | `StaffUser` with `organization_id`, `branch_id`, `role` | Separate `platform_users` + tenant `StaffUser` | Platform identity table ABSENT |
+| Identity model | `StaffUser` with `organization_id`, `branch_id`, `role`; `StaffDoctorAssignment` table added | Separate `platform_users` + tenant `StaffUser` | Platform identity table ABSENT |
 | Authentication | JWT staff login, single secret | Separate platform JWT scope/signing secret | ABSENT |
-| Role matrix | 6 operational roles + `super_admin` conflated | `platform_admin`/`platform_ops`/`platform_support` separate from tenant roles | `super_admin` not migrated |
+| Role matrix | 6 operational roles + `super_admin` conflated; `PLATFORM_ROLES` added separate from tenant roles | `platform_admin`/`platform_ops`/`platform_support` separate from tenant roles | `super_admin` not migrated; migration plan documented in IAM spec §7.2–7.4 |
 
 ---
 
@@ -540,17 +540,17 @@ MFA is NOT IMPLEMENTED, NOT TESTED, NOT VERIFIED.
 | R-03 | Cross-branch check-in/enqueue via caller-supplied `branch_id` | P0 / Critical | `queuing/main.py:146-215` — body `branch_id` used directly | DEFECT PRESENT |
 | R-04 | Cross-branch queue reorder mixing unrelated queues | P0 / High | `queuing/main.py:367-409` — org-only filter, no queue homogeneity | DEFECT PRESENT |
 | R-05 | Schedule creation for unauthorized branch | P0 / High | `scheduling/main.py:68-88` — `branch_id` from body, no branch check | DEFECT PRESENT |
-| R-06 | `super_admin` conflates platform + tenant authority | P0 / High | `permissions.py:38-52` — single role holds both domains | NOT MITIGATED |
+| R-06 | `super_admin` conflates platform + tenant authority | P0 / High | `permissions.py:38-52` — single role holds both domains | PARTIALLY MITIGATED | `super_admin` retained for backward compatibility; self-escalation prevented (PO-RBAC-03); platform roles added separate from tenant roles (PO-RBAC-05 groundwork); migration plan documented in IAM spec §7.2–7.4 |
 | R-07 | Frontend `super_admin` wildcard bypass | Medium | `frontend/lib/auth.js:20-22` — `role === 'super_admin'` returns true for all | PRESENT (presentation only) |
-| R-08 | No platform identity, authentication, or authorization | P0 / Critical | No `platform_users`, no platform routes, no platform JWT scope | ABSENT |
-| R-09 | No MFA for platform operators | P0 / High | No MFA endpoints or enforcement | ABSENT |
+| R-08 | No platform identity, authentication, or authorization | P0 / Critical | No `platform_users`, no platform routes, no platform JWT scope | PARTIAL | Platform groundwork implemented: `PlatformAuditEvent` model + `platform_audit_events` table + `record_platform_audit()` (O-SaaS-2); `PLATFORM_ROLES` dict (platform_admin, platform_ops, platform_support). Full platform identity system (platform users, JWT, endpoints) remains SPECIFIED NOT IMPLEMENTED (PO-RBAC-05). |
+| R-09 | No MFA for platform operators | P0 / High | No MFA endpoints or enforcement | ABSENT (documented exception) | MFA required before production per O-SaaS-15; temporary hackathon exception documented and time-limited; not deferred or optional |
 | R-10 | No support-grant mechanism | P0 / High | No support-grant routes, consent recording, or time-limited grants | ABSENT |
 | R-11 | No tenant suspension/access revocation enforcement | Medium | `Organization.status` column exists but not checked by endpoints | NOT ENFORCED |
 | R-12 | `queue.recover`/`queue.reposition` permission gap for doctors | RESOLVED — NOT A GAP | Doctors hold `queue.recover` + `queue.reposition` (`permissions.py:99`); recovery module correctly scoped by branch (`recovery.py:86-88`) | RESOLVED |
-| R-13 | Patient update uses `patient.create` permission (not `patient.update`) | Low | `patient/main.py:195` — `require_permission("patient.create")` on PATCH | PERMISSION MISMATCH |
+| R-13 | Patient update uses `patient.create` permission (not `patient.update`) | Low | `patient/main.py:195` — `require_permission("patient.create")` on PATCH | RESOLVED | Changed to `require_permission("patient.update")` (PO-RBAC-02); permissions matrix split into explicit patient.read/search/create/update |
 | R-14 | Branch create scope validation | RESOLVED — ADEQUATELY ENFORCED | `create_branch` calls `require_org_access(data.organization_id)(auth)` (`organization/main.py:196`) | RESOLVED |
-| R-15 | No self-escalation protection on staff role assignment | Medium | `PATCH /api/v1/staff/users/{id}` allows role change with `staff.manage` | NOT PROTECTED |
-| R-16 | No last-active-org-admin protection | Medium | No endpoint prevents deactivating the last org_admin | NOT PROTECTED |
+| R-15 | No self-escalation protection on staff role assignment | Medium | `PATCH /api/v1/staff/users/{id}` allows role change with `staff.manage` | RESOLVED | `ROLE_HIERARCHY` + `can_grant_role()` in `permissions.py`; `create_staff_user()` and `update_staff_user()` block self-escalation and granting role ≥ caller's level unless super_admin (PO-RBAC-03); super_admin cannot self-escalate |
+| R-16 | No last-active-org-admin protection | Medium | No endpoint prevents deactivating the last org_admin | RESOLVED | `count_active_org_admins()` in `auth.py`; `update_staff_user()` locks user + org rows; blocks removal/deactivation when last active org_admin; concurrency test proves invariant under concurrent deactivation (PO-RBAC-04) |
 | Permission matrix | `PERMISSIONS` dict with namespace wildcards | Platform capability enumeration + operational permissions | Platform capabilities only as `PLATFORM_CAPABILITIES` tuple |
 | Branch scope | Missing on queue/call/cancel/check-in/enqueue/reorder/schedule | Consistent `require_branch_access` on all scoped endpoints | 6 P0 defects present |
 | Cross-tenant | Non-disclosing 404 | Non-disclosing 404 + platform `cross_org` audit | Partially implemented (audit exists, no platform identity) |

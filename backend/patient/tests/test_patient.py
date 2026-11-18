@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from amsdp_test_support import (db_session, ensure_branch, ensure_org,
                                ensure_user, headers, load_app, purge_org)
-from common.models import Patient
+from common.models import Patient, StaffUser
 
 ORG = "legacy-pat-org"
 BR = "legacy-pat-br"
@@ -25,6 +25,8 @@ OTHER_ORG = "legacy-pat-other"
 OTHER_BR = "legacy-pat-other-br"
 RECP = "legacy_pat_recp"
 OTHER_RECP = "legacy_pat_other_recp"
+ORG_ADMIN = "legacy_pat_org_admin"
+BR_ADMIN = "legacy_pat_br_admin"
 
 
 @pytest.fixture(scope="module")
@@ -42,6 +44,8 @@ def _world(client):
     ensure_branch(OTHER_BR, OTHER_ORG)
     ensure_user(RECP, "receptionist", ORG, BR)
     ensure_user(OTHER_RECP, "receptionist", OTHER_ORG, OTHER_BR)
+    ensure_user(ORG_ADMIN, "org_admin", ORG, BR)
+    ensure_user(BR_ADMIN, "branch_admin", ORG, BR)
     yield
     # Teardown: no business rows left behind; reference rows stay (audit).
     purge_org(ORG)
@@ -176,7 +180,7 @@ class TestPatientReadUpdate:
     def test_update_patient(self, client):
         patient_id = _register(client).json()["patient"]["id"]
         r = client.patch(f"/api/v1/patients/{patient_id}",
-                         headers=headers(RECP),
+                         headers=headers(ORG_ADMIN),
                          json={"name": "Jamila Akter", "address": "Mirpur"})
         assert r.status_code == 200, r.text
         assert r.json()["name"] == "Jamila Akter"
@@ -185,10 +189,63 @@ class TestPatientReadUpdate:
             assert s.query(Patient).filter(
                 Patient.id == patient_id).first().name == "Jamila Akter"
 
-    def test_foreign_tenant_patient_cannot_be_updated(self, client):
+    def test_branch_admin_can_update_patient(self, client):
         patient_id = _register(client).json()["patient"]["id"]
         r = client.patch(f"/api/v1/patients/{patient_id}",
-                         headers=headers(OTHER_RECP), json={"name": "Hijacked"})
+                         headers=headers(BR_ADMIN),
+                         json={"name": "Jamila Akter", "address": "Mirpur"})
+        assert r.status_code == 200, r.text
+
+    def test_receptionist_cannot_update_patient_403(self, client):
+        patient_id = _register(client).json()["patient"]["id"]
+        r = client.patch(f"/api/v1/patients/{patient_id}",
+                         headers=headers(RECP), json={"name": "Hijacked"})
+        assert r.status_code == 403, r.text
+        with db_session() as s:
+            assert s.query(Patient).filter(
+                Patient.id == patient_id).first().name == "Jamila Begum"
+
+    def test_doctor_cannot_update_patient_403(self, client):
+        # A doctor has patient.read/search only — never patient.update.
+        import uuid, bcrypt
+        doc_staff_id = f"pat-doc-upd-staff-{uuid.uuid4().hex[:6]}"
+        doc_username = f"pat_doc_upd_{uuid.uuid4().hex[:6]}"
+        with db_session() as s:
+            pw = bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode()
+            s.add(StaffUser(id=doc_staff_id,
+                organization_id=ORG, branch_id=BR,
+                username=doc_username, password_hash=pw,
+                display_name="Dr Upd", role="doctor", status="active"))
+            s.commit()
+        r = client.patch(f"/api/v1/patients/{_register(client).json()['patient']['id']}",
+                         headers=headers(doc_username),
+                         json={"name": "Hijacked"})
+        assert r.status_code == 403, r.text
+
+    def test_assistant_cannot_update_patient_403(self, client):
+        # An assistant has patient.read/search only — never patient.update.
+        import uuid, bcrypt
+        asst_staff_id = f"pat-ass-upd-staff-{uuid.uuid4().hex[:6]}"
+        asst_username = f"pat_ass_upd_{uuid.uuid4().hex[:6]}"
+        with db_session() as s:
+            pw = bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode()
+            s.add(StaffUser(id=asst_staff_id,
+                organization_id=ORG, branch_id=BR,
+                username=asst_username, password_hash=pw,
+                display_name="Asst Upd", role="assistant", status="active"))
+            s.commit()
+        r = client.patch(f"/api/v1/patients/{_register(client).json()['patient']['id']}",
+                         headers=headers(asst_username),
+                         json={"name": "Hijacked"})
+        assert r.status_code == 403, r.text
+
+    def test_foreign_tenant_patient_cannot_be_updated(self, client):
+        # Register the patient as OTHER_RECP (in OTHER_ORG), then try to update
+        # as ORG_ADMIN (in ORG) — permission passes but the tenant lookup fails.
+        patient_id = _register(client, user=OTHER_RECP).json()["patient"]["id"]
+        assert patient_id  # sanity: the patient was created in OTHER_ORG
+        r = client.patch(f"/api/v1/patients/{patient_id}",
+                         headers=headers(ORG_ADMIN), json={"name": "Hijacked"})
         assert r.status_code == 404
         with db_session() as s:
             assert s.query(Patient).filter(

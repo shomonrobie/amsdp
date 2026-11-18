@@ -54,8 +54,31 @@ def _token():
         _SECRET, algorithm=_ALGO)
 
 
+def _org_admin_token():
+    s = SessionFactory()
+    try:
+        u = s.query(StaffUser).filter(StaffUser.username == "m7p_rec").first()
+        # Create/ensure an org_admin for update operations
+        admin = s.query(StaffUser).filter(
+            StaffUser.username == "m7p_admin").first()
+        if admin is None:
+            pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
+            admin = StaffUser(id=str(uuid.uuid4()), organization_id=ORG_ID,
+                              branch_id="m7p-branch", username="m7p_admin",
+                              password_hash=pw, display_name="M7-P Org Admin",
+                              role="org_admin", status="active")
+            s.add(admin)
+            s.commit()
+    finally:
+        s.close()
+    return jwt.encode({"sub": admin.id, "org": ORG_ID, "branch": "m7p-branch",
+        "role": "org_admin", "exp": int((datetime.now(timezone.utc)+timedelta(hours=1)).timestamp())},
+        _SECRET, algorithm=_ALGO)
+
+
 TOKEN = _token()
 H = {"Authorization": "Bearer " + TOKEN}
+H_OA = {"Authorization": "Bearer " + _org_admin_token()}
 
 
 def _register(mobile, **extra):
@@ -154,7 +177,7 @@ def test_update_adds_age_then_dob_wins():
     r = client.get(f"/api/v1/patients/{pid}", headers=H)
     assert r.json()["age_source"] == "reported"
     # adding a DOB makes it authoritative
-    r = client.patch(f"/api/v1/patients/{pid}", headers=H,
+    r = client.patch(f"/api/v1/patients/{pid}", headers=H_OA,
                      json={"date_of_birth": "1984-05-05"})
     assert r.status_code == 200
     j = r.json()
@@ -166,7 +189,7 @@ def test_update_adds_age_then_dob_wins():
 def test_update_clears_dob_falls_back_to_reported_age():
     mobile = _uniq_mobile()
     pid = _register(mobile, age=52, date_of_birth="1974-03-03").json()["patient"]["id"]
-    r = client.patch(f"/api/v1/patients/{pid}", headers=H, json={"date_of_birth": ""})
+    r = client.patch(f"/api/v1/patients/{pid}", headers=H_OA, json={"date_of_birth": ""})
     assert r.status_code == 200
     j = r.json()
     assert j["age_source"] == "reported"

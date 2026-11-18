@@ -222,6 +222,46 @@ class StaffUser(Base):
 
 
 # ---------------------------------------------------------------------------
+# Staff–Doctor assignments — service: identity
+# ---------------------------------------------------------------------------
+# PO-RBAC-01: An assistant may be assigned to multiple doctors within the same
+# organization.  Doctor access is based on explicit assignment, not on
+# organization membership alone.  The legacy ``StaffUser.doctor_id`` column is
+# preserved as a compatibility field; new code consults this table instead.
+# ---------------------------------------------------------------------------
+
+
+class StaffDoctorAssignment(Base):
+    """Explicit assignment of a staff member (assistant/doctor) to a doctor.
+
+    A staff member may be assigned to multiple doctors, all within the same
+    organization.  Only ``status = "active"`` assignments grant access.
+    """
+
+    __tablename__ = "staff_doctor_assignments"
+    __service__ = "identity"
+
+    id                = Column(String, primary_key=True, default=_new_id)
+    staff_user_id     = Column(String, ForeignKey("staff_users.id"), nullable=False)
+    doctor_id         = Column(String, ForeignKey("doctors.id"), nullable=False)
+    organization_id   = Column(String, ForeignKey("organizations.id"), nullable=False)
+    status            = Column(String(20), default="active", nullable=False)
+    created_at        = Column(DateTime(timezone=True), default=_utcnow)
+
+    staff_user        = relationship("StaffUser")
+    doctor            = relationship("Doctor")
+    organization      = relationship("Organization")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "staff_user_id", "doctor_id", name="uq_staff_doctor_assignment"),
+        Index("idx_staff_doctor_assignment_staff", "staff_user_id"),
+        Index("idx_staff_doctor_assignment_doctor", "doctor_id"),
+        Index("idx_staff_doctor_assignment_org", "organization_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Login attempts — service: identity (durable login throttle)
 # ---------------------------------------------------------------------------
 
@@ -790,6 +830,47 @@ class AuditEvent(Base):
     timestamp       = Column(DateTime(timezone=True), default=_utcnow)
 
     organization    = relationship("Organization")
+
+
+# ---------------------------------------------------------------------------
+# Platform audit events — service: platform (O-SaaS-2)
+# ---------------------------------------------------------------------------
+# Platform-only events belong in ``platform_audit_events``, separate from
+# tenant-affecting events in ``audit_events``.  This table has NO
+# ``organization_id`` — platform events are not scoped to a tenant.
+# Per O-SaaS-10, the actor is identified by named platform operator identity
+# plus platform role, minimizing unnecessary personal information.
+# ---------------------------------------------------------------------------
+
+
+class PlatformAuditEvent(Base):
+    """Audit event for platform-only operations (O-SaaS-2, O-SaaS-10).
+
+    Tenant-affecting events go to ``audit_events`` with a non-null
+    ``organization_id``.  Platform-only events (platform operator provisioning,
+    tenant suspension, cross-org support access initiated from the platform
+    plane) go here.
+    """
+
+    __tablename__ = "platform_audit_events"
+    __service__ = "platform"
+
+    id                = Column(String, primary_key=True, default=_new_id)
+    service           = Column(String(50), nullable=False)
+    action            = Column(String(50), nullable=False)
+    target_type       = Column(String(50), nullable=False)
+    target_id         = Column(String, nullable=False)
+    actor_id          = Column(String, nullable=False)
+    actor_role        = Column(String(30), nullable=False)
+    before            = Column(JSON)
+    after             = Column(JSON)
+    reason            = Column(Text, default="")
+    timestamp         = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        Index("idx_platform_audit_action", "action"),
+        Index("idx_platform_audit_time", "timestamp"),
+    )
 
 
 # ---------------------------------------------------------------------------

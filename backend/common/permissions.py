@@ -63,14 +63,20 @@ PERMISSIONS: dict[str, list[str]] = {
         # administrator retrieve retired catalogue entries for review.
         "symptom.read", "symptom.manage",
         "staff.read", "staff.manage",
-        "patient.*", "doctor.*", "schedule.*",
+        # BR §54 / PO-RBAC-02: patient.update is explicit — org_admin may modify
+        # patient demographics and operational registration information.
+        "patient.read", "patient.search", "patient.create", "patient.update",
+        "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
     "branch_admin": [
         "branch.read", "facility.read", "facility.manage", "staff.read",
         # AMSDP-SYMPTOM-01 — a branch administrator curates the branch's wording.
         "symptom.read", "symptom.manage",
-        "patient.*", "doctor.*", "schedule.*",
+        # BR §54 / PO-RBAC-02: patient.update is explicit — branch_admin may modify
+        # patient demographics and operational registration information.
+        "patient.read", "patient.search", "patient.create", "patient.update",
+        "doctor.*", "schedule.*",
         "appointment.*", "queue.*", "audit.read",
     ],
     "receptionist": [
@@ -106,6 +112,58 @@ PERMISSIONS: dict[str, list[str]] = {
         "appointment.read", "queue.view",
     ],
 }
+
+# PO-RBAC-05 / O-SaaS-8: Platform roles — distinct from tenant roles.
+# Platform roles hold only platform.* capabilities; they do NOT automatically
+# receive tenant business-data access.  A tenant org_admin is NOT a platform
+# administrator by default.
+PLATFORM_ROLES: dict[str, list[str]] = {
+    "platform_admin": [
+        # Full platform administration (tenant provisioning, platform operations).
+        *PLATFORM_CAPABILITIES,
+        # Platform-level audit read.
+        "audit.read",
+    ],
+    "platform_ops": [
+        # Platform operations: tenant support, incident response.
+        "platform.cross_org",
+        # Platform-level audit read.
+        "audit.read",
+    ],
+    "platform_support": [
+        # Limited platform support: read-only tenant access for support.
+        "platform.cross_org",
+        "audit.read",
+    ],
+}
+
+# PO-RBAC-03: Role hierarchy for self-escalation prevention.
+# Higher numbers = more privileged.  super_admin is the top tenant role.
+# Platform roles are a separate authorization domain (not compared in hierarchy).
+ROLE_HIERARCHY: dict[str, int] = {
+    "assistant": 1,
+    "doctor": 2,
+    "receptionist": 3,
+    "branch_admin": 4,
+    "org_admin": 5,
+    "super_admin": 6,
+}
+
+
+def role_level(role: str) -> int:
+    """Return the privilege level of *role*, or 0 for unknown roles."""
+    return ROLE_HIERARCHY.get(role, 0)
+
+
+def can_grant_role(grantor_role: str, target_role: str) -> bool:
+    """Return True if *grantor_role* may assign *target_role* to another user.
+
+    A user cannot grant a role at or above their own level, except
+    super_admin who can grant any role.
+    """
+    if grantor_role == "super_admin":
+        return True
+    return role_level(target_role) < role_level(grantor_role)
 
 
 def check(resource: str, role: str) -> bool:

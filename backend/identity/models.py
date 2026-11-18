@@ -71,6 +71,9 @@ class StaffUserCreate(BaseModel):
     organization_id: str
     branch_id: Optional[str] = None
     doctor_id: Optional[str] = None
+    # PO-RBAC-01: explicit doctor assignments (assistant may have multiple).
+    # ``doctor_ids`` takes precedence over the legacy single ``doctor_id``.
+    doctor_ids: Optional[list[str]] = None
     username: str
     password: str
     display_name: str
@@ -90,6 +93,8 @@ class StaffUserUpdate(BaseModel):
     locale: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
+    # PO-RBAC-01: replace the full set of assigned doctors when provided.
+    doctor_ids: Optional[list[str]] = None
     doctor_id: Optional[str] = None
 
 class StaffUserResponse(BaseModel):
@@ -97,6 +102,8 @@ class StaffUserResponse(BaseModel):
     organization_id: str
     branch_id: Optional[str] = None
     doctor_id: Optional[str] = None
+    # PO-RBAC-01: all active doctor assignments for this staff member.
+    doctor_ids: Optional[list[str]] = None
     username: str
     display_name: str
     role: str

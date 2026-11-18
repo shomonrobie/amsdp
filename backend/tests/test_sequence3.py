@@ -54,12 +54,12 @@ PAT2 = "sq3-pat2"
 TZ = ZoneInfo("Asia/Dhaka")
 TODAY = date.today()
 
-#: role, organization, branch
+#: role, organization, branch, [doctor_id]
 USERS = {
     "orgadm": ("sq3_orgadm", "org_admin", ORG, None),
     "bradm": ("sq3_bradm", "branch_admin", ORG, BR),
     "recp": ("sq3_recp", "receptionist", ORG, BR),
-    "dr": ("sq3_dr", "doctor", ORG, BR),
+    "dr": ("sq3_dr", "doctor", ORG, BR, DOC),
     "ast": ("sq3_ast", "assistant", ORG, BR),
 }
 PASSWORD = "testpass123"
@@ -125,17 +125,21 @@ def _seed():
         s.commit()
 
         pw = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt()).decode()
-        for username, role, org, branch in USERS.values():
+        for user_tuple in USERS.values():
+            username, role, org, branch = user_tuple[:4]
+            doctor_id = user_tuple[4] if len(user_tuple) > 4 else None
             user = s.query(StaffUser).filter(
                 StaffUser.username == username).first()
             if user is None:
                 s.add(StaffUser(id=str(uuid.uuid4()), organization_id=org,
                                 username=username, password_hash=pw,
                                 display_name=username.title(), role=role,
-                                status="active", branch_id=branch))
+                                status="active", branch_id=branch,
+                                doctor_id=doctor_id))
             else:
                 user.organization_id, user.branch_id = org, branch
                 user.role, user.status = role, "active"
+                user.doctor_id = doctor_id
         s.commit()
     finally:
         s.close()

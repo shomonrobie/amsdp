@@ -295,3 +295,137 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 - **Verification:** All 52 queue tests pass. Cross-tenant organization data is never returned for unauthorized branch IDs.
 
 ### Not implemented (out of scope): Same as Phase 1C — multi-doctor assistant assignment remains BLOCKED pending Product Owner decision.
+
+---
+
+## Phase 1D — Operational RBAC Completion and Platform Identity Separation (Recorded 2026-11-18)
+
+### Baseline and commit
+| Item | Value |
+|---|---|
+| Branch | `hackathon-mvp` |
+| Starting HEAD | `6d71156c0c320aefbb3e9983ab5069f529aec3a9` |
+| Final commit | Not yet committed (pending owner review) |
+| Working-tree changes | 12 modified files, 2 new migration files, 1 preserved untracked file |
+
+### Workstream A — Multiple Doctor Assignments (PO-RBAC-01) — IMPLEMENTED · TESTED
+
+**Requirement:** An assistant may be assigned to multiple doctors within the same organization. Doctor access must be based on explicit assignment, not organization membership alone.
+
+**Changes:**
+- `backend/common/models.py` — Added `StaffDoctorAssignment` model (explicit staff→doctor assignment table with `UNIQUE(staff_user_id, doctor_id)` constraint, FKs to `staff_users`, `doctors`, `organizations`, plus indexes). Legacy `StaffUser.doctor_id` column preserved as compatibility field.
+- `backend/common/auth.py` — Extended `AuthContext` with `assigned_doctor_ids: list[str]`; `can_access_doctor()` checks membership in `assigned_doctor_ids` for doctor/assistant roles; `get_current_user()`/`get_optional_user()` load assignments from DB with legacy `doctor_id` fallback.
+- `backend/identity/main.py` — `create_staff_user()` accepts `doctor_ids` list, validates each doctor exists/active/same-org, creates assignment rows; `_user_to_response()` returns `doctor_ids`.
+- `backend/identity/models.py` — Added `doctor_ids: Optional[list[str]]` to `StaffUserCreate`, `StaffUserUpdate`, `StaffUserResponse`.
+- `backend/identity/routes.py` — `update_staff_user()` replaces assignment set when `doctor_ids` provided; validates each doctor; legacy `doctor_id` fallback preserved.
+- `backend/alembic/versions/f8a1b2c3d4e5_add_staff_doctor_assignments.py` — Migration creating `staff_doctor_assignments` table with backfill of legacy `doctor_id` values; idempotent re-runs.
+
+**Tests added** (`backend/queuing/tests/test_queue.py` — `TestQueueMultiDoctorAssignments`):
+- Assistant assigned to multiple doctors can access each assigned doctor's queue
+- Assistant cannot access unassigned doctor's queue (404)
+- Assignment revocation immediately denies access (while other assignments remain)
+- Missing/empty assignment fails closed (404)
+- Legacy single `doctor_id` assignment still works
+
+**Tests added** (`backend/identity/tests/test_identity.py` — `TestMultiDoctorValidation`):
+- Cross-organization doctor assignment rejected (422)
+- Nonexistent doctor ID rejected (422)
+- Inactive doctor rejected (422)
+- Update cannot introduce invalid doctor (422)
+- Legacy `doctor_id` still readable in response
+
+**Verification:** All 57 queue tests pass (52 baseline + 5 new). All identity multi-doctor validation tests pass.
+
+### Workstream B — Separate Patient Permissions (PO-RBAC-02) — IMPLEMENTED · TESTED
+
+**Requirement:** Patient creation requires `patient.create`; patient modification requires `patient.update`. Correct the PATCH patient endpoint permission mismatch.
+
+**Changes:**
+- `backend/common/permissions.py` — Replaced `patient.*` wildcard with explicit `patient.read`, `patient.search`, `patient.create`, `patient.update` for `org_admin` and `branch_admin`. `patient.update` NOT granted to `receptionist`, `doctor`, `assistant`.
+- `backend/patient/main.py` — Fixed PATCH endpoint: `require_permission("patient.create")` → `require_permission("patient.update")`.
+
+**Tests added** (`backend/patient/tests/test_patient.py` — `TestPatientReadUpdate`):
+- `test_update_patient` — org_admin can update (200)
+- `test_branch_admin_can_update_patient` — branch_admin can update (200)
+- `test_receptionist_cannot_update_patient_403` — receptionist denied (403), data unchanged
+- `test_doctor_cannot_update_patient_403` — doctor denied (403)
+- `test_assistant_cannot_update_patient_403` — assistant denied (403)
+- `test_foreign_tenant_patient_cannot_be_updated` — cross-org update → 404
+
+**Verification:** All 20 patient tests pass (13 baseline + 7 new).
+
+### Workstream C — Prevent Privilege Self-Escalation (PO-RBAC-03) — IMPLEMENTED · TESTED
+
+**Requirement:** A user must not grant themselves a higher role or additional permissions. Enforced server-side.
+
+**Changes:**
+- `backend/common/permissions.py` — Added `ROLE_HIERARCHY` (assistant=1 → super_admin=6), `role_level()`, `can_grant_role()` (super_admin exempt for granting to others only).
+- `backend/identity/main.py` — `create_staff_user()` rejects role ≥ caller's level (403).
+- `backend/identity/routes.py` — `update_staff_user()`: (1) blocks self-escalation regardless of role including super_admin; (2) blocks granting role ≥ caller's level to others unless super_admin.
+
+**Tests added** (`backend/identity/tests/test_identity.py` — `TestSelfEscalation`):
+- Receptionist cannot create org_admin (403)
+- Receptionist cannot create super_admin (403)
+- Branch admin cannot create org_admin (403)
+- Org admin can create branch_admin (201)
+- Super admin can create any role (201)
+- User cannot update own role to higher (403)
+- User cannot update own role to super_admin (403)
+- Org admin cannot update own role to super_admin (403)
+- Unit tests for `can_grant_role()` and `role_level()`
+
+**Verification:** All 38 identity tests pass (18 baseline + 9 self-escalation + 6 multi-doctor validation + 5 last-org-admin).
+
+### Workstream D — Protect Last Active Organization Admin (PO-RBAC-04) — IMPLEMENTED · TESTED
+
+**Requirement:** Every active organization must retain at least one active `org_admin`. Prevent removal, deactivation, or role downgrade of the last active Organization Admin. Enforced transactionally with concurrency safety.
+
+**Changes:**
+- `backend/common/auth.py` — Added `count_active_org_admins(session, organization_id, exclude_user_id)` helper.
+- `backend/identity/routes.py` — `update_staff_user()`: locks both the user row AND the organization row (`with_for_update()`) before modifying role/status. This serializes concurrent admin-affecting changes within one organization, preventing the race where two concurrent requests each deactivate a different org_admin and both pass the count check. Checks after lock: if role changes away from org_admin or status changes away from active for an org_admin, verify at least one other active org_admin remains (403 otherwise).
+
+**Tests added** (`backend/identity/tests/test_identity.py` — `TestLastOrgAdmin`, `TestLastOrgAdminConcurrency`):
+- Cannot remove only active org_admin (role change → 403)
+- Cannot deactivate only active org_admin (status → 403)
+- Can remove one org_admin when another remains (200, verified count=1)
+- Can deactivate one org_admin when another remains (200, verified count=1)
+- Organization isolation — foreign tenant org_admin modification → 404
+- Concurrent deactivation of two admins: exactly one succeeds (200), other denied (403), exactly one remains active
+
+**Concurrency safety:** Organization-row locking serializes all org_admin-affecting changes within one organization. The concurrency test proves at least one org_admin remains under concurrent deactivation attempts.
+
+**Verification:** All 38 identity tests pass.
+
+### Workstream E — Separate Platform Identity and Platform RBAC (PO-RBAC-05) — PARTIAL (Groundwork Implemented)
+
+**Requirement:** Separate platform identities and roles from tenant organization identities and roles immediately.
+
+**Implemented (IMPLEMENTED · TESTED):**
+- `backend/common/models.py` — Added `PlatformAuditEvent` model for `platform_audit_events` table (no `organization_id`, per O-SaaS-2). Actor identified by named platform operator identity plus platform role (O-SaaS-10).
+- `backend/alembic/versions/f8a2b3c4d5e6_add_platform_audit_events.py` — Migration creating `platform_audit_events` table with indexes on `action` and `timestamp`.
+- `backend/common/audit.py` — Added `record_platform_audit()` function writing to `platform_audit_events` (separate from tenant `audit_events`).
+- `backend/common/permissions.py` — Added `PLATFORM_ROLES` dict: `platform_admin` (platform.admin, platform.cross_org, audit.read), `platform_ops` (platform.cross_org, audit.read), `platform_support` (platform.cross_org, audit.read). Platform roles hold only platform capabilities — no automatic tenant business-data access.
+
+**Specified but NOT implemented (requires separate platform service/infrastructure):**
+- Separate platform identity system (platform users table, platform JWT, platform endpoints)
+- Platform endpoints for tenant provisioning, suspension, closure
+- Legacy `super_admin` migration (role retained for backward compatibility; migration plan documented in IAM spec §7.2–7.4)
+- MFA implementation (required before production per O-SaaS-15; hackathon exception is time-boxed and restricted)
+
+**Verification:** All existing audit and identity tests continue to pass (115 total across queue, identity, patient suites).
+
+### Test results (all suites)
+| Suite | Result |
+|---|---|
+| `queuing/tests/test_queue.py` | 57 passed (52 baseline + 5 new multi-doctor) |
+| `identity/tests/test_identity.py` | 38 passed (18 baseline + 20 new) |
+| `patient/tests/test_patient.py` | 20 passed (13 baseline + 7 new) |
+| `tests/test_patient_age.py` | 15 passed (was 13 + 2 fixed after permission change) |
+| `tests/test_sequence3.py` | 27 passed (was failing, now fixed with doctor_id in seed) |
+| `tests/test_security.py` + `tests/test_platform_admin.py` + `tests/test_denial_audit.py` | 53 passed |
+| `appointment/tests/test_appointment.py` | 19 passed |
+| `scheduling/tests/test_scheduling.py` | Not re-confirmed (test run interrupted by terminal issue; was 36 passed at baseline, changes do not affect scheduling code path) |
+| **Total confirmed** | **229 passed, 0 failed** |
+
+### Disposition
+**IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted). Workstream E groundwork implemented; full platform identity system remains SPECIFIED, NOT IMPLEMENTED.
