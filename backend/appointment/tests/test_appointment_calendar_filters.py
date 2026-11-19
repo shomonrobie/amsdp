@@ -480,11 +480,16 @@ class TestTheThreeReadsAgree:
     def test_a_like_metacharacter_is_a_literal_not_a_wildcard(self, client):
         # A patient whose name contains "%" must not turn the search box into a
         # wildcard: ``%`` typed alone matches that name, not every patient.
+        #
+        # The window is stated explicitly because the grid read no longer
+        # defaults to "everything" (gap-analysis F-17): a bare request is
+        # answered for today ± 180 days, and these fixtures live in 2032.
         pct = ensure_patient("cal-flt-pat-pct", ORG, name="Shila 100% Rani",
                              mobile="01712220009")
         row = _insert(patient=pct, start="12:00", token="PCT-1")
         _insert(patient=PAT_A, start="12:30", token="PCT-2")
-        assert _ids(_grid(client, RECP, q="%")) == [row]
-        assert _ids(_grid(client, RECP, q="100%")) == [row]
-        assert len(_grid(client, RECP).json()) == 2
+        window = {"date_from": DAY, "date_to": DAY}
+        assert _ids(_grid(client, RECP, q="%", **window)) == [row]
+        assert _ids(_grid(client, RECP, q="100%", **window)) == [row]
+        assert len(_grid(client, RECP, **window).json()) == 2
 

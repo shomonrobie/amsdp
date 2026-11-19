@@ -42,6 +42,9 @@ import {
   MATCHES_PATH, buildMatchParams, parseMatchIndex, matchSummary, nearestMatchDate,
   matchesBannerKey,
 } from '../lib/calendar/matches';
+/* F-18/F-19 — the booking dialog's two explanations: how full a slot is, said in
+   words, and what a refusal means, said in the receptionist's language. */
+import { seatsWord, refusalCode, REFUSAL_KEYS } from '../lib/calendar/booking';
 
 const L = {
   bn: { t:'অ্যাপয়েন্টমেন্ট', p:'রোগী', d:'ডাক্তার', dt:'তারিখ', tm:'সময়', st:'অবস্থা',
@@ -51,10 +54,27 @@ const L = {
     closed:'শিডিউল নেই', past:'শেষ', loading:'লোড হচ্ছে…', actions:'কর্ম',
     searchPatient:'নাম বা মোবাইল দিয়ে রোগী খুঁজুন', notFound:'রোগী পাওয়া যায়নি',
     selectPatient:'রোগী নির্বাচন করুন', change:'পরিবর্তন', chooseSlot:'সময় নির্বাচন করুন',
-    noSlots:'এই দিনে শিডিউল নেই — সময় নিজে লিখুন', notes:'নোট', save:'সংরক্ষণ',
+    noSlots:'এই দিনে কোনো সেশন নেই', notes:'নোট', save:'সংরক্ষণ',
     saving:'সংরক্ষণ হচ্ছে…', bookedOk:'বুকিং সম্পন্ন হয়েছে', needPatient:'রোগী নির্বাচন করুন',
     needDoctor:'ডাক্তার নির্বাচন করুন', needDate:'তারিখ দিন', needTime:'সময় নির্বাচন করুন',
     bookErr:'বুকিং ব্যর্থ', actionErr:'কাজটি সম্পন্ন হয়নি',
+    /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
+    noSlotsHint:'এই ডাক্তার এই দিনে কোনো সময়সূচি দেননি — এখানে লেখা সময় কোনো স্লট বা সেশনের '
+      + 'মধ্যে পড়ে না, এবং একসঙ্গে একজন রোগীকেই ধরা হয়',
+    /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
+    seatsLeft:'আরও {n}টি খালি', seatLast:'শেষ আসন', slotFull:'পূর্ণ',
+    errSlotFull:'এই সময়টি পূর্ণ — অন্য সময় বেছে নিন',
+    errNoSlot:'এই সময় ডাক্তারের ঠিক করা স্লটের মধ্যে নেই — তালিকা থেকে সময় বেছে নিন',
+    errOutsideSession:'এই সময় ডাক্তারের সেশনের বাইরে — সেশনের ভিতরের সময় দিন',
+    errBadDate:'তারিখটি ঠিক নেই — আবার বেছে নিন',
+    errBadTime:'সময়ের বিন্যাস ঠিক নেই — ঘণ্টা:মিনিট আকারে দিন',
+    errBadTransition:'এই অবস্থা থেকে এই পরিবর্তন করা যায় না — তালিকা হালনাগাদ করুন',
+    errPatient:'রোগীটি পাওয়া যায়নি — আবার খুঁজুন',
+    errDoctor:'ডাক্তারটি পাওয়া যায়নি — আবার বেছে নিন',
+    errBranch:'শাখাটি পাওয়া যায়নি — অন্য শাখা বেছে নিন',
+    errNotFound:'তথ্যটি পাওয়া গেল না — তালিকা হালনাগাদ করুন',
+    errNeedReason:'কারণ আবশ্যক', errForbidden:'এই কাজটি আপনার অনুমতির বাইরে',
+    errUnknown:'সার্ভার কারণ জানায়নি — আবার চেষ্টা করুন',
     loadErr:'অ্যাপয়েন্টমেন্ট লোড করা যায়নি',
     detail:'অ্যাপয়েন্টমেন্ট', reason:'বাতিলের কারণ', cancelTitle:'অ্যাপয়েন্টমেন্ট বাতিল',
     cancelMsg:'এই অ্যাপয়েন্টমেন্ট বাতিল করতে চান? কারণ আবশ্যক।',
@@ -96,10 +116,27 @@ const L = {
     closed:'No clinic', past:'Past', loading:'Loading…', actions:'Actions',
     searchPatient:'Search a patient by name or mobile', notFound:'No patient found',
     selectPatient:'Select patient', change:'Change', chooseSlot:'Choose a time',
-    noSlots:'No clinic this day — enter a time', notes:'Notes', save:'Save',
+    noSlots:'No clinic on this day', notes:'Notes', save:'Save',
     saving:'Saving…', bookedOk:'Appointment booked', needPatient:'Select a patient',
     needDoctor:'Select a doctor', needDate:'Pick a date', needTime:'Pick a time',
     bookErr:'Booking failed', actionErr:'That action did not complete',
+    /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
+    noSlotsHint:'This doctor publishes no session on this day — a time entered here falls outside '
+      + 'every slot and session, and is counted one patient at a time',
+    /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
+    seatsLeft:'{n} left', seatLast:'last seat', slotFull:'Full',
+    errSlotFull:'That time is fully booked — choose another slot',
+    errNoSlot:'That time is not one of the doctor\'s published slots — pick one of the listed times',
+    errOutsideSession:'That time is outside the doctor\'s session — pick a time inside it',
+    errBadDate:'That date is not valid — pick it again',
+    errBadTime:'That time is not valid — use hours:minutes',
+    errBadTransition:'This appointment cannot change that way — refresh the list',
+    errPatient:'That patient was not found — search again',
+    errDoctor:'That doctor was not found — choose again',
+    errBranch:'That branch was not found — choose another',
+    errNotFound:'That record was not found — refresh the list',
+    errNeedReason:'A reason is required', errForbidden:'This action is outside your permission',
+    errUnknown:'The server gave no reason — try again',
     loadErr:'Could not load appointments',
     detail:'Appointment', reason:'Cancellation reason', cancelTitle:'Cancel appointment',
     cancelMsg:'Cancel this appointment? A reason is required.',
@@ -161,6 +198,25 @@ function withNumbers(template, values) {
     if (token && token in values) return <strong key={i}>{values[token]}</strong>;
     return <React.Fragment key={i}>{part}</React.Fragment>;
   });
+}
+
+/** Fill a `{token}` template as plain text — button labels and tooltips. */
+function fill(template, values) {
+  return String(template).replace(/\{(\w+)\}/g,
+    (whole, key) => (key in values ? String(values[key]) : whole));
+}
+
+/**
+ * F-19 — the server's refusal, said in the reader's language.
+ *
+ * The dialog used to append `String(e.message || e)`, which put an English
+ * sentence from `backend/appointment/main.py` inside a Bangla screen and named
+ * concepts (a "session window") the dialog never showed.  `refusalCode` maps the
+ * refusal to a caption that carries a next step, and an unrecognised answer is
+ * reported as unrecognised rather than pasted verbatim.
+ */
+function refusalText(err) {
+  return T(REFUSAL_KEYS[refusalCode(err)] || 'errUnknown');
 }
 
 /* The lifecycle order the status filter offers. Labels and tones come from
@@ -561,7 +617,7 @@ export default function Appointments() {
       setBook(null);
       await refresh();
     } catch (e) {
-      setBookError(T('bookErr') + ': ' + String(e.message || e));
+      setBookError(T('bookErr') + ': ' + refusalText(e));
     } finally {
       setSaving(false);
     }
@@ -574,7 +630,7 @@ export default function Appointments() {
       setDetail(null);
       await refresh();
     } catch (e) {
-      setError(T('actionErr') + ': ' + String(e.message || e));
+      setError(T('actionErr') + ': ' + refusalText(e));
     }
   };
 
@@ -585,7 +641,7 @@ export default function Appointments() {
       setDetail(null);
       await refresh();
     } catch (e) {
-      setError(T('actionErr') + ': ' + String(e.message || e));
+      setError(T('actionErr') + ': ' + refusalText(e));
     }
   };
 
@@ -610,7 +666,7 @@ export default function Appointments() {
       setWalk(null); setNotice(T('walkOk'));
       await refresh();
     } catch (e) {
-      setBookError(T('bookErr') + ': ' + String(e.message || e));
+      setBookError(T('bookErr') + ': ' + refusalText(e));
     } finally {
       setSaving(false);
     }
@@ -1013,23 +1069,39 @@ export default function Appointments() {
                     <div style={{ fontSize:'0.8rem', color:'#8a6d00', marginBottom:4 }}>
                       {T('noSlots')}
                     </div>
+                    {/* F-18 — the free-text field is a walk-in fallback, not a
+                        slot, and the dialog says what the booking will then be.
+                        Keeping the field is the documented current behaviour
+                        (owner decision Q1 on outside-session bookings is still
+                        open); presenting it as equivalent to a slot is not. */}
                     <input type='time' value={book.time} aria-label={T('tm')}
                       onChange={(e) => setBook({ ...book, time: e.target.value })} />
+                    <div style={{ fontSize:'0.75rem', color:'#8a6d00', marginTop:4 }}>
+                      {T('noSlotsHint')}
+                    </div>
                   </>
                 ) : (
                   <div className='flex flex-wrap' role='radiogroup' aria-label={T('chooseSlot')}
                     style={{ maxHeight: 190, overflowY: 'auto' }}>
-                    {slotChoices.map((s) => (
-                      <button key={s.start} type='button' role='radio'
-                        aria-checked={book.time === s.start} disabled={s.full}
-                        className={'btn btn-sm' + (book.time === s.start ? '' : ' btn-outline')}
-                        style={{ opacity: s.full ? 0.45 : 1, margin: 1 }}
-                        title={T('capacity') + ': ' + s.capacity}
-                        onClick={() => setBook({ ...book, time: s.start })}>
-                        {s.start}{' '}
-                        <span style={{ fontSize: '0.68rem' }}>{s.booked}/{s.capacity}</span>
-                      </button>
-                    ))}
+                    {slotChoices.map((s) => {
+                      /* F-19 — a full or nearly full slot says so in words; the
+                         arithmetic alone read the same at 3/4 and 4/4. */
+                      const word = seatsWord(s);
+                      const seats = word
+                        ? fill(T(word.key), { n: word.n })
+                        : s.booked + '/' + s.capacity;
+                      return (
+                        <button key={s.start} type='button' role='radio'
+                          aria-checked={book.time === s.start} disabled={s.full}
+                          className={'btn btn-sm' + (book.time === s.start ? '' : ' btn-outline')}
+                          style={{ opacity: s.full ? 0.45 : 1, margin: 1 }}
+                          title={T('capacity') + ': ' + s.capacity + ' · ' + seats}
+                          onClick={() => setBook({ ...book, time: s.start })}>
+                          {s.start}{' '}
+                          <span style={{ fontSize: '0.68rem' }}>{seats}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>

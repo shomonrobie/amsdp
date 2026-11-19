@@ -195,10 +195,16 @@ class TestMvpWorkflow:
         assert r.json()["duplicates"] == []
 
     def test_08_create_schedule(self, svc):
+        # The weekday must be the booking date's own weekday: BOOKING_DATE is a
+        # Wednesday, so a template declaring Monday publishes nothing on it.  The
+        # template used to declare Monday (0) and this workflow still expected
+        # twelve slots on the Wednesday, because `available-slots` ignored the
+        # weekday — the defect recorded as F-15 in
+        # docs/audit/AMSDP_Appointment_and_Calendar_Reliability_Gap_Analysis_V1.0.md.
         r = svc.scheduling.post("/api/v1/schedules", headers=_auth("admin"), json={
             "doctor_id": STATE["doctor_id"], "organization_id": ORG,
             "branch_id": BR, "effective_from": "2026-01-01",
-            "slot_templates": [{"day_of_week": 0, "start_time": "09:00",
+            "slot_templates": [{"day_of_week": 2, "start_time": "09:00",
                                 "end_time": "12:00",
                                 "slot_duration_minutes": 15,
                                 "max_patients": 4}]})

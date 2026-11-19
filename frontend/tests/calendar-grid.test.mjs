@@ -15,10 +15,11 @@ import assert from 'node:assert/strict';
 import {
   isoOf, parseIso, addDays, addMonths, jsDay, pythonWeekday, startOfWeek, weekDates,
   minutesOf, timeOf, compareTime, slotOf,
-  expandTemplate, templatesForDate, slotsForDate, capacityFor,
+  expandTemplate, templatesForDate, slotsForDate, capacityFor, scheduleCovers,
   bucketAppointments, appointmentsOn, countActive, gridTimes, cellState,
   rangeFor, shiftAnchor, rangeTotal,
   dayLabel, formatDayLong, formatRange, weekdayName, todayIso,
+  DEFAULT_SLOT_DURATION, MAX_SLOTS_PER_TEMPLATE,
 } from '../lib/calendar/grid.js';
 
 /* A Monday clinic 09:00–13:00 with 15-minute slots — the demo shape
@@ -98,6 +99,55 @@ test('only the template matching the date weekday publishes hours', () => {
   assert.equal(templatesForDate([MONDAY_CLINIC], SUN).length, 0);
   assert.equal(templatesForDate([INACTIVE_CLINIC], MON).length, 0, 'inactive schedules are closed');
   assert.equal(slotsForDate([ALL_WEEK_CLINIC], SUN).length, 2, '30-minute slots');
+});
+
+test('the slot defaults are the ones backend/common/slots.py uses', () => {
+  // F-16: the browser must expand a template with the same arithmetic the
+  // availability read publishes, or a free slot is shown where the API refuses.
+  assert.equal(DEFAULT_SLOT_DURATION, 15);
+  assert.equal(MAX_SLOTS_PER_TEMPLATE, 500);
+  const bare = expandTemplate({ start_time: '09:00', end_time: '10:00' });
+  assert.equal(bare.length, 4, '15-minute default, not the 30-minute row ladder');
+  assert.equal(bare[3].start, '09:45');
+  assert.equal(expandTemplate({ start_time: '09:00', end_time: '10:00' },
+    { limit: 2 }).length, 2, 'the cap is respected');
+  // A sub-5-minute duration is a configuration accident, not a consultation.
+  const tiny = expandTemplate({ start_time: '09:00', end_time: '09:30',
+    slot_duration_minutes: 1 });
+  assert.equal(tiny[1].start, '09:05');
+});
+
+test('a template without day_of_week publishes every day', () => {
+  // A row written before the field was validated applies to every day in
+  // `templates_for_day`; the grid used to treat it as matching nothing.
+  const legacy = { id: 'sch-legacy', doctor_id: 'd', status: 'active',
+    slot_templates: [{ start_time: '09:00', end_time: '10:00',
+      slot_duration_minutes: 30, max_patients: 3 }] };
+  assert.equal(templatesForDate([legacy], MON).length, 1);
+  assert.equal(templatesForDate([legacy], SUN).length, 1);
+  assert.equal(slotsForDate([legacy], SUN).length, 2);
+});
+
+test('a schedule publishes nothing outside its effective window', () => {
+  const bounded = { id: 'sch-4', doctor_id: 'demo-dr-004', status: 'active',
+    effective_from: '2026-11-16', effective_to: '2026-11-20',
+    slot_templates: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day_of_week: day,
+      start_time: '09:00', end_time: '10:00', slot_duration_minutes: 30,
+      max_patients: 2 })) };
+  assert.equal(scheduleCovers(bounded, '2026-11-16'), true);
+  assert.equal(scheduleCovers(bounded, '2026-11-15'), false, 'before the window');
+  assert.equal(scheduleCovers(bounded, '2026-11-21'), false, 'after the window');
+  assert.equal(scheduleCovers({ id: 's' }, '2026-11-21'), true, 'unbounded');
+  assert.equal(slotsForDate([bounded], SUN).length, 0);
+  assert.equal(slotsForDate([bounded], MON).length, 2);
+  const closed = cellState({ iso: SUN, time: '09:00', schedules: [bounded] });
+  assert.equal(closed.closed, true);
+  assert.equal(closed.bookable, false);
+  const open = cellState({ iso: MON, time: '09:00', schedules: [bounded] });
+  assert.equal(open.bookable, true);
+  // An `effective_from` carrying a full timestamp still compares as a date.
+  assert.equal(scheduleCovers({ effective_from: '2026-11-16T00:00:00' },
+    '2026-11-16'), true);
 });
 
 test('overlapping templates keep the larger capacity and never duplicate a start', () => {

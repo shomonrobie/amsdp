@@ -16,7 +16,16 @@ assertions below state the current rules:
 
 Slot availability is asserted against real appointment rows, so the "booked"
 arithmetic is verified rather than assumed.
+
+**AMSDP-APPT-RELIABILITY (F-13/F-14/F-15).**  Availability is now weekday-aware:
+a template publishes only on its own ``day_of_week``, an inactive or out-of-range
+schedule publishes nothing, and a stored template that cannot be parsed is
+skipped instead of raising.  The fixtures therefore name a **Monday**
+(``2026-04-20``) for the Monday template, and the reliability scenarios live in
+:class:`TestSlotGridGuards` / :class:`TestScheduleWriteGuards`.
 """
+
+import uuid
 
 import pytest
 from datetime import date
@@ -25,7 +34,7 @@ from fastapi.testclient import TestClient
 from amsdp_test_support import (db_session, ensure_branch, ensure_doctor,
                                ensure_org, ensure_patient, ensure_user,
                                headers, load_app, purge_org)
-from common.models import Appointment, Schedule
+from common.models import Appointment, AuditEvent, Doctor, Schedule
 
 ORG = "legacy-sch-org"
 BR = "legacy-sch-br"
@@ -199,7 +208,7 @@ class TestScheduleReadUpdate:
                 Schedule.id == sid).first().appointment_model == "time_slot"
 
 
-def _book(client, start_time, booking_date="2026-04-15", status="BOOKED"):
+def _book(client, start_time, booking_date="2026-04-20", status="BOOKED"):
     """Insert a real appointment row, the way the appointment service stores it."""
     with db_session() as s:
         s.add(Appointment(organization_id=ORG, branch_id=BR, patient_id=PAT,
@@ -214,7 +223,7 @@ class TestAvailableSlots:
         """09:00–10:00 with 15-minute slots is four slots, starting at 09:00."""
         sid = _create(client).json()["id"]
         r = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                       params={"date_str": "2026-04-15"},
+                       params={"date_str": "2026-04-20"},
                        headers=headers(ADMIN))
         assert r.status_code == 200, r.text
         body = r.json()
@@ -224,7 +233,7 @@ class TestAvailableSlots:
             "09:00", "09:15", "09:30", "09:45"]
         assert slots[0]["end_time"] == "09:15"
         assert body["appointment_model"] == "time_slot"
-        assert body["date"] == "2026-04-15"
+        assert body["date"] == "2026-04-20"
         # No reservation is configured on this organization, so all capacity
         # is bookable and nothing is held back for walk-ins.
         assert slots[0]["max_patients"] == 2
@@ -236,7 +245,7 @@ class TestAvailableSlots:
         sid = _create(client).json()["id"]
         _book(client, "09:00")
         slots = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                           params={"date_str": "2026-04-15"},
+                           params={"date_str": "2026-04-20"},
                            headers=headers(ADMIN)).json()["slots"]
         first = next(s for s in slots if s["start_time"] == "09:00")
         assert first["booked"] == 1
@@ -249,7 +258,7 @@ class TestAvailableSlots:
         _book(client, "09:00", status="CANCELLED")
         _book(client, "09:00", status="NO_SHOW")
         slots = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                           params={"date_str": "2026-04-15"},
+                           params={"date_str": "2026-04-20"},
                            headers=headers(ADMIN)).json()["slots"]
         first = next(s for s in slots if s["start_time"] == "09:00")
         assert first["booked"] == 0
@@ -257,9 +266,9 @@ class TestAvailableSlots:
 
     def test_bookings_for_another_date_are_not_counted(self, client):
         sid = _create(client).json()["id"]
-        _book(client, "09:00", booking_date="2026-04-16")
+        _book(client, "09:00", booking_date="2026-04-21")
         slots = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                           params={"date_str": "2026-04-15"},
+                           params={"date_str": "2026-04-20"},
                            headers=headers(ADMIN)).json()["slots"]
         assert slots[0]["booked"] == 0
 
@@ -279,15 +288,209 @@ class TestAvailableSlots:
     def test_foreign_schedule_slots_are_a_404(self, client):
         sid = _create(client).json()["id"]
         r = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                       params={"date_str": "2026-04-15"},
+                       params={"date_str": "2026-04-20"},
                        headers=headers(OTHER_ADMIN))
         assert r.status_code == 404
 
     def test_slots_require_authentication(self, client):
         sid = _create(client).json()["id"]
         r = client.get(f"/api/v1/schedules/{sid}/available-slots",
-                       params={"date_str": "2026-04-15"})
+                       params={"date_str": "2026-04-20"})
         assert r.status_code == 401
+
+
+def _store_schedule(client, templates, **extra) -> str:
+    """Write a schedule row straight to the database, bypassing validation.
+
+    A row stored before the template validators existed (F-14) is precisely what
+    the availability read has to survive, and the API now refuses to create one,
+    so the test has to.
+    """
+    sid = f"sch-store-{uuid.uuid4().hex[:8]}"
+    with db_session() as s:
+        s.add(Schedule(
+            id=sid, doctor_id=extra.get("doctor_id", DOC),
+            organization_id=ORG, branch_id=extra.get("branch_id", BR),
+            appointment_model="time_slot",
+            effective_from=extra.get("effective_from", date(2026, 1, 1)),
+            slot_templates=templates))
+        s.commit()
+    return sid
+
+
+class TestSlotGridGuards:
+    """F-03/F-15: the published grid must be the grid the write path enforces."""
+
+    def test_a_weekday_without_a_template_publishes_nothing(self, client):
+        # MORNING is a Monday template; 2026-04-22 is a Wednesday.
+        sid = _create(client).json()["id"]
+        r = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                       params={"date_str": "2026-04-22"},
+                       headers=headers(ADMIN))
+        assert r.status_code == 200, r.text
+        assert r.json()["slots"] == []
+
+    def test_a_template_without_a_weekday_still_applies_to_every_day(self, client):
+        # Rows written before ``day_of_week`` was validated have no value; they
+        # keep publishing rather than silently closing the doctor's hours.
+        sid = _store_schedule(client, [{"start_time": "09:00",
+                                        "end_time": "10:00",
+                                        "slot_duration_minutes": 30,
+                                        "max_patients": 1}])
+        for day in ("2026-04-20", "2026-04-22"):
+            body = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                              params={"date_str": day},
+                              headers=headers(ADMIN)).json()
+            assert [s["start_time"] for s in body["slots"]] == ["09:00", "09:30"]
+
+    def test_an_inactive_schedule_publishes_nothing(self, client):
+        sid = _create(client).json()["id"]
+        r = client.patch(f"/api/v1/schedules/{sid}", headers=headers(ADMIN),
+                         json={"status": "inactive"})
+        assert r.status_code == 200, r.text
+        body = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                          params={"date_str": "2026-04-20"},
+                          headers=headers(ADMIN)).json()
+        assert body["slots"] == []
+
+    def test_a_day_before_the_effective_window_publishes_nothing(self, client):
+        sid = _create(client, effective_from="2026-05-01").json()["id"]
+        body = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                          params={"date_str": "2026-04-20"},
+                          headers=headers(ADMIN)).json()
+        assert body["slots"] == []
+
+    def test_a_day_after_the_effective_window_publishes_nothing(self, client):
+        sid = _create(client, effective_to="2026-04-19").json()["id"]
+        body = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                          params={"date_str": "2026-04-20"},
+                          headers=headers(ADMIN)).json()
+        assert body["slots"] == []
+
+    def test_a_booking_inside_a_slot_window_occupies_that_slot(self, client):
+        """F-03: 09:07 belongs to the 09:00–09:15 slot, so 09:00 is taken."""
+        sid = _create(client).json()["id"]
+        _book(client, "09:07")
+        slots = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                           params={"date_str": "2026-04-20"},
+                           headers=headers(ADMIN)).json()["slots"]
+        first = next(s for s in slots if s["start_time"] == "09:00")
+        assert first["booked"] == 1
+        assert first["available"] == 1
+        neighbour = next(s for s in slots if s["start_time"] == "09:15")
+        assert neighbour["booked"] == 0
+
+    def test_a_corrupt_stored_template_is_skipped_not_a_500(self, client):
+        corrupt = [{"start_time": "9:00", "end_time": "10:00",
+                    "slot_duration_minutes": 15, "max_patients": 2}]
+        sid = _store_schedule(client, corrupt)
+        r = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                       params={"date_str": "2026-04-20"},
+                       headers=headers(ADMIN))
+        assert r.status_code == 200, r.text
+        assert r.json()["slots"] == []
+
+    def test_a_corrupt_template_does_not_hide_the_readable_ones(self, client):
+        corrupt = {"start_time": "nine", "end_time": "10:00",
+                   "slot_duration_minutes": 15, "max_patients": 2,
+                   "day_of_week": 0}
+        sid = _store_schedule(client, [corrupt, MORNING[0]])
+        body = client.get(f"/api/v1/schedules/{sid}/available-slots",
+                          params={"date_str": "2026-04-20"},
+                          headers=headers(ADMIN)).json()
+        assert [s["start_time"] for s in body["slots"]] == [
+            "09:00", "09:15", "09:30", "09:45"]
+
+
+class TestScheduleWriteGuards:
+    """F-12/F-13/F-14: a schedule the readers cannot honour is never stored."""
+
+    def test_a_malformed_time_is_refused(self, client):
+        r = _create(client, templates=[{"day_of_week": 0, "start_time": "9am",
+                                        "end_time": "10:00",
+                                        "slot_duration_minutes": 15,
+                                        "max_patients": 1}])
+        assert r.status_code == 422, r.text
+
+    def test_a_window_that_runs_backwards_is_refused(self, client):
+        r = _create(client, templates=[{"day_of_week": 0, "start_time": "10:00",
+                                        "end_time": "09:00",
+                                        "slot_duration_minutes": 15,
+                                        "max_patients": 1}])
+        assert r.status_code == 422, r.text
+
+    def test_a_zero_duration_is_refused(self, client):
+        r = _create(client, templates=[{"day_of_week": 0, "start_time": "09:00",
+                                        "end_time": "10:00",
+                                        "slot_duration_minutes": 0,
+                                        "max_patients": 1}])
+        assert r.status_code == 422, r.text
+
+    def test_a_zero_capacity_is_refused(self, client):
+        r = _create(client, templates=[{"day_of_week": 0, "start_time": "09:00",
+                                        "end_time": "10:00",
+                                        "slot_duration_minutes": 15,
+                                        "max_patients": 0}])
+        assert r.status_code == 422, r.text
+
+    def test_a_weekday_out_of_range_is_refused(self, client):
+        r = _create(client, templates=[{"day_of_week": 7, "start_time": "09:00",
+                                        "end_time": "10:00",
+                                        "slot_duration_minutes": 15,
+                                        "max_patients": 1}])
+        assert r.status_code == 422, r.text
+
+    def test_an_invalid_effective_date_is_refused(self, client):
+        r = _create(client, effective_from="01/05/2026")
+        assert r.status_code == 422, r.text
+        assert "effective_from" in r.json()["detail"]
+        with db_session() as s:
+            assert s.query(Schedule).filter(
+                Schedule.doctor_id == DOC).first() is None
+
+    def test_an_end_before_the_start_is_refused(self, client):
+        r = _create(client, effective_from="2026-06-01",
+                    effective_to="2026-05-01")
+        assert r.status_code == 422, r.text
+
+    def test_an_inactive_doctor_cannot_be_scheduled(self, client):
+        with db_session() as s:
+            s.query(Doctor).filter(Doctor.id == DOC).one().status = "inactive"
+            s.commit()
+        try:
+            r = _create(client)
+            assert r.status_code == 422, r.text
+            assert "not active" in r.json()["detail"]
+            with db_session() as s:
+                assert s.query(Schedule).filter(
+                    Schedule.doctor_id == DOC).first() is None
+        finally:
+            with db_session() as s:
+                s.query(Doctor).filter(Doctor.id == DOC).one().status = "active"
+                s.commit()
+
+    def test_creating_a_schedule_writes_an_audit_row(self, client):
+        sid = _create(client).json()["id"]
+        with db_session() as s:
+            event = s.query(AuditEvent).filter(
+                AuditEvent.action == "schedule.created",
+                AuditEvent.target_id == sid).first()
+            assert event is not None
+            assert event.organization_id == ORG
+            assert event.service == "scheduling"
+            assert event.after["doctor_id"] == DOC
+
+    def test_updating_a_schedule_writes_before_and_after(self, client):
+        sid = _create(client).json()["id"]
+        client.patch(f"/api/v1/schedules/{sid}", headers=headers(ADMIN),
+                     json={"appointment_model": "serial"})
+        with db_session() as s:
+            event = s.query(AuditEvent).filter(
+                AuditEvent.action == "schedule.updated",
+                AuditEvent.target_id == sid).first()
+            assert event is not None
+            assert event.before["appointment_model"] == "time_slot"
+            assert event.after["appointment_model"] == "serial"
 
 
 class TestScheduleBranchAuthorization:
@@ -454,7 +657,7 @@ class TestScheduleRBACR2:
                   "slot_templates": MORNING})
         sid = r.json()["id"]
         r2 = client.get(f"/api/v1/schedules/{sid}/available-slots",
-            params={"date_str": "2026-04-15"},
+            params={"date_str": "2026-04-20"},
             headers=headers(RECP))
         assert r2.status_code == 404, r2.text
 
@@ -469,7 +672,7 @@ class TestScheduleRBACR2:
                   "slot_templates": MORNING})
         sid = r.json()["id"]
         r2 = client.get(f"/api/v1/schedules/{sid}/available-slots",
-            params={"date_str": "2026-04-15"},
+            params={"date_str": "2026-04-20"},
             headers=headers("r2_org_adm7"))
         assert r2.status_code == 200, r2.text
 

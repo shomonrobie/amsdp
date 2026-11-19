@@ -5,18 +5,19 @@ PostgreSQL-backed with full lifecycle, capacity enforcement, walk-in support.
 import logging
 
 from fastapi import FastAPI, HTTPException, Query, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 
 from common.database import SessionFactory
 from common.models import (Appointment, Branch, Doctor, Schedule,
                            ScheduleSession, Patient, QueueEntry, Organization)
 from common.permissions import check as permission_check
 
-from common.auth import AuthContext, require_permission, get_current_user
+from common.auth import (AuthContext, branch_accessible, get_current_user,
+                         require_permission)
 from common.config import reserved_for_capacity
 from common.audit import record_audit
 from common.queue_tokens import allocate_daily_token, token_for
@@ -24,6 +25,9 @@ from common.timeutil import operational_today
 from common.log_redaction import install_token_redaction
 from common.health import install_health
 from common.denial_audit import install_denial_audit
+# AMSDP-APPT-RELIABILITY — the slot arithmetic scheduling publishes (F-02/F-03).
+from common.slots import (DEFAULT_CAPACITY, HHMM_PATTERN, slot_for,
+                          templates_for_day)
 
 # AMSDP-CALENDAR-FILTER-01 — one predicate set for every appointment read.
 # The grid used to apply no branch scope and no search while the list applied
@@ -145,7 +149,10 @@ class AppointmentCreate(BaseModel):
     patient_id: str
     doctor_id: str
     appointment_date: str  # YYYY-MM-DD
-    start_time: Optional[str] = None
+    # F-02: the time is part of the slot's identity, so it is validated at the
+    # boundary instead of being stored as whatever string arrived.  A malformed
+    # time used to be inserted verbatim and then never matched a slot start.
+    start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     serial_number: Optional[int] = None
     appointment_type: str = "scheduled"
     booking_source: str = "reception"
@@ -167,14 +174,16 @@ class AppointmentStatusUpdate(BaseModel):
 
 class AppointmentReschedule(BaseModel):
     new_date: str
-    new_start_time: Optional[str] = None
+    # F-02/F-04: a reschedule writes a time into a slot, so it is validated and
+    # capacity-checked exactly like a first booking.
+    new_start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     reason: str = ""
 
 class AppointmentTransfer(BaseModel):
     new_doctor_id: str
     new_branch_id: str
     new_date: str
-    new_start_time: Optional[str] = None
+    new_start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     reason: str = ""
 
 class WalkInCreate(BaseModel):
@@ -246,25 +255,6 @@ def _validate_transition(current: str, new: str):
         raise HTTPException(422, f"cannot transition from {current} to {new}")
 
 
-def _scoped_appointment(auth, appointment_id: str):
-    """The appointment if it belongs to the caller's organization, else None.
-
-    Cross-tenant ids must stay indistinguishable from unknown ids, so this
-    helper never raises and never reports *why* a row was not returned.
-    """
-    session = SessionFactory()
-    try:
-        appt = session.query(Appointment).filter(
-            Appointment.id == appointment_id,
-            Appointment.organization_id == auth.organization_id).first()
-        if appt is None:
-            return None
-        session.expunge(appt)
-        return appt
-    finally:
-        session.close()
-
-
 def _serial_token(doc_id: str, serial: int) -> str:
     """Booking-time display token — delegates to the one formatting authority."""
     return token_for(doc_id, serial)
@@ -283,7 +273,7 @@ def _date_covered(row, day) -> bool:
     return True
 
 
-def _resolve_location(session, *, doctor_id: str, organization_id: str,
+def _resolve_location(session, *, auth, doctor_id: str, organization_id: str,
                       branch_id, appointment_date, start_time):
     """Resolve the session — therefore the chamber — a booking lands in.
 
@@ -294,13 +284,21 @@ def _resolve_location(session, *, doctor_id: str, organization_id: str,
     When the doctor *does* hold an active session that weekday, a time outside
     every session is refused: a booking must never exist without a chamber the
     receptionist can send the patient to.
+
+    F-06: only branches the caller may act on are candidates.  The final
+    fallback loop used to take any schedule in the organization, so a
+    branch-scoped receptionist could file a booking into a branch she cannot
+    even read.  Whether a receptionist *should* be able to book org-wide is an
+    owner decision (gap analysis Q4); until it is taken, the branch scope the
+    read side already enforces applies to the write side too.
     """
     weekday = appointment_date.weekday()          # 0 = Monday, as in models
     slot = start_time or ""
 
-    schedule_rows = session.query(Schedule).filter(
+    schedule_rows = [row for row in session.query(Schedule).filter(
         Schedule.doctor_id == doctor_id,
         Schedule.organization_id == organization_id).all()
+        if branch_accessible(auth, row.branch_id)]
     schedule = None
     for row in (schedule_rows if not branch_id
                 else [r for r in schedule_rows if r.branch_id == branch_id]):
@@ -320,7 +318,9 @@ def _resolve_location(session, *, doctor_id: str, organization_id: str,
         ScheduleSession.status == "active")
     if branch_id:
         query = query.filter(ScheduleSession.branch_id == branch_id)
-    covering = [row for row in query.all() if _date_covered(row, appointment_date)]
+    covering = [row for row in query.all()
+                if _date_covered(row, appointment_date)
+                and branch_accessible(auth, row.branch_id)]
     matched = [row for row in covering if slot and row.start_time <= slot < row.end_time]
     if covering and slot and not matched:
         raise HTTPException(
@@ -350,10 +350,190 @@ def _apply_location(appt, schedule, clinic) -> None:
     elif schedule is not None:
         appt.schedule_id = schedule.id
 
+# ---------------------------------------------------------------------------
+# Write-path guards (AMSDP-APPT-RELIABILITY-01)
+#
+# Every route that writes a time used to do its own thing: create counted a
+# string, reschedule counted nothing, transfer resolved one time and stored
+# another, and the serial number was ``count(*) + 1`` in four places.  These
+# helpers are the one answer, used by all four.
+# ---------------------------------------------------------------------------
+
+#: Statuses that occupy a seat in a slot (BR §23.7).  Same vocabulary the
+#: availability read uses (``scheduling.main.ACTIVE_BOOKING_STATUSES``), because
+#: a public "3 free" badge and a private "capacity reached" refusal must count
+#: the same rows or one of them is lying.
+APPOINTMENT_ACTIVE_STATUSES = ("BOOKED", "AWAITING_CONFIRMATION", "CONFIRMED",
+                               "CHECKED_IN", "IN_QUEUE")
+
+
+def _tenant_doctor(session, auth, doctor_id: str):
+    """F-05: the doctor if this tenant has her, else ``404``.
+
+    A booking used to accept any ``doctor_id`` string: no query ever proved the
+    doctor existed in the tenant, so an appointment could name a doctor that no
+    read could resolve.  Unknown and other-tenant ids answer the same 404
+    (``.clinerules`` §3).
+    """
+    doctor = session.query(Doctor).filter(
+        Doctor.id == doctor_id,
+        Doctor.organization_id == auth.organization_id).first()
+    if doctor is None:
+        raise HTTPException(404, "doctor not found")
+    return doctor
+
+
+def _lock_doctor(session, doctor_id: str) -> None:
+    """F-01: serialise every booking write for one doctor.
+
+    The capacity check reads a count and then inserts; between those two
+    statements another request could insert the seat this one is about to
+    claim.  Locking the doctor's row makes count-then-insert atomic for that
+    doctor *and* makes the serial/token allocation (``count(*) + 1``) safe, in
+    one mechanism that needs no schema change.  The lock is released when the
+    transaction ends, so a refused booking never holds it beyond the refusal.
+
+    A database-level guarantee (a partial unique index for capacity-1 slots) is
+    the stronger answer and belongs in a migration; it cannot be added silently
+    here because capacity-N templates share a slot start by design, so the
+    choice is recorded as open item Q2 in the gap analysis.
+    """
+    session.query(Doctor.id).filter(
+        Doctor.id == doctor_id).with_for_update().first()
+
+
+def _published_templates(schedule, clinic, appointment_date) -> list:
+    """The slot templates in force for this doctor on this weekday (F-16).
+
+    The matched clinic session comes first: a session is the richer row (it
+    carries the chamber, its own duration and its own capacity) and it is what
+    ``_resolve_location`` already treats as authoritative.  The schedule's
+    ``slot_templates`` follow, so a doctor with sessions still honours a
+    template that has no session row.
+    """
+    templates = []
+    if clinic is not None:
+        templates.append({
+            "day_of_week": clinic.day_of_week,
+            "start_time": clinic.start_time,
+            "end_time": clinic.end_time,
+            "slot_duration_minutes": clinic.slot_duration_minutes,
+            "max_patients": clinic.max_patients,
+        })
+    if schedule is not None:
+        templates.extend(schedule.slot_templates or [])
+    return templates_for_day(templates, appointment_date.weekday())
+
+
+
 
 # ---------------------------------------------------------------------------
 # Appointment creation (with capacity enforcement)
 # ---------------------------------------------------------------------------
+
+def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
+                schedule, clinic, exclude_id=None) -> Optional[dict]:
+    """F-02/F-03/F-04: may this booking take a seat, and in which slot?
+
+    Three behaviours, in the order the gap analysis asks for them:
+
+    * A time the configuration does not publish is refused with a message that
+      says so — no more silent fallback to a capacity of one.
+    * The seat is charged to the *slot window*, not to the minute string, so a
+      09:07 booking consumes the 09:00–09:15 seat (F-03) and the calendar badge
+      that counts that window agrees with the guard.
+    * What is left after the walk-in reserve is the bookable capacity — the same
+      arithmetic the availability read publishes.
+
+    A doctor with no configuration at all keeps the historical default of one
+    patient per minute: that is how unconfigured schedules have always behaved
+    and closing them is not this change's business (gap analysis Q1).
+    """
+    templates = _published_templates(schedule, clinic, appointment_date)
+    slot = slot_for(templates, start_time) if start_time else None
+    if start_time and templates and slot is None:
+        raise HTTPException(
+            422, "no_slot_covers_time: this doctor publishes no slot for "
+                 f"{appointment_date.isoformat()} covering {start_time} — book "
+                 "inside the doctor's configured hours")
+
+    count = session.query(func.count(Appointment.id)).filter(
+        Appointment.organization_id == auth.organization_id,
+        Appointment.doctor_id == doctor_id,
+        Appointment.appointment_date == appointment_date,
+        Appointment.status.in_(APPOINTMENT_ACTIVE_STATUSES))
+    if exclude_id:
+        count = count.filter(Appointment.id != exclude_id)
+    if slot is not None:
+        capacity = slot["max_patients"]
+        count = count.filter(Appointment.start_time >= slot["start_time"],
+                             Appointment.start_time < slot["end_time"])
+    else:
+        # Unconfigured day/time: the historical exact-minute rule.
+        capacity = DEFAULT_CAPACITY
+        count = count.filter(Appointment.start_time == start_time)
+    booked = count.scalar() or 0
+
+    org_row = session.query(Organization).filter(
+        Organization.id == auth.organization_id).first()
+    reserved = reserved_for_capacity(capacity,
+                                     org_row.config if org_row else None)
+    effective = max(capacity - reserved, 1)
+    if booked >= effective:
+        where = (f"{slot['start_time']}–{slot['end_time']}" if slot
+                 else str(start_time or "this time"))
+        raise HTTPException(
+            422, f"slot_full: capacity {effective} reached for the {where} slot "
+                 f"({booked} booked, 0 free) — choose another slot")
+    return slot
+
+
+def _scoped_write_appointment(session, auth, appointment_id: str):
+    """F-08: the appointment this actor may write, locked for the transition.
+
+    Tenant filter, branch scope and a row lock in one place, so a route cannot
+    forget one of the three.  ``404`` covers both "unknown" and "not yours".
+    """
+    appt = session.query(Appointment).filter(
+        Appointment.id == appointment_id,
+        Appointment.organization_id == auth.organization_id
+    ).with_for_update().first()
+    if appt is None or not branch_accessible(auth, appt.branch_id):
+        raise HTTPException(404, "appointment not found")
+    return appt
+
+
+def _apply_status_transition(session, appt, *, new_status: str, auth,
+                             reason: str = "", actor: str = ""):
+    """The one status write (F-07).
+
+    Hoisted out of the route so no route can reach a transition without having
+    passed a permission dependency first — check-in used to call the status
+    route function directly, which is how it skipped ``appointment.modify``.
+    Validates the lifecycle, appends history, audits, and revokes tracking
+    access for the statuses that end a visit.
+    """
+    previous = appt.status
+    _validate_transition(previous, new_status)
+    history = list(appt.status_history or [])
+    history.append({"from": previous, "to": new_status, "reason": reason,
+                    "actor": actor or auth.user_id,
+                    "at": str(datetime.now(timezone.utc))})
+    appt.status_history = history
+    appt.status = new_status
+    record_audit(session, service="appointment", org_id=appt.organization_id,
+        action="appointment.status_change", target_type="appointment",
+        target_id=appt.id, actor_id=auth.user_id, actor_role=auth.role,
+        branch_id=appt.branch_id or "",
+        before={"status": previous}, after={"status": new_status},
+        reason=reason or "")
+    if new_status in ("IN_CONSULTATION", "CANCELLED", "RESCHEDULED"):
+        from common.tracking_tokens import revoke_for_appointment
+        revoke_for_appointment(session, appt.id, reason=f"status -> {new_status}")
+    return appt
+
+
+
 
 @app.post("/api/v1/appointments", status_code=201)
 def create_appointment(
@@ -364,8 +544,10 @@ def create_appointment(
     # Validate required fields
     if not data.patient_id or not data.doctor_id:
         raise HTTPException(422, "patient_id and doctor_id are required")
-    try: apt_date = datetime.strptime(data.appointment_date, "%Y-%m-%d").date()
-    except: raise HTTPException(422, "invalid date, use YYYY-MM-DD")
+    try:
+        apt_date = datetime.strptime(data.appointment_date, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise HTTPException(422, "invalid date, use YYYY-MM-DD")
 
     if data.booking_source not in BOOKING_SOURCES:
         raise HTTPException(422, f"invalid booking_source: {data.booking_source}")
@@ -386,43 +568,30 @@ def create_appointment(
         onset_code, onset_note = validate_onset(
             data.symptom_onset, data.symptom_onset_note)
 
-        # Concurrency-safe capacity check: count existing active appointments
-        existing = session.query(Appointment).filter(
-            Appointment.doctor_id == data.doctor_id,
-            Appointment.appointment_date == apt_date,
-            Appointment.start_time == data.start_time,
-            Appointment.status.in_(["BOOKED","AWAITING_CONFIRMATION",
-                "CONFIRMED","CHECKED_IN","IN_QUEUE"]),
-        ).count()
+        # F-05: the doctor must be this tenant's before anything is written.
+        _tenant_doctor(session, auth, data.doctor_id)
+        # F-01: hold the doctor's row for the whole count-then-insert so two
+        # receptionists cannot both take the last seat.
+        _lock_doctor(session, data.doctor_id)
 
         # Resolve the schedule and the clinic session.  The session is the
         # authority on *where* this doctor sits at this hour, so it is resolved
         # before the capacity check: a time outside every session is refused
         # early rather than silently booked into no chamber.
         schedule, clinic = _resolve_location(
-            session, doctor_id=data.doctor_id,
+            session, auth=auth, doctor_id=data.doctor_id,
             organization_id=auth.organization_id, branch_id=auth.branch_id,
             appointment_date=apt_date, start_time=data.start_time)
-        max_capacity = 1  # default per slot
 
-        if schedule and schedule.slot_templates:
-            for t in schedule.slot_templates:
-                if data.start_time and t["start_time"] <= data.start_time < t["end_time"]:
-                    max_capacity = t.get("max_patients", 1)
-                    break
-        # Reserved walk-in capacity (default 0 -> unchanged behaviour)
-        reserved = 0
-        if max_capacity:
-            org_row = session.query(Organization).filter(
-                Organization.id == auth.organization_id).first()
-            reserved = reserved_for_capacity(max_capacity, org_row.config if org_row else None)
-        effective_capacity = max(max_capacity - reserved, 1)
-        if existing >= effective_capacity:
-            raise HTTPException(
-                422, f"capacity exceeded for this time slot "
-                     f"(unreserved capacity {effective_capacity})")
+        # F-02/F-03/F-04: capacity is charged to the slot window, against the
+        # same templates the availability read publishes.
+        _guard_slot(session, auth=auth, doctor_id=data.doctor_id,
+                    appointment_date=apt_date, start_time=data.start_time,
+                    schedule=schedule, clinic=clinic)
 
-        # Generate serial number
+        # Generate serial number.  Safe because the doctor's row is locked
+        # above: two concurrent bookings can no longer both read the same
+        # count and hand out the same token.
         serial = session.query(Appointment).filter(
             Appointment.doctor_id == data.doctor_id,
             Appointment.appointment_date == apt_date,
@@ -488,6 +657,54 @@ def create_appointment(
         session.rollback(); raise
     finally:
         session.close()
+#: F-17: a calendar read is a *window*, not a table scan.  The route used to
+#: accept any pair of bounds — or none — so one request could walk the tenant's
+#: entire history.  A year-and-a-bit is the widest window the grid can honestly
+#: present (it renders one week at a time), so anything beyond it is a request
+#: error rather than a slow query.
+CALENDAR_MAX_SPAN_DAYS = 400
+#: Width of the window assumed when the caller names no bounds at all: six
+#: months either side of today.  Wide enough that no legitimate UI path loses a
+#: row (the grid always names its week; the List view pages), narrow enough that
+#: a bare request cannot read the tenant's whole life.
+CALENDAR_DEFAULT_SPAN_DAYS = 180
+
+
+def _calendar_window(session, auth, *, single_day, date_from, date_to):
+    """The bounded ``(date_from, date_to)`` this calendar read will use (F-17).
+
+    Three rules, all of them about *not* scanning history:
+
+    * ``date`` alone keeps its existing meaning — exactly that one day.
+    * no bounds at all becomes "today ± 180 days" (the operational today, so a
+      timezone does not move the window).
+    * a window wider than ``CALENDAR_MAX_SPAN_DAYS`` is a ``422``; a half-open
+      window is completed to the same width rather than left unbounded.
+
+    The values are returned as ISO strings so they flow through
+    ``appt_filters.apply_filters`` unchanged, keeping one date-parsing rule.
+    """
+    if single_day:
+        return date_from, date_to
+    first = parse_day(date_from, "date_from") if date_from else None
+    last = parse_day(date_to, "date_to") if date_to else None
+    if first is None and last is None:
+        today = operational_today(session, auth.organization_id)
+        return (str(today - timedelta(days=CALENDAR_DEFAULT_SPAN_DAYS)),
+                str(today + timedelta(days=CALENDAR_DEFAULT_SPAN_DAYS)))
+    if first is None:
+        first = last - timedelta(days=CALENDAR_DEFAULT_SPAN_DAYS)
+    if last is None:
+        last = first + timedelta(days=CALENDAR_DEFAULT_SPAN_DAYS)
+    if (last - first).days > CALENDAR_MAX_SPAN_DAYS:
+        raise HTTPException(
+            422, f"date_range_too_wide: the calendar accepts at most "
+                 f"{CALENDAR_MAX_SPAN_DAYS} days per request (asked for "
+                 f"{(last - first).days}) — page through the window instead")
+    return str(first), str(last)
+
+
+
 # ---------------------------------------------------------------------------
 # Search / List
 # ---------------------------------------------------------------------------
@@ -522,9 +739,14 @@ def list_appointments(
 
     Each row carries the patient/doctor/branch display names, so the grid no
     longer issues one ``GET /api/v1/patients/{id}`` per patient per week (F-7).
+
+    F-17: the date window is now bounded (``_calendar_window``) — previously any
+    request could read the tenant's whole history.
     """
     session = SessionFactory()
     try:
+        date_from, date_to = _calendar_window(
+            session, auth, single_day=date, date_from=date_from, date_to=date_to)
         rows = appointment_rows(session, auth)
         rows = apply_branch_scope(rows, auth, branch_id)
         if patient_id:
@@ -729,12 +951,22 @@ def list_appointments_page(
 
 
 @app.get("/api/v1/appointments/{appointment_id}")
-def get_appointment(appointment_id: str, auth: AuthContext = Depends(get_current_user)):
+def get_appointment(appointment_id: str,
+                    auth: AuthContext = Depends(require_permission("appointment.read"))):
+    """One appointment, with the recorded symptoms.
+
+    F-09: this route required authentication only, so any principal in the
+    tenant — including one whose role grants no appointment permission at all —
+    could read another patient's visit, complaint and onset.  It now asks for
+    ``appointment.read`` and applies the same branch scope as every other read;
+    an out-of-scope row is a non-disclosing 404 (``.clinerules`` §3).
+    """
     session = SessionFactory()
     try:
         a = session.query(Appointment).filter(Appointment.id == appointment_id,
             Appointment.organization_id == auth.organization_id).first()
-        if not a: raise HTTPException(404)
+        if not a or not branch_accessible(auth, a.branch_id):
+            raise HTTPException(404)
         recorded = symptoms_by_appointment([a.id], session=session).get(a.id, [])
         return _appt_to_dict(a, recorded)
     finally:
@@ -750,26 +982,12 @@ def update_appointment_status(appointment_id: str, data: AppointmentStatusUpdate
                                auth: AuthContext = Depends(require_permission("appointment.modify"))):
     session = SessionFactory()
     try:
-        a = session.query(Appointment).filter(Appointment.id == appointment_id,
-            Appointment.organization_id == auth.organization_id).first()
-        if not a: raise HTTPException(404)
-        _validate_transition(a.status, data.status)
-        history = list(a.status_history or [])
-        history.append({"from": a.status, "to": data.status,
-            "reason": data.reason, "actor": data.actor or auth.user_id,
-            "at": str(datetime.now(timezone.utc))})
-        a.status_history = history
-        a.status = data.status
-        record_audit(session, service="appointment", org_id=a.organization_id,
-            action="appointment.status_change", target_type="appointment", target_id=a.id,
-            actor_id=auth.user_id, actor_role=auth.role, branch_id=a.branch_id or "",
-            before={"status": history[-2]["from"] if len(history) >= 2 else ""},
-            after={"status": data.status},
-            reason=data.reason or "")
-        # PQT lifecycle: revoke tracking access on consultation start / cancel / reschedule
-        if data.status in ("IN_CONSULTATION", "CANCELLED", "RESCHEDULED"):
-            from common.tracking_tokens import revoke_for_appointment
-            revoke_for_appointment(session, a.id, reason=f"status -> {data.status}")
+        # F-08: branch scope + row lock in one place.
+        a = _scoped_write_appointment(session, auth, appointment_id)
+        # F-07: the status write lives in one helper so check-in cannot skip
+        # the permission dependency the route declares.
+        _apply_status_transition(session, a, new_status=data.status, auth=auth,
+                                 reason=data.reason, actor=data.actor)
         session.commit()
         # Sequence 3: cancel any pending confirmation/reminder for this visit.
         if data.status in CLOSING_STATUSES:
@@ -805,39 +1023,53 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
     import uuid
     session = SessionFactory()
     try:
-        orig = session.query(Appointment).filter(Appointment.id == appointment_id,
-            Appointment.organization_id == auth.organization_id).first()
-        if not orig: raise HTTPException(404)
+        # F-08: tenant + branch scope, and the row locked for the move.
+        orig = _scoped_write_appointment(session, auth, appointment_id)
         if orig.status in ("COMPLETED","CANCELLED","NO_SHOW"):
             raise HTTPException(422, f"cannot reschedule {orig.status}")
-        try: nd = datetime.strptime(data.new_date, "%Y-%m-%d").date()
-        except: raise HTTPException(422, "invalid date")
-        serial = session.query(Appointment).filter(
-            Appointment.doctor_id == orig.doctor_id,
-            Appointment.appointment_date == nd).count() + 1
-        # Mark original RESCHEDULED
-        prev_status = orig.status
-        orig.status = "RESCHEDULED"
-        # list(...) copy: mutating the loaded JSON list in place leaves
-        # SQLAlchemy nothing to persist (finding SEQ4-HISTORY-P0).
-        h = list(orig.status_history or [])
-        h.append({"from":prev_status,"to":"RESCHEDULED","reason":data.reason,
-            "actor":auth.user_id,"at":str(datetime.now(timezone.utc))})
-        orig.status_history = h
+        try:
+            nd = datetime.strptime(data.new_date, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            raise HTTPException(422, "invalid date")
+
+        new_time = data.new_start_time or orig.start_time
+        # F-01: serialise against concurrent bookings for the same doctor, so
+        # the seat check below and the serial allocation are both sound.
+        _lock_doctor(session, orig.doctor_id)
+
         # The new booking carries its own chamber snapshot: the room may well
         # differ from the original (other weekday, other branch).
         new_schedule, new_clinic = _resolve_location(
-            session, doctor_id=orig.doctor_id,
+            session, auth=auth, doctor_id=orig.doctor_id,
             organization_id=orig.organization_id, branch_id=orig.branch_id,
-            appointment_date=nd,
-            start_time=data.new_start_time or orig.start_time)
+            appointment_date=nd, start_time=new_time)
+
+        # Mark original RESCHEDULED first: the original seat is being vacated,
+        # so it must not count against the destination slot (F-04).  The move
+        # and the new booking commit together or not at all.  The transition
+        # goes through the one status write (F-07), so history, audit and
+        # tracking revocation are the same as a status change made by hand.
+        _apply_status_transition(session, orig, new_status="RESCHEDULED",
+                                 auth=auth, reason=data.reason)
+        session.flush()
+
+        # F-04: the destination slot is capacity-checked exactly like a first
+        # booking — a reschedule used to be a way to overbook a full slot.
+        _guard_slot(session, auth=auth, doctor_id=orig.doctor_id,
+                    appointment_date=nd, start_time=new_time,
+                    schedule=new_schedule, clinic=new_clinic,
+                    exclude_id=orig.id)
+
+        serial = session.query(Appointment).filter(
+            Appointment.doctor_id == orig.doctor_id,
+            Appointment.appointment_date == nd).count() + 1
         new_branch = (new_clinic.branch_id if new_clinic is not None
                       else (new_schedule.branch_id if new_schedule is not None
                             else orig.branch_id))
         new_a = Appointment(id=str(uuid.uuid4()),
             organization_id=orig.organization_id, branch_id=new_branch,
             patient_id=orig.patient_id, doctor_id=orig.doctor_id,
-            appointment_date=nd, start_time=data.new_start_time or orig.start_time,
+            appointment_date=nd, start_time=new_time,
             serial_number=serial, booking_source=orig.booking_source, status="BOOKED",
             status_history=[{"from":"","to":"BOOKED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(orig.doctor_id, serial),
@@ -860,11 +1092,8 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
             branch_id=orig.branch_id or "",
             before={"status": "RESCHEDULED", "date": str(orig.appointment_date)},
             after={"new_appointment_id": new_a.id, "new_date": data.new_date,
-                   "new_start_time": data.new_start_time or orig.start_time},
+                   "new_start_time": new_time},
             reason=data.reason or "")
-        # PQT lifecycle: revoke tracking on the original appointment
-        from common.tracking_tokens import revoke_for_appointment as _revoke
-        _revoke(session, appointment_id, reason="appointment rescheduled")
         session.commit()
         # Sequence 3: the old visit is gone, the new booking gets its own plan.
         _notify("on_appointment_closed", appointment_id, "appointment rescheduled")
@@ -882,73 +1111,77 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
 
 @app.post("/api/v1/appointments/{appointment_id}/check-in")
 def check_in_appointment(appointment_id: str, data: AppointmentStatusUpdate,
-                          auth=Depends(get_current_user)):
-    data.status = "CHECKED_IN"
-    # Idempotent check-in: the same patient can be checked in from the
-    # appointments page or from the queue page.  Once the appointment is
-    # CHECKED_IN/IN_QUEUE the status transition is meaningless, so return the
-    # current row instead of failing the receptionist's second click.
-    existing = _scoped_appointment(auth, appointment_id)
-    if existing is not None and existing.status in ("CHECKED_IN", "IN_QUEUE"):
-        r = _appt_to_dict(
-            existing,
-            symptoms_by_appointment([existing.id]).get(existing.id, []))
-    else:
-        r = update_appointment_status(appointment_id, data, auth)
-    # Auto-create the queue entry with the *same* token authority, history and
-    # audit trail as POST /api/v1/queue/check-in.
-    #
-    # Finding SEQ4-TOKEN-P1 (Sequence 4 acceptance run): this block used to mint
-    # its own token from ``count(*) + 1`` and swallowed every exception, so a
-    # walk-in enqueued afterwards was issued a token that was already live for
-    # the same doctor and day (two active entries T-<DOC>-001), with no
-    # status/position history and no queue.checkin audit event.
+                          auth: AuthContext = Depends(require_permission("appointment.modify"))):
+    """Check a patient in and put her in the queue, in one transaction.
+
+    F-07: this route used to depend on ``get_current_user`` and then call the
+    status route function directly, which is how it wrote a status change
+    without the ``appointment.modify`` check the status route declares — anyone
+    able to read the calendar could push a patient into the queue.  It also
+    committed twice: when the queue allocation failed the appointment stayed
+    CHECKED_IN with no queue entry behind it.  One permission dependency, one
+    transaction, and the status write goes through the shared helper.
+    """
     import uuid
     session = SessionFactory()
     try:
-        appt = session.query(Appointment).filter(
-            Appointment.id == appointment_id,
-            Appointment.organization_id == auth.organization_id).first()
-        if not appt:
-            return r
+        # F-08: tenant + branch scope, and the row locked for the transition.
+        appt = _scoped_write_appointment(session, auth, appointment_id)
+        # Idempotent check-in: the same patient can be checked in from the
+        # appointments page or from the queue page, so a second click must not
+        # fail on an illegal CHECKED_IN -> CHECKED_IN transition.
+        if appt.status not in ("CHECKED_IN", "IN_QUEUE"):
+            _apply_status_transition(session, appt, new_status="CHECKED_IN",
+                                     auth=auth, reason=data.reason,
+                                     actor=data.actor)
+            session.flush()
+
+        # Auto-create the queue entry with the *same* token authority, history
+        # and audit trail as POST /api/v1/queue/check-in.
+        #
+        # Finding SEQ4-TOKEN-P1 (Sequence 4 acceptance run): this block used to
+        # mint its own token from ``count(*) + 1`` and swallow every exception,
+        # so a walk-in enqueued afterwards was issued a token that was already
+        # live for the same doctor and day (two active entries T-<DOC>-001),
+        # with no status/position history and no queue.checkin audit event.
         dup = session.query(QueueEntry).filter(
             QueueEntry.appointment_id == appt.id,
             QueueEntry.status.in_(QUEUE_ACTIVE_STATUSES)).first()
-        if dup:
-            return r                      # already queued — idempotent
-        serial, token = allocate_daily_token(session, appt.doctor_id,
-                                             appt.appointment_date)
-        now = str(datetime.now(timezone.utc))
-        entry = QueueEntry(id=str(uuid.uuid4()),
-            organization_id=appt.organization_id, branch_id=appt.branch_id or "",
-            doctor_id=appt.doctor_id, date=appt.appointment_date,
-            position=serial, token=token, patient_id=appt.patient_id,
-            appointment_id=appt.id, entry_source="appointment", status="waiting",
-            status_history=[{"from": "", "to": "waiting",
-                             "actor": auth.user_id, "at": now}],
-            position_history=[{"from": 0, "to": serial,
-                               "actor": auth.user_id, "at": now}],
-            added_by=auth.user_id)
-        session.add(entry)
-        record_audit(session, service="appointment", org_id=appt.organization_id,
-            branch_id=entry.branch_id, action="queue.checkin",
-            target_type="queue_entry", target_id=entry.id,
-            actor_id=auth.user_id, actor_role=auth.role,
-            after={"status": "waiting", "position": serial, "token": token},
-            reason="check-in from appointment")
+        if dup is None:
+            serial, token = allocate_daily_token(session, appt.doctor_id,
+                                                 appt.appointment_date)
+            now = str(datetime.now(timezone.utc))
+            entry = QueueEntry(id=str(uuid.uuid4()),
+                organization_id=appt.organization_id, branch_id=appt.branch_id or "",
+                doctor_id=appt.doctor_id, date=appt.appointment_date,
+                position=serial, token=token, patient_id=appt.patient_id,
+                appointment_id=appt.id, entry_source="appointment", status="waiting",
+                status_history=[{"from": "", "to": "waiting",
+                                 "actor": auth.user_id, "at": now}],
+                position_history=[{"from": 0, "to": serial,
+                                   "actor": auth.user_id, "at": now}],
+                added_by=auth.user_id)
+            session.add(entry)
+            record_audit(session, service="appointment", org_id=appt.organization_id,
+                branch_id=entry.branch_id, action="queue.checkin",
+                target_type="queue_entry", target_id=entry.id,
+                actor_id=auth.user_id, actor_role=auth.role,
+                after={"status": "waiting", "position": serial, "token": token},
+                reason="check-in from appointment")
+
         session.commit()
+        recorded = symptoms_by_appointment([appt.id], session=session).get(appt.id, [])
+        return _appt_to_dict(appt, recorded)
     except HTTPException:
         session.rollback()
         raise
     except Exception:
         session.rollback()
-        logger.exception("queue entry creation failed for appointment %s",
-                         appointment_id)
-        raise HTTPException(503, "appointment checked in but the queue entry "
-                                 "could not be created")
+        logger.exception("check-in failed for appointment %s", appointment_id)
+        raise HTTPException(503, "check-in could not be completed — the "
+                                 "appointment and the queue were left unchanged")
     finally:
         session.close()
-    return r
 # ---------------------------------------------------------------------------
 # No-show
 # ---------------------------------------------------------------------------
@@ -975,6 +1208,10 @@ def register_walk_in(data: WalkInCreate,
         p = session.query(Patient).filter(Patient.id==data.patient_id,
             Patient.organization_id==auth.organization_id).first()
         if not p: raise HTTPException(422, "patient not found")
+        # F-05: the doctor must be this tenant's; F-01: hold her row while the
+        # daily serial is allocated, so two walk-ins cannot share a token.
+        _tenant_doctor(session, auth, data.doctor_id)
+        _lock_doctor(session, data.doctor_id)
         count = session.query(Appointment).filter(
             Appointment.doctor_id==data.doctor_id,
             Appointment.appointment_date==today).count() + 1
@@ -984,13 +1221,13 @@ def register_walk_in(data: WalkInCreate,
         # "no chamber" rather than refusing the registration.
         try:
             w_schedule, w_clinic = _resolve_location(
-                session, doctor_id=data.doctor_id,
+                session, auth=auth, doctor_id=data.doctor_id,
                 organization_id=auth.organization_id, branch_id=auth.branch_id,
                 appointment_date=today,
                 start_time=datetime.now().strftime("%H:%M"))
         except HTTPException:
             w_schedule, w_clinic = _resolve_location(
-                session, doctor_id=data.doctor_id,
+                session, auth=auth, doctor_id=data.doctor_id,
                 organization_id=auth.organization_id, branch_id=auth.branch_id,
                 appointment_date=today, start_time=None)
         w_branch = (w_clinic.branch_id if w_clinic is not None
@@ -1036,7 +1273,7 @@ def register_walk_in(data: WalkInCreate,
         _notify("on_appointment_booked", a.id)
         return _appt_to_dict(a, symptom_rows)
     except HTTPException: raise
-    except: session.rollback(); raise
+    except Exception: session.rollback(); raise
     finally: session.close()
 
 
@@ -1050,35 +1287,59 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
     import uuid
     session = SessionFactory()
     try:
-        orig = session.query(Appointment).filter(Appointment.id==appointment_id,
-            Appointment.organization_id==auth.organization_id).first()
-        if not orig: raise HTTPException(404)
+        # F-08: tenant + branch scope, and the original row locked for the move.
+        orig = _scoped_write_appointment(session, auth, appointment_id)
         if orig.status in ("COMPLETED","CANCELLED","NO_SHOW"):
             raise HTTPException(422, f"cannot transfer {orig.status}")
-        try: nd = datetime.strptime(data.new_date, "%Y-%m-%d").date()
-        except: raise HTTPException(422, "invalid date")
-        # Verify doctor exists in org
-        from common.models import Doctor
-        doc = session.query(Doctor).filter(Doctor.id==data.new_doctor_id,
-            Doctor.organization_id==auth.organization_id).first()
-        if not doc: raise HTTPException(422, "target doctor not found")
+        try:
+            nd = datetime.strptime(data.new_date, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            raise HTTPException(422, "invalid date")
+        # F-05: the target doctor must be this tenant's, and F-10: the target
+        # branch must exist *in this tenant* and be one the caller may act on —
+        # it used to be written verbatim, producing rows no scoped read could
+        # return.
+        _tenant_doctor(session, auth, data.new_doctor_id)
+        if data.new_branch_id:
+            target_branch = session.query(Branch).filter(
+                Branch.id == data.new_branch_id,
+                Branch.organization_id == auth.organization_id).first()
+            if target_branch is None or not branch_accessible(auth, data.new_branch_id):
+                raise HTTPException(404, "branch not found")
+        # F-01: serialise with concurrent bookings for the target doctor.
+        _lock_doctor(session, data.new_doctor_id)
+
+        # F-11: one time, resolved once and stored.  The snapshot used to be
+        # resolved for ``new_start_time or orig.start_time`` while the row was
+        # written with ``new_start_time`` alone, so a transfer without a new
+        # time carried the chamber of the old hour.
+        t_time = data.new_start_time or orig.start_time
+        t_schedule, t_clinic = _resolve_location(
+            session, auth=auth, doctor_id=data.new_doctor_id,
+            organization_id=orig.organization_id, branch_id=data.new_branch_id,
+            appointment_date=nd, start_time=t_time)
+
+        # The original visit ends as RESCHEDULED through the one status write
+        # (F-07), before the destination is counted (F-04).
+        _apply_status_transition(session, orig, new_status="RESCHEDULED",
+                                 auth=auth, reason=data.reason)
+        session.flush()
+
+        # F-04: the destination slot obeys the same capacity rule as any other
+        # booking; a transfer used to ignore capacity entirely.
+        _guard_slot(session, auth=auth, doctor_id=data.new_doctor_id,
+                    appointment_date=nd, start_time=t_time,
+                    schedule=t_schedule, clinic=t_clinic,
+                    exclude_id=orig.id)
+
         serial = session.query(Appointment).filter(
             Appointment.doctor_id==data.new_doctor_id,
             Appointment.appointment_date==nd).count() + 1
-        h = list(orig.status_history or [])
-        h.append({"from":orig.status,"to":"RESCHEDULED","reason":data.reason,
-            "actor":auth.user_id,"at":str(datetime.now(timezone.utc))})
-        orig.status_history = h; orig.status = "RESCHEDULED"
-        t_schedule, t_clinic = _resolve_location(
-            session, doctor_id=data.new_doctor_id,
-            organization_id=orig.organization_id, branch_id=data.new_branch_id,
-            appointment_date=nd,
-            start_time=data.new_start_time or orig.start_time)
         t_branch = t_clinic.branch_id if t_clinic is not None else data.new_branch_id
         new_a = Appointment(id=str(uuid.uuid4()), organization_id=orig.organization_id,
             branch_id=t_branch, patient_id=orig.patient_id,
             doctor_id=data.new_doctor_id, appointment_date=nd,
-            start_time=data.new_start_time, serial_number=serial,
+            start_time=t_time, serial_number=serial,
             booking_source=orig.booking_source, status="BOOKED",
             status_history=[{"from":"","to":"BOOKED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(data.new_doctor_id, serial),
@@ -1102,9 +1363,6 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             after={"new_appointment_id": new_a.id, "new_doctor_id": data.new_doctor_id,
                    "new_branch_id": data.new_branch_id, "new_date": data.new_date},
             reason=data.reason or "")
-        # PQT lifecycle: revoke tracking on the original appointment
-        from common.tracking_tokens import revoke_for_appointment as _revoke
-        _revoke(session, appointment_id, reason="appointment transferred")
         session.commit()
         # Sequence 3: cancel the original visit's messages, plan the new one.
         _notify("on_appointment_closed", appointment_id, "appointment transferred")
@@ -1113,5 +1371,5 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             "original_appointment_id":appointment_id,
             "message":"transfer completed"}
     except HTTPException: raise
-    except: session.rollback(); raise
+    except Exception: session.rollback(); raise
     finally: session.close()

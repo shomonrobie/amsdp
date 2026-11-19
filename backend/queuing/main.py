@@ -14,6 +14,7 @@ import logging
 from common.database import SessionFactory
 from common.models import QueueEntry, QueueSequence, Appointment, Patient, Doctor, Branch
 from common.auth import AuthContext, get_current_user, require_permission, branch_accessible
+from common.permissions import check as permission_check
 from common.audit import record_audit
 from common.queue_tokens import allocate_daily_token, token_for
 from common.timeutil import operational_today
@@ -163,9 +164,23 @@ class CheckInRequest(BaseModel):
 @app.post("/api/v1/queue/check-in", status_code=201)
 def check_in_appointment(data: CheckInRequest,
                           auth: AuthContext = Depends(require_permission("queue.checkin"))):
+    """Check an appointment in: create the queue entry and advance the visit.
+
+    This route changes an appointment's lifecycle status, so it must satisfy the
+    same permission the appointment service demands for a status change
+    (`appointment.modify`).  `queue.checkin` alone is the queue capability; on
+    its own it used to be enough to flip an appointment's status from another
+    service, which is the same bypass the F-07 finding records for
+    `POST /api/v1/appointments/{id}/check-in`.  Every role holding
+    `queue.checkin` today (receptionist, branch_admin, org_admin) also holds
+    `appointment.modify`, so this narrows the matrix without breaking a
+    workflow.
+    """
     import uuid
     session = SessionFactory()
     try:
+        if not permission_check("appointment.modify", auth.role):
+            raise HTTPException(403, "insufficient permissions")
         appt = session.query(Appointment).filter(
             Appointment.id == data.appointment_id,
             Appointment.organization_id == auth.organization_id).first()

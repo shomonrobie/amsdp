@@ -26,6 +26,16 @@ export const WEEK_START = 6;
 export const DEFAULT_OPEN = '09:00';
 export const DEFAULT_CLOSE = '17:00';
 export const DEFAULT_STEP = 30;
+/**
+ * Slot length when a template omits `slot_duration_minutes`, and the cap on one
+ * template's expansion. Both mirror `backend/common/slots.py`
+ * (`DEFAULT_SLOT_DURATION`, `MAX_SLOTS_PER_TEMPLATE`) so the grid and
+ * `/schedules/{id}/available-slots` cannot disagree about a slot boundary.
+ * They are *not* `DEFAULT_STEP`: that is the empty-day row ladder, a display
+ * fallback for a doctor with no published hours.
+ */
+export const DEFAULT_SLOT_DURATION = 15;
+export const MAX_SLOTS_PER_TEMPLATE = 500;
 /** Statuses that occupy a slot (mirrors backend capacity check). */
 export const ACTIVE_STATUSES = Object.freeze([
   'BOOKED', 'AWAITING_CONFIRMATION', 'CONFIRMED', 'CHECKED_IN', 'IN_QUEUE',
@@ -116,14 +126,16 @@ export function slotOf(appt) {
  * Expand one `slot_template` into bookable slots.
  *
  * `slot_duration_minutes` is the slot length, so a 09:00–13:00 clinic with
- * 15-minute slots yields 16 slots — the same arithmetic the scheduling service
- * uses in `/schedules/{id}/available-slots`.
+ * 15-minute slots yields 16 slots — the same arithmetic
+ * `backend/common/slots.slot_starts` uses, and the same defaults: 15 minutes
+ * when the field is absent, never under 5, never more than
+ * `MAX_SLOTS_PER_TEMPLATE` from one template.
  */
-export function expandTemplate(template, { limit = 200 } = {}) {
+export function expandTemplate(template, { limit = MAX_SLOTS_PER_TEMPLATE } = {}) {
   const start = minutesOf(template && template.start_time);
   const end = minutesOf(template && template.end_time);
   if (start === null || end === null || end <= start) return [];
-  const step = Math.max(Number(template.slot_duration_minutes) || DEFAULT_STEP, 5);
+  const step = Math.max(Number(template.slot_duration_minutes) || DEFAULT_SLOT_DURATION, 5);
   const capacity = Math.max(Number(template.max_patients) || 1, 1);
   const slots = [];
   for (let m = start; m < end && slots.length < limit; m += step) {
@@ -137,15 +149,37 @@ function activeSchedules(schedules) {
   return (schedules || []).filter((s) => (s && (s.status || 'active')) === 'active');
 }
 
+/**
+ * True when a schedule's effective window contains `iso`.
+ *
+ * Mirrors `_date_covered` in `backend/appointment/main.py` and the guard in
+ * `GET /schedules/{id}/available-slots`: a schedule that starts next month
+ * publishes nothing today. Without this the grid offered bookable cells for
+ * dates the write path refuses — the same divergence F-15 records for weekdays.
+ */
+export function scheduleCovers(schedule, iso) {
+  const from = String((schedule && schedule.effective_from) || '').slice(0, 10);
+  const to = String((schedule && schedule.effective_to) || '').slice(0, 10);
+  if (from && iso < from) return false;
+  if (to && iso > to) return false;
+  return true;
+}
+
 /** The `{schedule, template}` pairs that apply on `iso` for its weekday. */
 export function templatesForDate(schedules, iso) {
   const weekday = pythonWeekday(iso);
   const out = [];
   activeSchedules(schedules).forEach((schedule) => {
+    if (!scheduleCovers(schedule, iso)) return;
     (schedule.slot_templates || []).forEach((template) => {
-      if (Number(template && template.day_of_week) === weekday) {
-        out.push({ schedule, template });
-      }
+      if (!template || typeof template !== 'object') return;
+      // A template with no `day_of_week` applies to every day, exactly as
+      // `backend/common/slots.templates_for_day` treats a row written before the
+      // field was validated: closing a doctor's published hours is the worse
+      // failure. (`Number(undefined)` is NaN, which used to match nothing.)
+      const day = template.day_of_week;
+      if (day !== undefined && day !== null && Number(day) !== weekday) return;
+      out.push({ schedule, template });
     });
   });
   return out;
