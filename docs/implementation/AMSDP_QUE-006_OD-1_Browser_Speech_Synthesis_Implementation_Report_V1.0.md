@@ -367,6 +367,34 @@ Modified (only these, by this task):
 All 35 pre-existing modified files and 12 pre-existing untracked paths are unchanged by this
 task. Nothing was staged, committed, pushed, stashed, reset or cleaned.
 
+### 15.1 Commit outcome (recorded after the fact)
+
+The block above is the state **at the end of the implementation task**. It was committed
+afterwards, unchanged, in a separate step:
+
+```
+Commit : e67327e9b44f709369d57892d16dac917ba02db7
+Subject: feat(queue): add browser speech synthesis for QUE-006
+Pushed : 6d3acdf..e67327e -> origin/hackathon-mvp   (fast-forward, non-force)
+Staged : exactly 11 OD-1 paths (8 new + queue.js + i18n.js + this report)
+Checked after commit: 0 backend paths, 0 docs-index paths in the commit.
+Frontend suite immediately before staging: 229/229, exit 0.
+```
+
+`docs/governance/AMSDP_Docs_Index_V1.0.md` was **not** in that commit. Its diff is mixed — this
+task's Revision 34 block and report row sit beside the Revision 33 block, the Q1–Q5 catalogue row
+and a gap-analysis row update from other workstreams — and its header counts are only true once
+those workstreams' documents are committed. It was committed with them, as Revision 35, and
+Revision 35 corrects a counting error in Revision 34 (92 documents on disk, not 91) rather than
+hiding it.
+
+The 35 modified and remaining untracked paths were then committed at the tree owner's
+instruction on 2026-11-20, in workstream-scoped commits attributed to the workstreams that
+produced them (`AMSDP-APPT-OWNER-DECISIONS-01`, `AMSDP-PHASE-3-GAP-ANALYSIS`, the QUE-006
+catalogue-addition task). **This task did not author, review or verify that work**; only the
+frontend suite was run against the combined tree (229/229), and the backend suite was not run
+(no throwaway `AMSDP_DATABASE_URL` in this environment).
+
 **Residual limitation, stated plainly:** QUE-006 now has a working, tested, browser-native
 announcement mechanism and an operator surface, but it is **not** triggered by a queue event,
 **not** configurable per facility, **not** audited server-side, and **not** proven audible on
