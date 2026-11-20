@@ -69,6 +69,11 @@ def _install_security_filters():
 WALK_IN_POLICIES = ("end_of_queue", "first_come", "reserved_capacity", "staff_placement")
 ACTIVE_STATUSES = ("waiting", "called", "in_consultation", "skipped")
 
+#: Appointment states a patient may be checked in from (owner decision Q3).
+#: Mirrors the appointment service's BR §18 lifecycle up to CHECKED_IN; the
+#: terminal and post-queue states are refused by the route.
+CHECKIN_SOURCES = ("BOOKED", "AWAITING_CONFIRMATION", "CONFIRMED", "CHECKED_IN")
+
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -163,24 +168,30 @@ class CheckInRequest(BaseModel):
 
 @app.post("/api/v1/queue/check-in", status_code=201)
 def check_in_appointment(data: CheckInRequest,
-                          auth: AuthContext = Depends(require_permission("queue.checkin"))):
+                          auth: AuthContext = Depends(require_permission("appointment.check_in"))):
     """Check an appointment in: create the queue entry and advance the visit.
 
     This route changes an appointment's lifecycle status, so it must satisfy the
-    same permission the appointment service demands for a status change
-    (`appointment.modify`).  `queue.checkin` alone is the queue capability; on
-    its own it used to be enough to flip an appointment's status from another
-    service, which is the same bypass the F-07 finding records for
-    `POST /api/v1/appointments/{id}/check-in`.  Every role holding
-    `queue.checkin` today (receptionist, branch_admin, org_admin) also holds
-    `appointment.modify`, so this narrows the matrix without breaking a
-    workflow.
+    same authorization the appointment service demands for a check-in — that is
+    owner decision Q3's "equivalent authorization" requirement, and it is why the
+    dependency here is ``appointment.check_in`` rather than ``queue.checkin``:
+
+    * ``queue.checkin`` alone is a *queue* capability.  On its own it used to be
+      enough to flip an appointment's status from another service, which is the
+      same bypass the F-07 finding records for
+      ``POST /api/v1/appointments/{id}/check-in``.
+    * ``appointment.modify`` (the previous requirement) is a *mutation*
+      capability.  A doctor who may check in her own patient must not thereby be
+      able to cancel or reschedule anything, and an assistant must not gain
+      modify either.
+
+    ``appointment.check_in`` is held by the front desk and administrators, by a
+    doctor for their own patients and by an assistant for the doctor(s) they are
+    assigned to; the resource-scope checks below enforce exactly that.
     """
     import uuid
     session = SessionFactory()
     try:
-        if not permission_check("appointment.modify", auth.role):
-            raise HTTPException(403, "insufficient permissions")
         appt = session.query(Appointment).filter(
             Appointment.id == data.appointment_id,
             Appointment.organization_id == auth.organization_id).first()
@@ -201,11 +212,17 @@ def check_in_appointment(data: CheckInRequest,
             raise HTTPException(404, "not found")
         if not branch_accessible(auth, target_branch):
             raise HTTPException(404, "not found")
-        # C2: a doctor or assistant may check in only their own assigned
+        # C2 / Q3: a doctor or assistant may check in only their own assigned
         # doctor's appointments.  Fail closed when no assignment exists.
         if auth.role in ("doctor", "assistant"):
             if not auth.can_access_doctor(appt.doctor_id):
                 raise HTTPException(404, "appointment not found")
+        # Q3: the current appointment state is validated before anything is
+        # written.  ``CHECKIN_SOURCES`` mirrors the appointment service's BR §18
+        # lifecycle (BOOKED / AWAITING_CONFIRMATION / CONFIRMED → CHECKED_IN);
+        # the full transition table stays owned by that service.
+        if appt.status not in CHECKIN_SOURCES:
+            raise HTTPException(422, f"cannot check in a {appt.status} appointment")
         day = appt.appointment_date
         seq = _next_sequence(session, appt.doctor_id, day)
         token = _token_for(appt.doctor_id, seq)
@@ -221,8 +238,27 @@ def check_in_appointment(data: CheckInRequest,
             notes=data.notes, added_by=auth.user_id)
         session.add(entry)
         h = list(appt.status_history or [])
-        h.append({"from": appt.status, "to": "IN_QUEUE", "actor": auth.user_id, "at": _now_iso()})
+        # The lifecycle is recorded, not skipped: a BOOKED appointment reaches
+        # IN_QUEUE through CHECKED_IN, exactly as the appointment service's
+        # check-in route records it.  A second, silent single-step jump would let
+        # the two entry points disagree about a patient's visit history.
+        if appt.status != "CHECKED_IN":
+            h.append({"from": appt.status, "to": "CHECKED_IN",
+                      "actor": auth.user_id, "at": _now_iso()})
+        h.append({"from": "CHECKED_IN", "to": "IN_QUEUE",
+                  "actor": auth.user_id, "at": _now_iso()})
+        previous_status = appt.status
         appt.status_history = h; appt.status = "IN_QUEUE"
+        # The appointment transition is audited from this service too: the trail
+        # must show *where* the check-in happened, in the same transaction as the
+        # queue entry (Q5/Q3 — a failed queue write leaves neither behind).
+        record_audit(session, service="queuing", org_id=auth.organization_id,
+                     branch_id=entry.branch_id, action="appointment.status_change",
+                     target_type="appointment", target_id=appt.id,
+                     actor_id=auth.user_id, actor_role=auth.role,
+                     before={"status": previous_status},
+                     after={"status": "IN_QUEUE"},
+                     reason="check-in from appointment service")
         record_audit(session, service="queuing", org_id=auth.organization_id,
                      branch_id=entry.branch_id, action="queue.checkin",
                      target_type="queue_entry", target_id=entry.id,

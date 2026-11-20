@@ -262,6 +262,63 @@ class StaffDoctorAssignment(Base):
 
 
 # ---------------------------------------------------------------------------
+# Staff capability grants — service: identity (owner decisions Q1/Q4)
+# ---------------------------------------------------------------------------
+# Q4 requires a permission that an administrator grants deliberately and revokes
+# independently of the ordinary role ("central reception may book across
+# branches").  The platform's authority model is a role matrix, which cannot
+# express "this one receptionist, for now" — so this table adds exactly that and
+# nothing more: a named capability from ``common.permissions``, optionally
+# limited to one branch, held by one staff member, with its own audit trail.
+#
+# It is deliberately *not* an entitlement system: capabilities are validated
+# against the permission catalogue, only :data:`common.permissions.DELEGABLE_CAPABILITIES`
+# may be granted, and a grant only ever widens what the role matrix already
+# allows.  Nothing here can grant ``appointment.modify`` to a doctor.
+# ---------------------------------------------------------------------------
+
+
+class StaffCapabilityGrant(Base):
+    """One explicitly granted capability, optionally scoped to a branch.
+
+    ``status`` is ``active`` or ``revoked``; revoked rows are kept so the trail
+    of who held what, and when it was taken away, remains readable.  Only
+    ``active`` rows are consulted at authorization time.
+    """
+
+    __tablename__ = "staff_capability_grants"
+    __service__ = "identity"
+
+    id                = Column(String, primary_key=True, default=_new_id)
+    organization_id   = Column(String, ForeignKey("organizations.id"), nullable=False)
+    staff_user_id     = Column(String, ForeignKey("staff_users.id"), nullable=False)
+    #: A capability name from ``common.permissions.DELEGABLE_CAPABILITIES``.
+    capability        = Column(String(60), nullable=False)
+    #: ``None`` means every branch of the organization; otherwise one branch.
+    branch_id         = Column(String, ForeignKey("branches.id"))
+    status            = Column(String(20), default="active", nullable=False)
+    granted_by        = Column(String)
+    granted_at        = Column(DateTime(timezone=True), default=_utcnow)
+    revoked_by        = Column(String)
+    revoked_at        = Column(DateTime(timezone=True))
+    reason            = Column(String(200), default="")
+
+    staff_user        = relationship("StaffUser")
+
+    __table_args__ = (
+        UniqueConstraint("staff_user_id", "capability", "branch_id",
+                         name="uq_staff_capability_grant"),
+        # PostgreSQL treats NULLs as distinct, so the constraint above does not
+        # stop a second organization-wide grant of the same capability.  This
+        # partial index does.
+        Index("uq_staff_capability_grant_orgwide", "staff_user_id", "capability",
+              unique=True, postgresql_where=text("branch_id IS NULL")),
+        Index("idx_staff_capability_staff", "staff_user_id"),
+        Index("idx_staff_capability_org", "organization_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Login attempts — service: identity (durable login throttle)
 # ---------------------------------------------------------------------------
 
@@ -571,6 +628,14 @@ class Appointment(Base):
     department_name       = Column(String(120))
     room_id               = Column(String, ForeignKey("facility_rooms.id"))
     room_name             = Column(String(120))
+    # --- Appointment type and staff override (AMSDP-APPT-OWNER-DECISIONS-01) --
+    # ``appointment_type`` is the persisted distinction the owner decision Q1
+    # asks for: ``scheduled`` (a published slot), ``walk_in`` (registered during
+    # an active published session) or ``unscheduled`` (accepted through the
+    # authorized override).  It is *never* inferred from a missing ``start_time``.
+    # ``override_reason`` is required — and audited — for an ``unscheduled``
+    # appointment, so the trail says why the published hours were bypassed.
+    override_reason       = Column(String(200))
     # --- Symptom onset, optional and recorded at booking (AMSDP-SYMPTOM-01) --
     # A closed vocabulary (``appointment/symptoms.ONSET_CODES``) instead of a
     # date: a patient at a reception desk routinely cannot name a day, and
@@ -592,6 +657,66 @@ class Appointment(Base):
         Index("idx_appt_doctor_date", "doctor_id", "appointment_date"),
         Index("idx_appt_patient", "patient_id"),
         Index("idx_appt_session", "session_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Slot allocations — service: appointment (owner decision Q2)
+# ---------------------------------------------------------------------------
+# Q2 asks for database-level capacity integrity that still supports capacity-N
+# slots: a session may legitimately seat several patients at the same slot start,
+# so a unique constraint on ``(doctor_id, slot_start)`` is wrong.  A seat is
+# therefore *allocated*: one row per claimed place, uniquely numbered inside its
+# slot.  ``UNIQUE (doctor_id, appointment_date, slot_key, seat_number)`` is the
+# guarantee, and it holds even if the application's row lock is bypassed.
+#
+# ``slot_key`` is the slot window start (``HH:MM``) for a published slot, and the
+# literal ``UNSCHEDULED`` for the staff override pool (Q1's outside-session
+# workflow), whose capacity is the organization's daily limit.
+#
+# A row exists only while the appointment occupies a seat: the closing statuses
+# (cancelled, no-show, completed, rescheduled, in consultation) release it, so
+# the allocation table and the status-based capacity count always agree.
+# ---------------------------------------------------------------------------
+
+#: ``slot_key`` value for an outside-session (unscheduled) allocation.
+UNSCHEDULED_SLOT_KEY = "UNSCHEDULED"
+
+
+class SlotAllocation(Base):
+    """One claimed seat in one slot window — the database capacity guarantee.
+
+    See the module comment above.  Deliberately small: the operational fact is
+    "this appointment holds seat *n* of this slot", and everything else
+    (capacity, patient, time) is reachable from the appointment.
+    """
+
+    __tablename__ = "slot_allocations"
+    __service__ = "appointment"
+
+    id                = Column(String, primary_key=True, default=_new_id)
+    organization_id   = Column(String, ForeignKey("organizations.id"), nullable=False)
+    doctor_id         = Column(String, ForeignKey("doctors.id"), nullable=False)
+    appointment_date  = Column(Date, nullable=False)
+    #: Slot window start ``HH:MM``, or :data:`UNSCHEDULED_SLOT_KEY`.
+    slot_key          = Column(String(20), nullable=False)
+    slot_end          = Column(String(10))
+    #: ``scheduled`` | ``walk_in`` | ``unscheduled`` — why the seat was claimed.
+    kind              = Column(String(20), nullable=False, default="scheduled")
+    seat_number       = Column(Integer, nullable=False)
+    appointment_id    = Column(String, ForeignKey("appointments.id",
+                                                  ondelete="CASCADE"),
+                               nullable=False)
+    created_at        = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        # The capacity guarantee: one seat number per slot, per doctor, per day.
+        UniqueConstraint("doctor_id", "appointment_date", "slot_key", "seat_number",
+                         name="uq_slot_allocation_seat"),
+        # One live allocation per appointment — a double claim is a bug, not data.
+        UniqueConstraint("appointment_id", name="uq_slot_allocation_appointment"),
+        Index("idx_slot_allocation_lookup", "doctor_id", "appointment_date", "slot_key"),
+        Index("idx_slot_allocation_org", "organization_id"),
     )
 
 

@@ -60,6 +60,15 @@ def operational_today(session=None, organization_id=None) -> date:
     return datetime.now(facility_zone(session, organization_id)).date()
 
 
+def operational_now(session=None, organization_id=None) -> datetime:
+    """The facility-local wall-clock time (BR §8) — never the container's clock.
+
+    The walk-in workflow records the arrival to the minute; deriving it from UTC
+    would file a 09:10 arrival in Dhaka as 03:10, which is a different session.
+    """
+    return datetime.now(facility_zone(session, organization_id))
+
+
 def utc_timestamp() -> str:
     """A UTC ISO timestamp, as stored in ``*_history`` columns."""
     return str(datetime.now(timezone.utc))

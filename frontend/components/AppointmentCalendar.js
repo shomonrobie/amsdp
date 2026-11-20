@@ -98,6 +98,13 @@ const S = {
   cardToken: { flexShrink: 0, fontSize: '0.62rem',
     color: 'hsl(var(--muted-foreground))', background: 'hsl(var(--card))', borderRadius: 3,
     padding: '0 0.2rem' },
+  /* Q1: the type badge.  Deliberately quiet (an outline, not a colour): it must
+     be readable in a 3-card-tall cell without competing with the status colour,
+     which is the card's primary signal. */
+  cardType: { flexShrink: 0, fontSize: '0.56rem', fontWeight: 700, lineHeight: 1.3,
+    color: 'hsl(var(--primary))', background: 'hsl(var(--card))', borderRadius: 3,
+    border: '1px solid hsl(var(--primary) / 0.45)', padding: '0 0.18rem',
+    whiteSpace: 'nowrap' },
   cardMeta: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     fontSize: '0.65rem', color: 'hsl(var(--muted-foreground))' },
   cardStatus: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -143,25 +150,34 @@ function Highlighted({ text, term }) {
   );
 }
 
-function Chip({ appt, color, patient, doctor, showDoctor, lang, onOpen, highlightTerm }) {
+function Chip({ appt, color, patient, doctor, showDoctor, lang, onOpen, highlightTerm, labels = {} }) {
   const time = (appt.start_time || '').slice(0, 5);
   const cancelled = appt.status === 'CANCELLED' || appt.status === 'NO_SHOW';
   const status = statusLabel(appt.status, lang);
   const where = appt.location_label || '';
+  /* Q1: ``appointment_type`` is persisted, so the card states it instead of
+     guessing from a missing time.  An ordinary scheduled booking shows nothing —
+     the badge exists to flag the two exceptions. */
+  const typeBadge = appt.appointment_type === 'walk_in' ? labels.typeWalkIn
+    : appt.appointment_type === 'unscheduled' ? labels.typeUnscheduled
+      : '';
   // The tooltip keeps the machine status; the card states it in words, so the
   // chip reads correctly in Bangla and screenshot-diffs stay stable.
-  const title = `${time} · ${patient}${appt.token_number ? ' · ' + appt.token_number : ''} · ${appt.status}`;
+  const title = `${time} · ${patient}${appt.token_number ? ' · ' + appt.token_number : ''} · ${appt.status}`
+    + (typeBadge ? ' · ' + typeBadge : '');
   return (
     <button type="button" className="appt-cal-chip"
       style={{ ...S.card, borderLeft: `3px solid ${color}`,
         background: cancelled ? 'hsl(var(--danger-soft))' : 'hsl(var(--secondary))',
         textDecoration: cancelled ? 'line-through' : 'none' }}
       title={title}
-      aria-label={`${patient} · ${time}${showDoctor && doctor ? ' · ' + doctor : ''} · ${status}`}
+      aria-label={`${patient} · ${time}${showDoctor && doctor ? ' · ' + doctor : ''} · ${status}`
+        + (typeBadge ? ' · ' + typeBadge : '')}
       onClick={() => onOpen && onOpen(appt)}>
       <span style={S.cardTop}>
         <span style={{ ...S.dot, background: color }} aria-hidden="true" />
         <span style={S.cardName}><Highlighted text={patient} term={highlightTerm} /></span>
+        {typeBadge ? <span style={S.cardType}>{typeBadge}</span> : null}
         {appt.token_number
           ? <span style={S.cardToken}><Highlighted text={appt.token_number} term={highlightTerm} /></span>
           : null}
@@ -256,7 +272,7 @@ export default function AppointmentCalendar({
                           <Chip key={appt.id} appt={appt} color={TONE[appt.status] || '#607d8b'}
                             patient={resolvePatient(appt)} doctor={resolveDoctor(appt)}
                             showDoctor={showDoctor} lang={lang} onOpen={onEventClick}
-                            highlightTerm={highlightTerm} />
+                            highlightTerm={highlightTerm} labels={labels} />
                         ))}
                         {layout.overflow && (
                           <MoreChip

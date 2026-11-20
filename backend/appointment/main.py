@@ -13,21 +13,22 @@ from sqlalchemy import func, text
 
 from common.database import SessionFactory
 from common.models import (Appointment, Branch, Doctor, Schedule,
-                           ScheduleSession, Patient, QueueEntry, Organization)
+                           ScheduleSession, Patient, QueueEntry, Organization,
+                           UNSCHEDULED_SLOT_KEY)
 from common.permissions import check as permission_check
 
 from common.auth import (AuthContext, branch_accessible, get_current_user,
                          require_permission)
-from common.config import reserved_for_capacity
+from common.config import get_appointment_config, reserved_for_capacity
 from common.audit import record_audit
+from common.capacity import SlotFull, claim_seat, release_seat
 from common.queue_tokens import allocate_daily_token, token_for
-from common.timeutil import operational_today
+from common.timeutil import operational_now, operational_today
 from common.log_redaction import install_token_redaction
 from common.health import install_health
 from common.denial_audit import install_denial_audit
 # AMSDP-APPT-RELIABILITY — the slot arithmetic scheduling publishes (F-02/F-03).
-from common.slots import (DEFAULT_CAPACITY, HHMM_PATTERN, slot_for,
-                          templates_for_day)
+from common.slots import (HHMM_PATTERN, slot_for, templates_for_day)
 
 # AMSDP-CALENDAR-FILTER-01 — one predicate set for every appointment read.
 # The grid used to apply no branch scope and no search while the list applied
@@ -144,6 +145,34 @@ BOOKING_SOURCES = ["phone", "in_person", "reception", "assistant", "walk_in", "o
 
 WALK_IN_POLICIES = ["end_of_queue", "first_come", "reserved_capacity", "staff_placement"]
 
+#: The persisted appointment types (owner decision Q1).  The distinction is
+#: stored, never inferred from a missing ``start_time``:
+#:
+#: * ``scheduled``    — the time is inside availability the doctor published
+#:                      (a slot template or a clinic session).  Capacity applies.
+#: * ``walk_in``      — staff registered a patient who is at the facility *now*,
+#:                      during an active published session.  Capacity applies.
+#: * ``unscheduled``  — staff accepted a patient outside every published session
+#:                      through the explicit override: a named capability, a
+#:                      recorded reason, the organization's daily limit and an
+#:                      audit event (``appointment.unscheduled_override``).
+APPOINTMENT_TYPES = ("scheduled", "walk_in", "unscheduled")
+
+#: Types an appointment occupies a seat for.  ``unscheduled`` claims a seat in
+#: the override pool instead of a slot window, which is why the capacity helper
+#: takes the pool key from the caller.
+SEATED_TYPES = APPOINTMENT_TYPES
+
+
+def _require_capability(auth, capability: str, message: str) -> None:
+    """403 unless the caller holds *capability* by role or explicit grant.
+
+    One place for the Q1/Q4 refusals: the message names the capability so an
+    administrator knows what to grant, and the decision is server-side.
+    """
+    if not auth.has_capability(capability):
+        raise HTTPException(403, message)
+
 
 class AppointmentCreate(BaseModel):
     patient_id: str
@@ -154,7 +183,11 @@ class AppointmentCreate(BaseModel):
     # time used to be inserted verbatim and then never matched a slot start.
     start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     serial_number: Optional[int] = None
+    #: ``scheduled`` (default) | ``walk_in`` (use the walk-in workflow) |
+    #: ``unscheduled`` (outside-session override — Q1).
     appointment_type: str = "scheduled"
+    #: Required for ``unscheduled``; recorded and audited verbatim.
+    override_reason: str = ""
     booking_source: str = "reception"
     notes: str = ""
     # --- AMSDP-SYMPTOM-01 — all optional, nothing is ever pre-filled ---------
@@ -191,6 +224,9 @@ class WalkInCreate(BaseModel):
     doctor_id: str
     notes: str = ""
     placement: str = "end_of_queue"  # walk-in policy
+    #: Required only when the arrival falls outside every published session —
+    #: that booking is persisted as ``unscheduled`` (Q1), never as a normal slot.
+    reason: str = ""
     # AMSDP-SYMPTOM-01 — a walk-in is a visit like any other; the receptionist
     # asks the same two questions.  Optional here for the same reason.
     symptom_ids: list[str] = []
@@ -219,6 +255,9 @@ def _appt_to_dict(a, symptoms):
         "appointment_date": str(a.appointment_date) if a.appointment_date else "",
         "start_time": a.start_time or "", "serial_number": a.serial_number,
         "appointment_type": a.appointment_type or "scheduled",
+        # Q1: why an outside-session appointment was accepted.  Empty for the
+        # scheduled and in-session walk-in types, which never needed an override.
+        "override_reason": a.override_reason or "",
         "booking_source": a.booking_source or "reception",
         "status": a.status or "BOOKED",
         "status_history": a.status_history or [],
@@ -273,8 +312,25 @@ def _date_covered(row, day) -> bool:
     return True
 
 
+def _may_book_branch(auth, branch_id) -> bool:
+    """May this actor *book into* ``branch_id``? (owner decision Q4)
+
+    Deliberately narrower than :func:`branch_accessible`, which governs reads and
+    mutations: a central-reception grant is permission to *create* an appointment
+    in another branch of the same organization, and nothing else.  Every read,
+    reschedule, cancel and check-in keeps using ``branch_accessible``, so the
+    grant cannot be turned into cross-branch access to patient records.
+    """
+    if branch_accessible(auth, branch_id):
+        return True
+    if branch_id is None:
+        return False
+    return auth.has_capability("appointment.book_cross_branch", branch_id)
+
+
 def _resolve_location(session, *, auth, doctor_id: str, organization_id: str,
-                      branch_id, appointment_date, start_time):
+                      branch_id, appointment_date, start_time,
+                      allow_cross_branch: bool = False):
     """Resolve the session — therefore the chamber — a booking lands in.
 
     Returns ``(schedule, clinic_session)``.  ``clinic_session`` is ``None`` for
@@ -283,22 +339,27 @@ def _resolve_location(session, *, auth, doctor_id: str, organization_id: str,
 
     When the doctor *does* hold an active session that weekday, a time outside
     every session is refused: a booking must never exist without a chamber the
-    receptionist can send the patient to.
+    receptionist can send the patient to.  (Owner decision Q1 keeps that refusal
+    for *scheduled* bookings; the walk-in and unscheduled workflows are the
+    deliberate way to see a patient outside a session.)
 
-    F-06: only branches the caller may act on are candidates.  The final
-    fallback loop used to take any schedule in the organization, so a
-    branch-scoped receptionist could file a booking into a branch she cannot
-    even read.  Whether a receptionist *should* be able to book org-wide is an
-    owner decision (gap analysis Q4); until it is taken, the branch scope the
-    read side already enforces applies to the write side too.
+    F-06: only branches the caller may act on are candidates.  With
+    ``allow_cross_branch`` — which the booking route sets only after the Q4
+    capability check — a branch the caller may *book into* but not read is a
+    candidate too.
     """
     weekday = appointment_date.weekday()          # 0 = Monday, as in models
     slot = start_time or ""
 
+    def reachable(candidate) -> bool:
+        if allow_cross_branch:
+            return _may_book_branch(auth, candidate)
+        return branch_accessible(auth, candidate)
+
     schedule_rows = [row for row in session.query(Schedule).filter(
         Schedule.doctor_id == doctor_id,
         Schedule.organization_id == organization_id).all()
-        if branch_accessible(auth, row.branch_id)]
+        if reachable(row.branch_id)]
     schedule = None
     for row in (schedule_rows if not branch_id
                 else [r for r in schedule_rows if r.branch_id == branch_id]):
@@ -320,7 +381,7 @@ def _resolve_location(session, *, auth, doctor_id: str, organization_id: str,
         query = query.filter(ScheduleSession.branch_id == branch_id)
     covering = [row for row in query.all()
                 if _date_covered(row, appointment_date)
-                and branch_accessible(auth, row.branch_id)]
+                and reachable(row.branch_id)]
     matched = [row for row in covering if slot and row.start_time <= slot < row.end_time]
     if covering and slot and not matched:
         raise HTTPException(
@@ -330,6 +391,27 @@ def _resolve_location(session, *, auth, doctor_id: str, organization_id: str,
     if clinic is not None and clinic.schedule is not None:
         schedule = clinic.schedule
     return schedule, clinic
+
+
+def _session_covering(session, *, auth, doctor_id: str, organization_id: str,
+                      day, at: str):
+    """The active clinic session of *doctor_id* that contains *at* on *day*.
+
+    Used by the walk-in workflow (Q1): a patient standing at the desk is in an
+    active session or is not, and the persisted appointment type differs between
+    the two.  Unlike :func:`_resolve_location` this never raises — "no session at
+    this hour" is a legitimate answer that selects the override workflow.
+    """
+    rows = [row for row in session.query(ScheduleSession).filter(
+        ScheduleSession.organization_id == organization_id,
+        ScheduleSession.doctor_id == doctor_id,
+        ScheduleSession.day_of_week == day.weekday(),
+        ScheduleSession.status == "active").all()
+        if _date_covered(row, day) and branch_accessible(auth, row.branch_id)]
+    for row in rows:
+        if row.start_time <= at < row.end_time:
+            return row
+    return None
 
 
 def _apply_location(appt, schedule, clinic) -> None:
@@ -431,24 +513,62 @@ def _published_templates(schedule, clinic, appointment_date) -> list:
 # Appointment creation (with capacity enforcement)
 # ---------------------------------------------------------------------------
 
+def _org_config(session, organization_id: str) -> dict:
+    """The organization's ``config`` JSON, or ``{}`` when absent."""
+    org_row = session.query(Organization).filter(
+        Organization.id == organization_id).first()
+    return (org_row.config if org_row else None) or {}
+
+
+def _unscheduled_policy(session, organization_id: str) -> dict:
+    """The Q1 override policy in force for this organization."""
+    return get_appointment_config(_org_config(session, organization_id))
+
+
 def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
-                schedule, clinic, exclude_id=None) -> Optional[dict]:
-    """F-02/F-03/F-04: may this booking take a seat, and in which slot?
+                schedule, clinic, exclude_id=None,
+                appointment_type="scheduled") -> Optional[dict]:
+    """Which slot does this booking consume, and may it?  (F-02/F-03/F-04 + Q1)
 
     Three behaviours, in the order the gap analysis asks for them:
 
     * A time the configuration does not publish is refused with a message that
-      says so — no more silent fallback to a capacity of one.
+      says so — no more silent fallback to a capacity of one.  Owner decision Q1
+      makes the refusal *explicit*: a scheduled booking outside published hours
+      is refused with ``unscheduled_requires_override``, and the way to accept
+      the patient is the unscheduled workflow (capability + reason + limit).
     * The seat is charged to the *slot window*, not to the minute string, so a
       09:07 booking consumes the 09:00–09:15 seat (F-03) and the calendar badge
       that counts that window agrees with the guard.
     * What is left after the walk-in reserve is the bookable capacity — the same
       arithmetic the availability read publishes.
 
-    A doctor with no configuration at all keeps the historical default of one
-    patient per minute: that is how unconfigured schedules have always behaved
-    and closing them is not this change's business (gap analysis Q1).
+    An ``unscheduled`` appointment does not consume a published slot at all: it
+    draws on the organization's per-doctor daily override pool, whose size is
+    configuration (``appointment_config.unscheduled_daily_limit``) rather than an
+    invented unlimited allowance.
     """
+    if appointment_type == "unscheduled":
+        policy = _unscheduled_policy(session, auth.organization_id)
+        if not policy["allow_unscheduled"]:
+            raise HTTPException(
+                422, "unscheduled_disabled: this organization does not accept "
+                     "appointments outside its published sessions")
+        limit = policy["unscheduled_daily_limit"]
+        booked = session.query(func.count(Appointment.id)).filter(
+            Appointment.organization_id == auth.organization_id,
+            Appointment.doctor_id == doctor_id,
+            Appointment.appointment_date == appointment_date,
+            Appointment.appointment_type == "unscheduled",
+            Appointment.status.in_(APPOINTMENT_ACTIVE_STATUSES),
+        ).scalar() or 0
+        if booked >= limit:
+            raise HTTPException(
+                422, f"unscheduled_limit: the outside-session limit of {limit} "
+                     f"patient(s) per doctor per day is reached ({booked} "
+                     "taken) — book a published slot or ask an administrator")
+        return None
+
     templates = _published_templates(schedule, clinic, appointment_date)
     slot = slot_for(templates, start_time) if start_time else None
     if start_time and templates and slot is None:
@@ -456,6 +576,17 @@ def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
             422, "no_slot_covers_time: this doctor publishes no slot for "
                  f"{appointment_date.isoformat()} covering {start_time} — book "
                  "inside the doctor's configured hours")
+    if slot is None:
+        # Q1: with no published availability there is no scheduled slot to
+        # claim.  The historical fallback (one patient per exact minute, no
+        # configuration consulted) is deliberately gone: an arbitrary time must
+        # not be presented as a confirmed slot.  The staff override is the way
+        # to accept the patient.
+        raise HTTPException(
+            422, "unscheduled_requires_override: this doctor publishes no "
+                 f"availability for {appointment_date.isoformat()}"
+                 f"{(' at ' + start_time) if start_time else ''} — use the "
+                 "walk-in or unscheduled workflow, which records a reason")
 
     count = session.query(func.count(Appointment.id)).filter(
         Appointment.organization_id == auth.organization_id,
@@ -464,14 +595,9 @@ def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
         Appointment.status.in_(APPOINTMENT_ACTIVE_STATUSES))
     if exclude_id:
         count = count.filter(Appointment.id != exclude_id)
-    if slot is not None:
-        capacity = slot["max_patients"]
-        count = count.filter(Appointment.start_time >= slot["start_time"],
-                             Appointment.start_time < slot["end_time"])
-    else:
-        # Unconfigured day/time: the historical exact-minute rule.
-        capacity = DEFAULT_CAPACITY
-        count = count.filter(Appointment.start_time == start_time)
+    capacity = slot["max_patients"]
+    count = count.filter(Appointment.start_time >= slot["start_time"],
+                         Appointment.start_time < slot["end_time"])
     booked = count.scalar() or 0
 
     org_row = session.query(Organization).filter(
@@ -480,12 +606,42 @@ def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
                                      org_row.config if org_row else None)
     effective = max(capacity - reserved, 1)
     if booked >= effective:
-        where = (f"{slot['start_time']}–{slot['end_time']}" if slot
-                 else str(start_time or "this time"))
         raise HTTPException(
-            422, f"slot_full: capacity {effective} reached for the {where} slot "
+            422, f"slot_full: capacity {effective} reached for the "
+                 f"{slot['start_time']}–{slot['end_time']} slot "
                  f"({booked} booked, 0 free) — choose another slot")
     return slot
+
+
+
+def _claim_seat(session, *, auth, doctor_id, appointment_date, slot,
+                appointment_id, appointment_type="scheduled") -> int:
+    """Take the appointment's seat through the Q2 database guarantee.
+
+    ``slot`` is what :func:`_guard_slot` returned: the window for a published
+    slot, ``None`` for the unscheduled pool.  A :class:`SlotFull` refusal is
+    translated into the same vocabulary the guard uses, so a caller sees one
+    meaning ("this slot is full") whichever layer refused it.
+    """
+    if appointment_type == "unscheduled":
+        capacity = _unscheduled_policy(
+            session, auth.organization_id)["unscheduled_daily_limit"]
+        slot_key, slot_end = UNSCHEDULED_SLOT_KEY, None
+    else:
+        capacity = (slot or {}).get("max_patients") or 1
+        slot_key = (slot or {}).get("start_time") or "00:00"
+        slot_end = (slot or {}).get("end_time")
+    try:
+        return claim_seat(
+            session, organization_id=auth.organization_id, doctor_id=doctor_id,
+            appointment_date=appointment_date, slot_key=slot_key,
+            slot_end=slot_end, kind=appointment_type, capacity=capacity,
+            appointment_id=appointment_id)
+    except SlotFull as exc:
+        raise HTTPException(
+            422, f"slot_full: capacity {capacity} reached for the {slot_key} "
+                 f"slot (0 free) — choose another slot [{exc}]")
+
 
 
 def _scoped_write_appointment(session, auth, appointment_id: str):
@@ -530,7 +686,13 @@ def _apply_status_transition(session, appt, *, new_status: str, auth,
     if new_status in ("IN_CONSULTATION", "CANCELLED", "RESCHEDULED"):
         from common.tracking_tokens import revoke_for_appointment
         revoke_for_appointment(session, appt.id, reason=f"status -> {new_status}")
+    # Q2: the seat is held only while the appointment occupies it.  Every status
+    # outside the active list frees the seat, so the allocation table and the
+    # status-based capacity count cannot drift apart.
+    if new_status not in APPOINTMENT_ACTIVE_STATUSES:
+        release_seat(session, appt.id)
     return appt
+
 
 
 
@@ -552,6 +714,33 @@ def create_appointment(
     if data.booking_source not in BOOKING_SOURCES:
         raise HTTPException(422, f"invalid booking_source: {data.booking_source}")
 
+    # Q1: the type is part of the request, validated at the boundary, and it
+    # decides which capacity policy applies.  ``walk_in`` is refused here on
+    # purpose: it has its own workflow, which stamps today's date from the
+    # facility clock and resolves the active session for the arrival.
+    if data.appointment_type not in APPOINTMENT_TYPES:
+        raise HTTPException(
+            422, "appointment_type must be one of "
+                 + ", ".join(APPOINTMENT_TYPES))
+    if data.appointment_type == "walk_in":
+        raise HTTPException(
+            422, "use_walk_in_workflow: register the patient through "
+                 "POST /api/v1/appointments/walk-in")
+    override_reason = (data.override_reason or "").strip()
+    if data.appointment_type == "unscheduled":
+        # The override is its own capability, needs a stated reason, and is
+        # audited.  The role matrix already grants it to the front desk and to
+        # doctors; the check is here so a grant (or its revocation) is honoured
+        # per request.
+        _require_capability(
+            auth, "appointment.create_unscheduled",
+            "appointment.create_unscheduled is required to book outside the "
+            "doctor's published availability")
+        if len(override_reason) < 3:
+            raise HTTPException(
+                422, "reason required: an outside-session appointment must "
+                     "record why the patient was accepted")
+
     session = SessionFactory()
     try:
         # Verify patient exists and is in org
@@ -570,24 +759,33 @@ def create_appointment(
 
         # F-05: the doctor must be this tenant's before anything is written.
         _tenant_doctor(session, auth, data.doctor_id)
+        # Q3: a doctor or assistant books only for the doctor(s) they work for.
+        if auth.role in ("doctor", "assistant") and not auth.can_access_doctor(data.doctor_id):
+            raise HTTPException(404, "doctor not found")
         # F-01: hold the doctor's row for the whole count-then-insert so two
-        # receptionists cannot both take the last seat.
+        # receptionists cannot both take the last seat; Q2 adds the database
+        # constraint on top of this lock.
         _lock_doctor(session, data.doctor_id)
 
         # Resolve the schedule and the clinic session.  The session is the
         # authority on *where* this doctor sits at this hour, so it is resolved
         # before the capacity check: a time outside every session is refused
-        # early rather than silently booked into no chamber.
+        # early rather than silently booked into no chamber.  Q4: a holder of
+        # ``appointment.book_cross_branch`` may resolve a chamber in a branch
+        # they may book into but not read.
         schedule, clinic = _resolve_location(
             session, auth=auth, doctor_id=data.doctor_id,
             organization_id=auth.organization_id, branch_id=auth.branch_id,
-            appointment_date=apt_date, start_time=data.start_time)
+            appointment_date=apt_date, start_time=data.start_time,
+            allow_cross_branch=auth.has_capability("appointment.book_cross_branch"))
 
-        # F-02/F-03/F-04: capacity is charged to the slot window, against the
-        # same templates the availability read publishes.
-        _guard_slot(session, auth=auth, doctor_id=data.doctor_id,
-                    appointment_date=apt_date, start_time=data.start_time,
-                    schedule=schedule, clinic=clinic)
+        # F-02/F-03/F-04 + Q1: capacity is charged to the slot window (or to the
+        # unscheduled pool), against the same templates the availability read
+        # publishes.
+        slot = _guard_slot(session, auth=auth, doctor_id=data.doctor_id,
+                           appointment_date=apt_date, start_time=data.start_time,
+                           schedule=schedule, clinic=clinic,
+                           appointment_type=data.appointment_type)
 
         # Generate serial number.  Safe because the doctor's row is locked
         # above: two concurrent bookings can no longer both read the same
@@ -602,6 +800,10 @@ def create_appointment(
         branch_for_appt = (clinic.branch_id if clinic is not None
                            else (schedule.branch_id if schedule is not None
                                  else (auth.branch_id or "")))
+        # Q4: booking into a branch the caller cannot *read* is only reached with
+        # the cross-branch grant, and it is recorded as such on the audit event.
+        cross_branch = (branch_for_appt is not None
+                        and not branch_accessible(auth, branch_for_appt))
         appt = Appointment(id=str(uuid.uuid4()),
             organization_id=auth.organization_id,
             branch_id=branch_for_appt,
@@ -612,6 +814,7 @@ def create_appointment(
             status_history=[{"from":"","to":"BOOKED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(data.doctor_id, serial),
             notes=data.notes, created_by=auth.user_id,
+            override_reason=override_reason or None,
         )
         _apply_location(appt, schedule, clinic)
         # The onset answer is part of the visit, not of any one symptom: it is
@@ -623,6 +826,13 @@ def create_appointment(
         # and ``appointment_symptoms`` has a foreign key but no ORM relationship
         # to lean on, so the parent row must exist first.
         session.flush()
+        # Q2: claim the seat through the database guarantee.  A concurrent winner
+        # leaves this request with no allocation, and the whole transaction
+        # (appointment, symptoms) rolls back with it.
+        seat = _claim_seat(session, auth=auth, doctor_id=data.doctor_id,
+                           appointment_date=apt_date, slot=slot,
+                           appointment_id=appt.id,
+                           appointment_type=data.appointment_type)
         symptom_rows = persist_symptoms(session, appointment=appt,
                                         plan=symptom_plan,
                                         recorded_by=auth.user_id)
@@ -632,6 +842,8 @@ def create_appointment(
             after={"patient_id": data.patient_id, "doctor_id": data.doctor_id,
                    "appointment_date": data.appointment_date, "start_time": data.start_time,
                    "status": "BOOKED", "booking_source": data.booking_source,
+                   "appointment_type": data.appointment_type,
+                   "seat": seat,
                    "session_id": appt.session_id or "",
                    "room_id": appt.room_id or "",
                    "location": _location_label(appt),
@@ -645,7 +857,26 @@ def create_appointment(
                                    if row.symptom_id],
                    "symptom_text_count": sum(1 for row in symptom_rows
                                              if row.kind == "free_text"),
-                   "symptom_onset": appt.symptom_onset_code or ""})
+                   "symptom_onset": appt.symptom_onset_code or "",
+                   # Q4/Q1: which override, if any, this booking needed.
+                   "override_reason": override_reason,
+                   "cross_branch": cross_branch})
+
+        # An outside-session acceptance gets its own event as well as the
+        # creation event: "the published hours were bypassed, by whom, why" is a
+        # question the trail must answer without joining anything (Q5).
+        if data.appointment_type == "unscheduled":
+            record_audit(session, service="appointment",
+                org_id=auth.organization_id,
+                action="appointment.unscheduled_override",
+                target_type="appointment", target_id=appt.id,
+                actor_id=auth.user_id, actor_role=auth.role,
+                branch_id=branch_for_appt,
+                after={"doctor_id": data.doctor_id,
+                       "appointment_date": data.appointment_date,
+                       "start_time": data.start_time or "",
+                       "seat": seat},
+                reason=override_reason)
 
         session.commit()
         # Sequence 3 — N1 confirmation + N2 reminder planning (best effort).
@@ -1037,12 +1268,20 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
         # the seat check below and the serial allocation are both sound.
         _lock_doctor(session, orig.doctor_id)
 
+        # Q1: a reschedule keeps the appointment's category where the category
+        # still describes it.  An outside-session appointment stays an override
+        # (and keeps its reason); a walk-in moved to a new date/time is a booked
+        # time from now on, so it becomes ``scheduled``.
+        new_type = ("unscheduled" if (orig.appointment_type or "scheduled") ==
+                    "unscheduled" else "scheduled")
+
         # The new booking carries its own chamber snapshot: the room may well
         # differ from the original (other weekday, other branch).
         new_schedule, new_clinic = _resolve_location(
             session, auth=auth, doctor_id=orig.doctor_id,
             organization_id=orig.organization_id, branch_id=orig.branch_id,
-            appointment_date=nd, start_time=new_time)
+            appointment_date=nd,
+            start_time=None if new_type == "unscheduled" else new_time)
 
         # Mark original RESCHEDULED first: the original seat is being vacated,
         # so it must not count against the destination slot (F-04).  The move
@@ -1055,10 +1294,10 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
 
         # F-04: the destination slot is capacity-checked exactly like a first
         # booking — a reschedule used to be a way to overbook a full slot.
-        _guard_slot(session, auth=auth, doctor_id=orig.doctor_id,
+        new_slot = _guard_slot(session, auth=auth, doctor_id=orig.doctor_id,
                     appointment_date=nd, start_time=new_time,
                     schedule=new_schedule, clinic=new_clinic,
-                    exclude_id=orig.id)
+                    exclude_id=orig.id, appointment_type=new_type)
 
         serial = session.query(Appointment).filter(
             Appointment.doctor_id == orig.doctor_id,
@@ -1071,12 +1310,19 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
             patient_id=orig.patient_id, doctor_id=orig.doctor_id,
             appointment_date=nd, start_time=new_time,
             serial_number=serial, booking_source=orig.booking_source, status="BOOKED",
+            appointment_type=new_type,
+            override_reason=None if new_type == "scheduled" else orig.override_reason,
             status_history=[{"from":"","to":"BOOKED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(orig.doctor_id, serial),
             rescheduled_from=appointment_id, reschedule_reason=data.reason,
             created_by=auth.user_id)
         _apply_location(new_a, new_schedule, new_clinic)
         session.add(new_a); session.flush()
+        # Q2: the destination seat is claimed through the database guarantee, so a
+        # concurrent reschedule into the same last seat cannot overbook it.
+        seat = _claim_seat(session, auth=auth, doctor_id=orig.doctor_id,
+                           appointment_date=nd, slot=new_slot,
+                           appointment_id=new_a.id, appointment_type=new_type)
         # The complaint does not change because the day did: the recorded
         # symptoms are carried to the new visit, and the original rows stay on
         # the original (now RESCHEDULED) appointment as history.
@@ -1092,7 +1338,7 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
             branch_id=orig.branch_id or "",
             before={"status": "RESCHEDULED", "date": str(orig.appointment_date)},
             after={"new_appointment_id": new_a.id, "new_date": data.new_date,
-                   "new_start_time": new_time},
+                   "new_start_time": new_time, "seat": seat},
             reason=data.reason or "")
         session.commit()
         # Sequence 3: the old visit is gone, the new booking gets its own plan.
@@ -1111,7 +1357,7 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
 
 @app.post("/api/v1/appointments/{appointment_id}/check-in")
 def check_in_appointment(appointment_id: str, data: AppointmentStatusUpdate,
-                          auth: AuthContext = Depends(require_permission("appointment.modify"))):
+                          auth: AuthContext = Depends(require_permission("appointment.check_in"))):
     """Check a patient in and put her in the queue, in one transaction.
 
     F-07: this route used to depend on ``get_current_user`` and then call the
@@ -1121,12 +1367,24 @@ def check_in_appointment(appointment_id: str, data: AppointmentStatusUpdate,
     committed twice: when the queue allocation failed the appointment stayed
     CHECKED_IN with no queue entry behind it.  One permission dependency, one
     transaction, and the status write goes through the shared helper.
+
+    Owner decision Q3: check-in is its own capability
+    (``appointment.check_in``), held by the front desk, by branch/organization
+    administrators, by an assistant **for their assigned doctor(s)** and by a
+    doctor **for their own patients**.  It is deliberately not
+    ``appointment.modify``: a doctor checking a patient in must not thereby gain
+    the ability to cancel, reschedule or transfer.
     """
     import uuid
     session = SessionFactory()
     try:
         # F-08: tenant + branch scope, and the row locked for the transition.
         appt = _scoped_write_appointment(session, auth, appointment_id)
+        # Q3: doctor/assistant ownership.  ``can_access_doctor`` fails closed when
+        # the caller has no active assignment, so an unassigned doctor cannot
+        # check in anybody — not even a patient of the doctor they used to cover.
+        if auth.role in ("doctor", "assistant") and not auth.can_access_doctor(appt.doctor_id):
+            raise HTTPException(404, "appointment not found")
         # Idempotent check-in: the same patient can be checked in from the
         # appointments page or from the queue page, so a second click must not
         # fail on an illegal CHECKED_IN -> CHECKED_IN transition.
@@ -1201,47 +1459,83 @@ def mark_no_show(appointment_id: str, data: AppointmentStatusUpdate,
 @app.post("/api/v1/appointments/walk-in", status_code=201)
 def register_walk_in(data: WalkInCreate,
                       auth=Depends(require_permission("appointment.create"))):
+    """Register a patient who is at the facility now (owner decision Q1).
+
+    Two outcomes, both persisted explicitly and neither inferred from a missing
+    time:
+
+    * an active published session covers the arrival → ``walk_in``, charged to
+      that session's slot capacity;
+    * nothing covers it → the outside-session override → ``unscheduled``, which
+      needs ``appointment.create_unscheduled``, a stated reason, the
+      organization's daily limit, and writes ``appointment.unscheduled_override``
+      to the trail.
+
+    Whichever path runs, the appointment does **not** create a queue token:
+    check-in is the separate lifecycle transition.  Capacity is claimed through
+    the same Q2 seat allocation every other booking path uses.
+    """
     import uuid
+    reason = (data.reason or "").strip()
     session = SessionFactory()
     try:
         today = operational_today(session, auth.organization_id)
+        arrival = operational_now(session, auth.organization_id).strftime("%H:%M")
         p = session.query(Patient).filter(Patient.id==data.patient_id,
             Patient.organization_id==auth.organization_id).first()
         if not p: raise HTTPException(422, "patient not found")
         # F-05: the doctor must be this tenant's; F-01: hold her row while the
         # daily serial is allocated, so two walk-ins cannot share a token.
         _tenant_doctor(session, auth, data.doctor_id)
+        # Q3: a doctor or assistant may register only their own patients' visits.
+        if auth.role in ("doctor", "assistant") and not auth.can_access_doctor(data.doctor_id):
+            raise HTTPException(404, "doctor not found")
         _lock_doctor(session, data.doctor_id)
+
+        # Q1: is the patient inside a session the doctor is actually holding?
+        clinic = _session_covering(
+            session, auth=auth, doctor_id=data.doctor_id,
+            organization_id=auth.organization_id, day=today, at=arrival)
+        if clinic is not None:
+            appt_type = "walk_in"
+            schedule = clinic.schedule
+        else:
+            # Outside every session: permitted only through the explicit override.
+            _require_capability(
+                auth, "appointment.create_unscheduled",
+                "appointment.create_unscheduled is required to register a "
+                "patient outside the doctor's published sessions")
+            if len(reason) < 3:
+                raise HTTPException(
+                    422, "reason required: this arrival is outside the doctor's "
+                         "published session, so record why the patient is being "
+                         "accepted")
+            appt_type = "unscheduled"
+            schedule = None
+
+        # Capacity first (F-02/F-03/F-04 semantics), then the seat claim (Q2).
+        slot = _guard_slot(session, auth=auth, doctor_id=data.doctor_id,
+                           appointment_date=today, start_time=arrival,
+                           schedule=schedule, clinic=clinic,
+                           appointment_type=appt_type)
+
         count = session.query(Appointment).filter(
             Appointment.doctor_id==data.doctor_id,
             Appointment.appointment_date==today).count() + 1
-        # A walk-in is filed into today's session chamber as well: the patient
-        # has to be sent to *this* doctor's room.  Arriving outside a session
-        # window is legitimate for a walk-in, so the resolver's 422 degrades to
-        # "no chamber" rather than refusing the registration.
-        try:
-            w_schedule, w_clinic = _resolve_location(
-                session, auth=auth, doctor_id=data.doctor_id,
-                organization_id=auth.organization_id, branch_id=auth.branch_id,
-                appointment_date=today,
-                start_time=datetime.now().strftime("%H:%M"))
-        except HTTPException:
-            w_schedule, w_clinic = _resolve_location(
-                session, auth=auth, doctor_id=data.doctor_id,
-                organization_id=auth.organization_id, branch_id=auth.branch_id,
-                appointment_date=today, start_time=None)
-        w_branch = (w_clinic.branch_id if w_clinic is not None
-                    else (w_schedule.branch_id if w_schedule is not None
+        w_branch = (clinic.branch_id if clinic is not None
+                    else (schedule.branch_id if schedule is not None
                           else (auth.branch_id or "")))
         a = Appointment(id=str(uuid.uuid4()), organization_id=auth.organization_id,
             branch_id=w_branch, patient_id=data.patient_id,
             doctor_id=data.doctor_id, appointment_date=today,
-            serial_number=count, appointment_type="walk_in",
+            start_time=arrival,
+            serial_number=count, appointment_type=appt_type,
             booking_source="walk_in", status="CONFIRMED",
             status_history=[{"from":"","to":"CONFIRMED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(data.doctor_id, count),
-            notes=data.notes, created_by=auth.user_id)
-        _apply_location(a, w_schedule, w_clinic)
+            notes=data.notes, created_by=auth.user_id,
+            override_reason=reason or None)
+        _apply_location(a, schedule, clinic)
         symptom_plan = plan_symptoms(
             session, organization_id=auth.organization_id,
             symptom_ids=data.symptom_ids, symptom_texts=data.symptom_texts)
@@ -1251,6 +1545,9 @@ def register_walk_in(data: WalkInCreate,
         a.symptom_onset_note = onset_note or None
         session.add(a)
         session.flush()          # parent row before its symptom rows (see create)
+        seat = _claim_seat(session, auth=auth, doctor_id=data.doctor_id,
+                           appointment_date=today, slot=slot,
+                           appointment_id=a.id, appointment_type=appt_type)
         symptom_rows = persist_symptoms(session, appointment=a,
                                         plan=symptom_plan,
                                         recorded_by=auth.user_id)
@@ -1258,7 +1555,9 @@ def register_walk_in(data: WalkInCreate,
             action="appointment.walk_in_created", target_type="appointment", target_id=a.id,
             actor_id=auth.user_id, actor_role=auth.role, branch_id=w_branch,
             after={"patient_id": data.patient_id, "doctor_id": data.doctor_id,
-                   "status": "CONFIRMED", "appointment_type": "walk_in", "notes": data.notes,
+                   "status": "CONFIRMED", "appointment_type": appt_type,
+                   "arrival_time": arrival, "seat": seat, "notes": data.notes,
+                   "override_reason": reason,
                    "session_id": a.session_id or "",
                    "location": _location_label(a),
                    "symptom_count": len(symptom_rows),
@@ -1266,7 +1565,19 @@ def register_walk_in(data: WalkInCreate,
                                    if row.symptom_id],
                    "symptom_text_count": sum(1 for row in symptom_rows
                                              if row.kind == "free_text"),
-                   "symptom_onset": a.symptom_onset_code or ""})
+                   "symptom_onset": a.symptom_onset_code or ""},
+            reason=reason)
+        # Q5: the override is its own event, in addition to the registration.
+        if appt_type == "unscheduled":
+            record_audit(session, service="appointment",
+                org_id=auth.organization_id,
+                action="appointment.unscheduled_override",
+                target_type="appointment", target_id=a.id,
+                actor_id=auth.user_id, actor_role=auth.role, branch_id=w_branch,
+                after={"doctor_id": data.doctor_id,
+                       "appointment_date": str(today),
+                       "arrival_time": arrival, "seat": seat},
+                reason=reason)
 
         session.commit()
         # Sequence 3: hooks decide walk-ins need no message (see hooks.py).
@@ -1327,7 +1638,7 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
 
         # F-04: the destination slot obeys the same capacity rule as any other
         # booking; a transfer used to ignore capacity entirely.
-        _guard_slot(session, auth=auth, doctor_id=data.new_doctor_id,
+        t_slot = _guard_slot(session, auth=auth, doctor_id=data.new_doctor_id,
                     appointment_date=nd, start_time=t_time,
                     schedule=t_schedule, clinic=t_clinic,
                     exclude_id=orig.id)
@@ -1341,12 +1652,17 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             doctor_id=data.new_doctor_id, appointment_date=nd,
             start_time=t_time, serial_number=serial,
             booking_source=orig.booking_source, status="BOOKED",
+            appointment_type="scheduled",
             status_history=[{"from":"","to":"BOOKED","at":str(datetime.now(timezone.utc))}],
             token_number=_serial_token(data.new_doctor_id, serial),
             rescheduled_from=appointment_id, reschedule_reason=data.reason,
             notes=f"Transferred from {orig.doctor_id}", created_by=auth.user_id)
         _apply_location(new_a, t_schedule, t_clinic)
         session.add(new_a); session.flush()
+        # Q2: the transfer's destination seat is claimed like any other booking.
+        seat = _claim_seat(session, auth=auth, doctor_id=data.new_doctor_id,
+                           appointment_date=nd, slot=t_slot,
+                           appointment_id=new_a.id, appointment_type="scheduled")
         # Same reasoning as reschedule: a transfer moves the visit, not the
         # complaint, so the recorded symptoms and onset go with it.
         copy_symptoms(session, source=orig, target=new_a, recorded_by=auth.user_id)
@@ -1361,7 +1677,8 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
             before={"status": "RESCHEDULED", "doctor_id": orig.doctor_id,
                     "branch_id": orig.branch_id, "date": str(orig.appointment_date)},
             after={"new_appointment_id": new_a.id, "new_doctor_id": data.new_doctor_id,
-                   "new_branch_id": data.new_branch_id, "new_date": data.new_date},
+                   "new_branch_id": data.new_branch_id, "new_date": data.new_date,
+                   "new_start_time": t_time, "seat": seat},
             reason=data.reason or "")
         session.commit()
         # Sequence 3: cancel the original visit's messages, plan the new one.

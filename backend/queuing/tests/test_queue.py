@@ -28,11 +28,37 @@ def _ensure_org():
 _ensure_org()
 
 
+def _sync_assignment(session, staff_user_id, doctor_id, org_id="m5-org"):
+    """Mirror the f8a1b2c3d4e5 migration for fixture users.
+
+    The migration backfills every legacy ``StaffUser.doctor_id`` into an
+    ``staff_doctor_assignments`` row.  The runtime loader treats the table as
+    authoritative (PO-RBAC-01: an empty table result is a revocation, not a
+    reason to fall back), so a fixture that only sets ``doctor_id`` would be
+    an unassigned account.  No-op on pre-migration databases where the table
+    is absent and the legacy fallback still applies.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    if not sa_inspect(session.get_bind()).has_table("staff_doctor_assignments"):
+        return
+    from common.models import StaffDoctorAssignment
+    session.query(StaffDoctorAssignment).filter(
+        StaffDoctorAssignment.staff_user_id == staff_user_id
+    ).delete(synchronize_session=False)
+    if doctor_id:
+        session.add(StaffDoctorAssignment(
+            id=str(uuid.uuid4()), staff_user_id=staff_user_id,
+            doctor_id=doctor_id, organization_id=org_id, status="active"))
+
+
 def _mk_user(session, username, role, doctor_id=None):
     existing = session.query(StaffUser).filter(StaffUser.username == username).first()
     if existing:
         existing.doctor_id = doctor_id
         existing.role = role
+        session.commit()
+        _sync_assignment(session, existing.id, doctor_id,
+                         existing.organization_id)
         session.commit()
         return existing
     pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()
@@ -40,6 +66,8 @@ def _mk_user(session, username, role, doctor_id=None):
                   username=username, password_hash=pw, display_name=username,
                   role=role, doctor_id=doctor_id, status="active")
     session.add(u); session.commit()
+    _sync_assignment(session, u.id, doctor_id, u.organization_id)
+    session.commit()
     return u
 
 
@@ -645,6 +673,10 @@ class TestQueueDoctorAssistantOwnership:
                           username=username, password_hash=pw,
                           display_name=username, role=role, status="active")
             session.add(u); session.commit()
+            # PO-RBAC-01: the migrated assignment table is authoritative, so a
+            # fixture user needs the assignment row the migration backfills.
+            _sync_assignment(session, u.id, doctor_id, org_id)
+            session.commit()
         return u
 
     def _mk_patient_rbac_r3(self, session, org_id="m5-org"):
@@ -1194,6 +1226,8 @@ class TestQueueMultiDoctorAssignments:
         tag = uuid.uuid4().hex[:8]
         session = SessionFactory()
         try:
+            # PO-RBAC-01: a migrated legacy account keeps doctor_id AND the
+            # assignment row backfilled by the f8a1b2c3d4e5 migration.
             u = _mk_user(session, f"md_asst_single_legacy_{tag}", "assistant",
                          doctor_id="m5-doc")
         finally:
@@ -1202,3 +1236,41 @@ class TestQueueMultiDoctorAssignments:
         r = client.get(f"/api/v1/queue?doctor_id=m5-doc&date={date.today().isoformat()}",
             headers=_auth(tok))
         assert r.status_code == 200, r.text
+
+    def test_revoked_legacy_doctor_id_does_not_restore_access(self):
+        """PO-RBAC-01: deleting the assignment row revokes doctor access even
+        though the legacy ``StaffUser.doctor_id`` column still references the
+        doctor.  Only the identity API clears that column; a DB-level
+        revocation must not be undone by the legacy fallback."""
+        tag = uuid.uuid4().hex[:8]
+        session = SessionFactory()
+        try:
+            from sqlalchemy import inspect as sa_inspect
+            if not sa_inspect(session.get_bind()).has_table(
+                    "staff_doctor_assignments"):
+                pytest.skip("staff_doctor_assignments table not migrated")
+            self._mk_multi_doc_doctors(session)
+            asst = self._mk_multi_doc_user(
+                session, f"md_asst_revoke_legacy_{tag}", "assistant",
+                ["md-doc-a"])
+            asst_id = asst.id
+            from common.models import StaffDoctorAssignment
+            session.query(StaffDoctorAssignment).filter(
+                StaffDoctorAssignment.staff_user_id == asst_id).delete(
+                    synchronize_session=False)
+            session.commit()
+            # The legacy column is untouched by the revocation.
+            assert session.query(StaffUser).filter(
+                StaffUser.id == asst_id).one().doctor_id == "md-doc-a"
+        finally:
+            session.close()
+
+        tok = jwt.encode({"sub": asst_id, "org": "m5-org",
+                          "branch": "m5-branch", "role": "assistant",
+                          "exp": int((datetime.now(timezone.utc)
+                                      + timedelta(hours=1)).timestamp())},
+                         _SECRET, algorithm=_ALGO)
+        r = client.get(f"/api/v1/queue?doctor_id=md-doc-a"
+                       f"&date={date.today().isoformat()}",
+            headers=_auth(tok))
+        assert r.status_code == 404, r.text

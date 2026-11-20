@@ -18,9 +18,11 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from amsdp_test_support import (db_session, ensure_branch, ensure_doctor,
-                               ensure_org, ensure_patient, ensure_symptom,
-                               ensure_user, headers, load_app, purge_org)
+from amsdp_test_support import (db_session, ensure_all_day_session,
+                               ensure_branch, ensure_doctor, ensure_org,
+                               ensure_patient, ensure_schedule,
+                               ensure_symptom, ensure_user, headers, load_app,
+                               purge_org)
 from common.models import (Appointment, AppointmentSymptom, AuditEvent,
                            SymptomCatalog)
 
@@ -49,6 +51,10 @@ def world(client):
     ensure_org(OTHER_ORG)
     ensure_branch(BR, ORG)
     ensure_doctor(DOC, ORG, name="Dr. Symptom", mobile="01700002001")
+    # Q1: symptom recording happens on a booked appointment, so the fixture must
+    # publish availability before it books through the API.
+    ensure_schedule(DOC, ORG, BR, capacity=1)
+    ensure_all_day_session(DOC, ORG, BR, capacity=1)
     ensure_patient(PAT, ORG, name="Symptom Patient", mobile="01700002002")
     ensure_user(RECP, "receptionist", ORG, BR)
     ensure_user(ADMIN, "org_admin", ORG, BR)
@@ -202,7 +208,10 @@ class TestBooking:
         """``UNKNOWN`` means "asked, could not say" — not "not asked"."""
         body = _book(client, start="09:20", symptom_onset="UNKNOWN").json()
         assert body["symptom_onset"] == "UNKNOWN"
-        assert _book(client, start="09:25").json()["symptom_onset"] == ""
+        # Q2 charges capacity to the published *window*, not to the minute
+        # string, so the second booking must land in the next window (09:45)
+        # rather than four minutes later inside the 09:15 seat.
+        assert _book(client, start="09:45").json()["symptom_onset"] == ""
 
     def test_duplicate_catalogue_selection_collapses(self, client, world):
         r = _book(client, start="09:30",

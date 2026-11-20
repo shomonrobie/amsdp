@@ -66,6 +66,28 @@ def _load_assigned_doctor_ids(session, staff_user_id: str) -> Optional[list[str]
     return list(rows)
 
 
+def _load_capability_grants(session, staff_user_id: str) -> list[dict]:
+    """Active staff-level capability grants for *staff_user_id* (Q1/Q4).
+
+    Returns ``[{"capability": str, "branch_id": str|None}, …]``.  A missing
+    table (pre-migration) yields an empty list — no grant, therefore exactly the
+    role's authority, which is the fail-closed answer.
+
+    A ``branch_id`` of ``None`` means the grant applies to every branch of the
+    caller's organization; a named branch limits it to that branch.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    if not sa_inspect(session.get_bind()).has_table("staff_capability_grants"):
+        return []
+    rows = session.execute(
+        sa.text("""
+            SELECT capability, branch_id FROM staff_capability_grants
+            WHERE staff_user_id = :uid AND status = 'active'
+        """), {"uid": staff_user_id}
+    ).all()
+    return [{"capability": row[0], "branch_id": row[1]} for row in rows]
+
+
 # PO-RBAC-04: protect the last active Organization Admin.
 def count_active_org_admins(session, organization_id: str,
                             exclude_user_id: Optional[str] = None) -> int:
@@ -129,7 +151,8 @@ class AuthContext:
                  branch_id: Optional[str], role: str, username: str,
                  locale: str, status: str, token_payload: dict,
                  doctor_id: Optional[str] = None,
-                 assigned_doctor_ids: Optional[list[str]] = None):
+                 assigned_doctor_ids: Optional[list[str]] = None,
+                 capability_grants: Optional[list[dict]] = None):
         self.user_id = user_id
         self.organization_id = organization_id
         self.branch_id = branch_id
@@ -139,6 +162,10 @@ class AuthContext:
         self.status = status
         self.token_payload = token_payload
         self.doctor_id = doctor_id
+        # AMSDP-APPT-OWNER-DECISIONS-01 (Q1/Q4): explicit capability grants held
+        # by this staff member, loaded per request so a revocation takes effect
+        # on the very next call.  Empty for every caller without a grant.
+        self.capability_grants = list(capability_grants or [])
         # PO-RBAC-01: explicit doctor assignments for this staff member.
         # ``doctor_id`` (legacy single assignment) remains for compatibility;
         # ``assigned_doctor_ids`` is the authoritative list for assistant/doctor
@@ -172,6 +199,25 @@ class AuthContext:
                 return False
             return doctor_id in self.assigned_doctor_ids
         return True
+
+    def has_capability(self, capability: str, branch_id: Optional[str] = None) -> bool:
+        """Does this caller hold *capability* — by role or by explicit grant?
+
+        Owner decisions Q1/Q4.  The role matrix is the primary authority; a
+        :class:`common.models.StaffCapabilityGrant` adds one named capability to
+        one person, optionally for one branch.  ``branch_id`` therefore narrows
+        an org-wide grant to the branch being acted on: a grant recorded for
+        Branch B does not answer yes for Branch C.
+
+        A revoked grant is absent from ``capability_grants`` (they are loaded
+        with ``status = 'active'`` only), so revocation needs no cache to clear.
+        """
+        from .permissions import check_granted
+        granted = [
+            row["capability"] for row in self.capability_grants
+            if branch_id is None or row.get("branch_id") in (None, branch_id)
+        ]
+        return check_granted(capability, self.role, granted)
 
     @property
     def is_super_admin(self) -> bool:
@@ -238,6 +284,8 @@ def get_current_user(
         # explicit revocation must remain effective.
         if assigned is None and user.doctor_id:
             assigned = [user.doctor_id]
+        # AMSDP-APPT-OWNER-DECISIONS-01: explicit capability grants (Q1/Q4).
+        grants = _load_capability_grants(session, uid)
     finally:
         session.close()
     return AuthContext(
@@ -246,7 +294,11 @@ def get_current_user(
         username=user.username, locale=user.locale or "en",
         status=user.status or "active", token_payload=payload,
         doctor_id=user.doctor_id,
-        assigned_doctor_ids=list(assigned),
+        # NOTE: ``assigned`` is None only when the assignment table does not
+        # exist yet (pre-migration).  An unassigned staff member must carry an
+        # empty list, never None: ``list(None)`` would raise.
+        assigned_doctor_ids=list(assigned or []),
+        capability_grants=grants,
     )
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -274,6 +326,7 @@ def get_optional_user(
             # explicit revocation must remain effective.
             if assigned is None and user.doctor_id:
                 assigned = [user.doctor_id]
+            grants = _load_capability_grants(session, uid)
         finally:
             session.close()
         return AuthContext(
@@ -282,7 +335,10 @@ def get_optional_user(
             username=user.username, locale=user.locale or "en",
             status=user.status or "active", token_payload=payload,
             doctor_id=user.doctor_id,
-            assigned_doctor_ids=list(assigned),
+            # Same contract as get_current_user(): None means the assignment
+            # table is absent (pre-migration), so an empty list is carried.
+            assigned_doctor_ids=list(assigned or []),
+            capability_grants=grants,
         )
     except (jwt.PyJWTError, HTTPException):
         return None
@@ -300,10 +356,11 @@ def require_permission(resource: str):
         ):
             ...
     """
-    from .permissions import check as perm_check
+    from .permissions import check_granted
 
     def _dependency(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
-        if not perm_check(resource, auth.role):
+        granted = [row["capability"] for row in auth.capability_grants]
+        if not check_granted(resource, auth.role, granted):
             raise HTTPException(403, "insufficient permissions")
         return auth
 

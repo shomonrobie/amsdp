@@ -34,7 +34,48 @@ def reserved_for_capacity(capacity: int, org_config=None) -> int:
     return int(round(capacity * value / 100.0))
 
 
-#: Registration policy defaults (AMSDP-FACILITY-DOCTOR-01).
+#: Staff override policy (AMSDP-APPT-OWNER-DECISIONS-01, owner decision Q1).
+#:
+#: An outside-session ("unscheduled") appointment is limited per doctor per day,
+#: so the override cannot become an unlimited dumping ground.  Five is the
+#: default for a chamber that normally sees scheduled patients and takes a few
+#: walk-ins; an organization that needs more sets it explicitly through
+#: ``PUT /api/v1/orgs/{id}/appointment-config`` (audited, Q5).
+#:
+#: ``allow_unscheduled`` is the organization's switch: when an organization turns
+#: the override off, outside-session bookings are refused outright rather than
+#: silently accepted under the limit.
+DEFAULT_UNSCHEDULED_DAILY_LIMIT = 5
+MAX_UNSCHEDULED_DAILY_LIMIT = 100
+
+
+def get_appointment_config(org_config=None) -> dict:
+    """Read ``appointment_config`` from the Organization ``config`` JSON.
+
+    Unknown or malformed values fall back to the defaults rather than raising: a
+    corrupt configuration block must never make booking answer a 500.
+    """
+    cfg = (org_config or {}).get("appointment_config") or {}
+    try:
+        limit = int(cfg.get("unscheduled_daily_limit",
+                            DEFAULT_UNSCHEDULED_DAILY_LIMIT))
+    except (TypeError, ValueError):
+        limit = DEFAULT_UNSCHEDULED_DAILY_LIMIT
+    limit = min(max(limit, 1), MAX_UNSCHEDULED_DAILY_LIMIT)
+    allow = cfg.get("allow_unscheduled", True)
+    if not isinstance(allow, bool):
+        allow = True
+    return {"unscheduled_daily_limit": limit, "allow_unscheduled": allow}
+
+
+def merge_appointment_config(org_config, updates: dict) -> dict:
+    """Return a copy of *org_config* with *updates* applied to the policy block."""
+    current = get_appointment_config(org_config)
+    current.update({k: v for k, v in (updates or {}).items() if v is not None})
+    merged = dict(org_config or {})
+    merged["appointment_config"] = current
+    return merged
+
 #:
 #: ``bmdc_required`` — a doctor cannot be **activated** (created as active, or
 #: moved from inactive to active) without a BMDC registration number.

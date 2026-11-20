@@ -152,8 +152,11 @@ class TestOperationalDate:
     def test_walk_in_appointment_and_entry_share_the_facility_day(self, _fresh_state):
         r = appointment_client.post(
             "/api/v1/appointments/walk-in",
+            # Q1: no session is open today, so this arrival is accepted as an
+            # outside-hours visit and must carry its reason.
             json={"patient_id": PAT, "doctor_id": DOC,
-                  "placement": "end_of_queue"},
+                  "placement": "end_of_queue",
+                  "reason": "walk-in without a session today"},
             headers=_headers("recp"))
         assert r.status_code in (200, 201), r.text
         walk_in = r.json()

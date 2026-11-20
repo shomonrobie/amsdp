@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "queuing"))
 from common.auth import _ALGO, _SECRET
 from common.database import SessionFactory
 from common.models import (Appointment, AuditEvent, Branch, Doctor, Notification,
-                           Organization, Patient, QueueEntry, StaffUser,
+                           Organization, Patient, QueueEntry, Schedule, StaffUser,
                            TrackingToken)
 from common.notifications import outbox, worker
 from common.notifications import config as notif_config
@@ -114,6 +114,22 @@ def _seed():
             s.add(Doctor(id=DOC2, organization_id=ORG2, name="Dr. Foreign",
                          mobile="01700000002"))
         s.commit()
+
+        # Q1: published availability is the precondition for a *scheduled*
+        # booking (the old exact-minute fallback is gone), so the suite's doctor
+        # publishes a full-day template.  Five-minute windows keep each test's
+        # chosen start time in its own slot, so capacity 1 never collides.
+        sched = s.query(Schedule).filter(Schedule.doctor_id == DOC).first()
+        if sched is None:
+            sched = Schedule(id="sq3-sched", doctor_id=DOC, organization_id=ORG,
+                             branch_id=BR, status="active", slot_templates=[])
+            s.add(sched)
+        sched.branch_id = BR
+        sched.status = "active"
+        sched.slot_templates = [{
+            "day_of_week": None, "start_time": "00:00", "end_time": "23:59",
+            "slot_duration_minutes": 5, "max_patients": 1}]
+        s.commit()
         for pid, name, mobile, sex in ((PAT, "Queue Patient", "01700000123",
                                         "male"),
                                        (PAT2, "Foreign Patient", "01700000456",
@@ -141,6 +157,31 @@ def _seed():
                 user.role, user.status = role, "active"
                 user.doctor_id = doctor_id
         s.commit()
+
+        # PO-RBAC-01: the f8a1b2c3d4e5 migration backfills every legacy
+        # ``doctor_id`` into ``staff_doctor_assignments``.  The runtime loader
+        # treats the table as authoritative (an empty result for a migrated
+        # database is a revocation, not a reason to fall back), so recreate the
+        # backfilled row for fixture users that carry a legacy ``doctor_id``.
+        # No-op on pre-migration databases, where the legacy fallback applies.
+        from sqlalchemy import inspect as sa_inspect
+        if sa_inspect(s.get_bind()).has_table("staff_doctor_assignments"):
+            from common.models import StaffDoctorAssignment
+            for user_tuple in USERS.values():
+                username = user_tuple[0]
+                user_doctor_id = user_tuple[4] if len(user_tuple) > 4 else None
+                if not user_doctor_id:
+                    continue
+                user = s.query(StaffUser).filter(
+                    StaffUser.username == username).first()
+                s.query(StaffDoctorAssignment).filter(
+                    StaffDoctorAssignment.staff_user_id == user.id
+                ).delete(synchronize_session=False)
+                s.add(StaffDoctorAssignment(
+                    id=str(uuid.uuid4()), staff_user_id=user.id,
+                    doctor_id=user_doctor_id,
+                    organization_id=user.organization_id, status="active"))
+            s.commit()
     finally:
         s.close()
 
@@ -480,7 +521,10 @@ def test_walk_in_booking_creates_no_message():
     _set_org_config(_enabled_config())
     r = appointment_client.post(
         "/api/v1/appointments/walk-in",
-        json={"patient_id": PAT, "doctor_id": DOC, "notes": "walked in"},
+        # Q1: DOC publishes hours but has no clinic session, so the arrival is an
+        # outside-hours acceptance and carries the reason it was accepted with.
+        json={"patient_id": PAT, "doctor_id": DOC, "notes": "walked in",
+              "reason": "walk-in, no session today"},
         headers=_headers("recp"))
     assert r.status_code == 201, r.text
     assert _notifications(r.json()["id"]) == []

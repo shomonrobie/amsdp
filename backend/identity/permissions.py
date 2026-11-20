@@ -4,3 +4,4 @@ Re-exports from common.permissions for backward compatibility.
 """
 
 from common.permissions import PERMISSIONS, check, can_grant_role, role_level, PLATFORM_ROLES  # noqa
+from common.permissions import DELEGABLE_CAPABILITIES, check_granted  # noqa

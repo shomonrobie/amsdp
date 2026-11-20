@@ -89,6 +89,14 @@ PERMISSIONS: dict[str, list[str]] = {
         # nothing here grants the receptionist the ability to change it.
         "symptom.read",
         "appointment.create", "appointment.read", "appointment.modify",
+        # AMSDP-APPT-OWNER-DECISIONS-01 (Q3): check-in is its own capability, not
+        # a side effect of appointment.modify.  The front desk holds it; a doctor
+        # holds it for their own patients without gaining modify.
+        "appointment.check_in",
+        # Q1: the front desk may accept an outside-session patient, but only with
+        # a recorded reason, under the organization's unscheduled limit, and with
+        # an audit event — the capability is separate so it can be withdrawn.
+        "appointment.create_unscheduled",
         "queue.view", "queue.reorder", "queue.checkin", "queue.manage",
         # Sequence 3 / BR §27A: staff-confirmed missed-turn recovery.
         "queue.recover", "queue.reposition",
@@ -99,6 +107,14 @@ PERMISSIONS: dict[str, list[str]] = {
         # AMSDP-SYMPTOM-01: a doctor reads what the receptionist recorded.
         "symptom.read",
         "schedule.read", "appointment.read", "queue.view", "queue.consult",
+        # AMSDP-APPT-OWNER-DECISIONS-01 (Q1/Q3, Scenario A): a doctor working
+        # without a receptionist registers and checks in their own walk-in
+        # patients.  Their own, because every route applying these capabilities
+        # also enforces ``can_access_doctor`` against the explicit assignment —
+        # which fails closed.  ``appointment.modify`` is deliberately NOT granted:
+        # cancel, reschedule and transfer stay front-desk work.
+        "appointment.create", "appointment.check_in",
+        "appointment.create_unscheduled",
         # Sequence 3 / BR §27A.1 + §27A.3: an authorized doctor may confirm a
         # missed turn and reposition within the same queue. This does NOT grant
         # queue.manage (cancel / no-show) or queue.reorder (bulk reorder).
@@ -110,8 +126,30 @@ PERMISSIONS: dict[str, list[str]] = {
         # AMSDP-SYMPTOM-01: read-only, like the rest of the assistant matrix.
         "symptom.read",
         "appointment.read", "queue.view",
+        # AMSDP-APPT-OWNER-DECISIONS-01 (Q3): an assistant may check in patients
+        # for the doctor(s) they are assigned to, and for nobody else.  The
+        # assignment check is enforced by the check-in routes, not by this list.
+        "appointment.check_in",
     ],
 }
+
+#: Capabilities an administrator may grant to an individual staff member, over
+#: and above their role (owner decisions Q1/Q4).
+#:
+#: Deliberately a closed, short list.  A grant can only *widen* authority that
+#: already exists in the matrix, never invent a new kind of access, so nothing
+#: here can hand out ``appointment.modify``, ``org.manage`` or ``audit.read``
+#: to a role that was never meant to hold it.
+DELEGABLE_CAPABILITIES: tuple[str, ...] = (
+    # Q4: central-reception staff book into another branch of the same
+    # organization.  Does not grant reads, cancellation or patient records
+    # outside the branch — those stay ``branch_accessible`` decisions.
+    "appointment.book_cross_branch",
+    # Q1: accept an outside-session patient through the override workflow.
+    "appointment.create_unscheduled",
+    # Q3: check a patient in without any other modification authority.
+    "appointment.check_in",
+)
 
 # PO-RBAC-05 / O-SaaS-8: Platform roles — distinct from tenant roles.
 # Platform roles hold only platform.* capabilities; they do NOT automatically
@@ -180,3 +218,15 @@ def check(resource: str, role: str) -> bool:
         resource == p or (p.endswith("*") and resource.startswith(p[:-1]))
         for p in perms
     )
+
+def check_granted(resource: str, role: str, granted=()) -> bool:
+    """Return True if *role* — or an explicit grant held by this user — allows it.
+
+    Owner decisions Q1/Q4 add staff-level capability grants on top of the role
+    matrix (:class:`common.models.StaffCapabilityGrant`).  A grant can only
+    *add* to what the role already holds, so this is the union of the two, never
+    a replacement: revoking the grant restores exactly the role authority.
+    """
+    if check(resource, role):
+        return True
+    return resource in set(granted or ())

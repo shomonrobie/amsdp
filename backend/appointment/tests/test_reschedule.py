@@ -9,8 +9,9 @@ the kind of write an in-memory fixture used to hide.
 import pytest
 from fastapi.testclient import TestClient
 
-from amsdp_test_support import (db_session, ensure_branch, ensure_doctor,
-                               ensure_org, ensure_patient, ensure_user,
+from amsdp_test_support import (db_session, ensure_all_day_session,
+                               ensure_branch, ensure_doctor, ensure_org,
+                               ensure_patient, ensure_schedule, ensure_user,
                                headers, load_app, purge_org)
 from common.models import Appointment
 
@@ -32,6 +33,9 @@ def _world(client):
     ensure_org(ORG)
     ensure_branch(BR, ORG)
     ensure_doctor(DOC, ORG, name="Dr. Reschedule", mobile="01700002001")
+    # Q1: published availability is the precondition for a scheduled booking.
+    ensure_schedule(DOC, ORG, BR, capacity=1)
+    ensure_all_day_session(DOC, ORG, BR, capacity=1)
     ensure_patient(PAT, ORG, name="Reschedule Patient", mobile="01700002002")
     ensure_user(RECP, "receptionist", ORG, BR)
     yield

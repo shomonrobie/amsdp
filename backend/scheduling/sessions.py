@@ -480,11 +480,26 @@ def update_session(
                 end_time=row.end_time, exclude_id=row.id)
         session.flush()
         sync_slot_templates(session, row.schedule)
+        after = session_dict(row)
         record_audit(
             session, service=SERVICE, org_id=row.organization_id,
             action="schedule.session.update", target_type="schedule_session",
             target_id=row.id, actor_id=auth.user_id, actor_role=auth.role,
-            branch_id=row.branch_id, before=before, after=session_dict(row))
+            branch_id=row.branch_id, before=before, after=after)
+        # Q5: a session's capacity is the number the booking path enforces, so a
+        # change to it is its own auditable event rather than a field buried in
+        # the generic update payload.
+        if before["max_patients"] != after["max_patients"]:
+            record_audit(
+                session, service=SERVICE, org_id=row.organization_id,
+                action="schedule.session.capacity_change",
+                target_type="schedule_session", target_id=row.id,
+                actor_id=auth.user_id, actor_role=auth.role,
+                branch_id=row.branch_id,
+                before={"max_patients": before["max_patients"]},
+                after={"max_patients": after["max_patients"]},
+                reason="session capacity")
+
         try:
             session.commit()
         except IntegrityError:

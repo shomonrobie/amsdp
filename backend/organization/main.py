@@ -30,6 +30,15 @@ except ImportError:
     from notification_config import router as notification_router
 app.include_router(notification_router)
 
+# AMSDP-APPT-OWNER-DECISIONS-01 (Q1/Q5) — the outside-session ("unscheduled")
+# policy: a per-doctor daily limit and an on/off switch, changed only through an
+# audited administrative call.
+try:
+    from .appointment_config import router as appointment_config_router
+except ImportError:
+    from appointment_config import router as appointment_config_router
+app.include_router(appointment_config_router)
+
 # AMSDP-FACILITY-DOCTOR-01 — facility hierarchy: floors, departments, chambers
 # and the organization's speciality catalogue.  Mounted here because every one
 # of those entities belongs to a branch or an organization.

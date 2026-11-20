@@ -94,6 +94,35 @@ test('booking sends the same payload contract as before the refactor', () => {
   assert.match(page, /apiFetch\('\/api\/v1\/appointments', \{\s*method: 'POST'/);
 });
 
+test('the booking dialog names the appointment type and asks for the override reason (Q1)', () => {
+  // The persisted type is sent, never inferred from a missing time.
+  assert.match(page, /appointment_type: unscheduled \? 'unscheduled' : 'scheduled'/);
+  assert.match(page, /override_reason: unscheduled \? String\(book\.overrideReason\)\.trim\(\) : ''/);
+  // The decision itself lives in the tested pure module.
+  assert.match(page, /from '\.\.\/lib\/calendar\/booking'/);
+  for (const fn of ['bookingMode', 'overrideProblem', 'typeLabelKey', 'typeBadgeKey']) {
+    assert.ok(page.includes(fn), `page must use ${fn} from the booking model`);
+  }
+  // Nothing published → the dialog asks for the reason before the round trip.
+  assert.match(page, /bookingMode\(slotChoices\)\.requiresReason/);
+  assert.match(page, /id='book-override-reason'/);
+  assert.match(page, /id='book-override-hint'/);
+  // A day whose slots are all full says so in words.
+  assert.match(page, /bookingMode\(slotChoices\)\.mode === 'allFull'/);
+  // The walk-in dialog carries the same reason, because an arrival outside a
+  // published session is an outside-hours acceptance rather than a walk-in.
+  assert.match(page, /reason: \(walk\.reason \|\| ''\)\.trim\(\)/);
+  assert.match(page, /id='walk-reason'/);
+  // The detail panel states the persisted type and the recorded reason.
+  assert.match(page, /T\(typeLabelKey\(detail\.appointment_type\)\)/);
+  assert.match(page, /detail\.override_reason/);
+  // A walk-in or outside-hours card is badged on its face, so it cannot be read
+  // as an ordinary confirmed slot.
+  assert.match(page, /T\(typeBadgeKey\('walk_in'\)\)/);
+  assert.match(page, /T\(typeBadgeKey\('unscheduled'\)\)/);
+  assert.match(component, /appt\.appointment_type === 'walk_in'/);
+});
+
 test('walk-in, check-in, status change and cancel-with-reason are preserved', () => {
   assert.match(page, /'\/api\/v1\/appointments\/walk-in'/);
   assert.match(page, /'\/api\/v1\/appointments\/' \+ appt\.id \+ '\/check-in'/);

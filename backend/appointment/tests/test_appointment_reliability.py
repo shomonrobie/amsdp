@@ -306,19 +306,24 @@ class TestTenantAndBranchScope:
     def test_a_schedule_in_another_branch_does_not_move_the_booking(
             self, client):
         # F-06: the location resolver must not pick up a schedule the caller's
-        # token cannot reach, and must still file the appointment in the
-        # caller's own branch.
+        # token cannot reach.  Owner decision Q1 makes that refusal explicit: a
+        # BR-scoped receptionist with no BR hours published is told so
+        # (``unscheduled_requires_override``) instead of being silently booked,
+        # and nothing is filed against the unreachable branch.
         _schedule(branch_id=BR2)
-        body = _booked(client, start="09:00")
-        assert body["branch_id"] == BR
-        assert body["schedule_id"] == ""
+        r = _book(client, start="09:00")
+        assert r.status_code == 422, r.text
+        assert "unscheduled_requires_override" in r.json()["detail"]
         with db_session() as s:
             assert s.query(Appointment).filter(
                 Appointment.branch_id == BR2).count() == 0
+            assert s.query(Appointment).filter(
+                Appointment.branch_id == BR).count() == 0
 
     def test_a_cross_branch_appointment_is_invisible(self, client):
         # F-09: detail reads are branch-scoped.  The appointment is real; the
         # caller simply may not learn that it is.
+        _schedule(branch_id=BR2)             # Q1: the BR2 desk's own hours
         foreign = _booked(client, user=RECP2)
         for user in (RECP, ASSIST):
             r = client.get(f"/api/v1/appointments/{foreign['id']}",
@@ -330,6 +335,7 @@ class TestTenantAndBranchScope:
 
     def test_a_cross_branch_status_write_is_refused(self, client):
         # F-08: the same scope rule on the write path, and the row is untouched.
+        _schedule(branch_id=BR2)
         foreign = _booked(client, user=RECP2)
         r = client.patch(f"/api/v1/appointments/{foreign['id']}/status",
                          headers=headers(RECP),
@@ -342,6 +348,7 @@ class TestTenantAndBranchScope:
         assert ok.status_code == 200, ok.text
 
     def test_a_cross_branch_check_in_is_refused(self, client):
+        _schedule(branch_id=BR2)
         foreign = _booked(client, user=RECP2)
         r = client.post(f"/api/v1/appointments/{foreign['id']}/check-in",
                         headers=headers(RECP),
@@ -359,11 +366,16 @@ class TestCheckInCapability:
     """F-07: check-in is an appointment write, on both doors."""
 
     def test_an_assistant_cannot_check_a_patient_in(self, client):
+        _schedule()
         booked = _booked(client)
         r = client.post(f"/api/v1/appointments/{booked['id']}/check-in",
                         headers=headers(ASSIST),
                         json={"status": "CHECKED_IN"})
-        assert r.status_code == 403, r.text
+        # Q3: the assistant *holds* ``appointment.check_in``, but only for the
+        # doctor(s) they are assigned to.  With no active assignment the route
+        # fails closed with the same non-disclosing 404 a foreign id produces —
+        # never a 403 that would confirm the appointment exists.
+        assert r.status_code == 404, r.text
         assert _status(booked["id"]) == "BOOKED"
         with db_session() as s:
             assert s.query(QueueEntry).filter(
@@ -371,6 +383,7 @@ class TestCheckInCapability:
 
     def test_a_receptionist_check_in_writes_status_and_queue_together(
             self, client):
+        _schedule()
         booked = _booked(client)
         _confirm(client, booked["id"])
         r = client.post(f"/api/v1/appointments/{booked['id']}/check-in",
@@ -386,6 +399,7 @@ class TestCheckInCapability:
             assert entry.position == 1
 
     def test_a_second_check_in_is_idempotent(self, client):
+        _schedule()
         booked = _booked(client)
         _confirm(client, booked["id"])
         first = client.post(f"/api/v1/appointments/{booked['id']}/check-in",
@@ -402,17 +416,18 @@ class TestCheckInCapability:
 
     def test_the_queue_door_refuses_a_role_without_the_capability(self, app):
         # The queue service's own check-in route is the sibling door F-07
-        # records.  An assistant holds neither ``queue.checkin`` nor
-        # ``appointment.modify``; the refusal is what keeps the two doors
-        # equivalent.  (No role holds ``queue.checkin`` without
-        # ``appointment.modify`` today, so the inner capability check there is
-        # defence in depth rather than an observable narrowing.)
+        # records.  Owner decision Q3 made ``appointment.check_in`` the one
+        # capability behind check-in on *both* doors, and narrowed it for
+        # assistants/doctors to their assigned doctor.  An unassigned assistant
+        # is therefore refused by the same ownership rule on both doors, with the
+        # same non-disclosing 404.
         queue_client = TestClient(load_app("queuing"))
+        _schedule()
         booked = _booked(TestClient(app))
         r = queue_client.post("/api/v1/queue/check-in",
                               headers=headers(ASSIST),
                               json={"appointment_id": booked["id"]})
-        assert r.status_code == 403, r.text
+        assert r.status_code == 404, r.text
         with db_session() as s:
             assert s.query(QueueEntry).filter(
                 QueueEntry.appointment_id == booked["id"]).count() == 0

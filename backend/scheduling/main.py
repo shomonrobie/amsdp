@@ -115,6 +115,35 @@ def _schedule_to_dict(s):
         "created_at": str(s.created_at) if s.created_at else "",
     }
 
+def _capacity_map(templates) -> dict:
+    """``{(day, start, end): max_patients}`` for a template list.
+
+    Owner decision Q5 asks for capacity changes to be auditable with accurate
+    before/after values.  Comparing the raw JSON lists would report "the
+    templates changed" for a reordered list and would not say *which* window's
+    capacity moved, so the audit event carries this derived map instead.
+    """
+    from common.slots import normalise_template
+    out = {}
+    for template in templates or []:
+        normal = normalise_template(template)
+        if normal is None:
+            continue
+        out[f"{normal['day_of_week']} {normal['start_time']}-{normal['end_time']}"] = \
+            normal["max_patients"]
+    return out
+
+
+def _capacity_changes(before_templates, after_templates) -> dict:
+    """Windows whose capacity changed between two template lists."""
+    before, after = _capacity_map(before_templates), _capacity_map(after_templates)
+    changes = {}
+    for key in sorted(set(before) | set(after)):
+        if before.get(key) != after.get(key):
+            changes[key] = {"from": before.get(key), "to": after.get(key)}
+    return changes
+
+
 def _optional_date(value, field: str):
     """Parse an optional ``YYYY-MM-DD``, refusing instead of swallowing (F-13).
 
@@ -251,6 +280,50 @@ def update_schedule(schedule_id: str, data: ScheduleUpdate,
                      action="schedule.updated", target_type="schedule",
                      target_id=s.id, actor_id=auth.user_id, actor_role=auth.role,
                      branch_id=s.branch_id, before=before, after=_schedule_to_dict(s))
+        # Q5: activation/deactivation, effective-date changes, template changes and
+        # capacity changes each get their own event, with the *specific* values
+        # that moved.  The generic ``schedule.updated`` above stays as the
+        # complete before/after record; these are the events an operator or an
+        # auditor searches for without diffing JSON.
+        after = _schedule_to_dict(s)
+        if before["status"] != after["status"]:
+            record_audit(session, service="scheduling", org_id=auth.organization_id,
+                         action="schedule.status_change", target_type="schedule",
+                         target_id=s.id, actor_id=auth.user_id, actor_role=auth.role,
+                         branch_id=s.branch_id,
+                         before={"status": before["status"]},
+                         after={"status": after["status"]},
+                         reason="activation/deactivation")
+        if ((before["effective_from"], before["effective_to"]) !=
+                (after["effective_from"], after["effective_to"])):
+            record_audit(session, service="scheduling", org_id=auth.organization_id,
+                         action="schedule.effective_dates_changed",
+                         target_type="schedule", target_id=s.id,
+                         actor_id=auth.user_id, actor_role=auth.role,
+                         branch_id=s.branch_id,
+                         before={"effective_from": before["effective_from"],
+                                 "effective_to": before["effective_to"]},
+                         after={"effective_from": after["effective_from"],
+                                "effective_to": after["effective_to"]})
+        if before["slot_templates"] != after["slot_templates"]:
+            record_audit(session, service="scheduling", org_id=auth.organization_id,
+                         action="schedule.templates_changed", target_type="schedule",
+                         target_id=s.id, actor_id=auth.user_id, actor_role=auth.role,
+                         branch_id=s.branch_id,
+                         before={"windows": _capacity_map(before["slot_templates"])},
+                         after={"windows": _capacity_map(after["slot_templates"])})
+            changes = _capacity_changes(before["slot_templates"],
+                                        after["slot_templates"])
+            if changes:
+                record_audit(session, service="scheduling",
+                             org_id=auth.organization_id,
+                             action="schedule.capacity_change",
+                             target_type="schedule", target_id=s.id,
+                             actor_id=auth.user_id, actor_role=auth.role,
+                             branch_id=s.branch_id,
+                             before={"capacity": {k: v["from"] for k, v in changes.items()}},
+                             after={"capacity": {k: v["to"] for k, v in changes.items()}},
+                             reason="slot capacity")
         session.commit()
         return _schedule_to_dict(s)
     except Exception:

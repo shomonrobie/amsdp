@@ -81,7 +81,9 @@ def _user_to_response(user: StaffUser) -> StaffUserResponse:
         branch_id=user.branch_id,
         doctor_id=user.doctor_id or None,
         # PO-RBAC-01: all active doctor assignments for this staff member.
-        doctor_ids=assigned,
+        # ``assigned`` is None only when the assignment table does not exist
+        # yet (pre-migration); the API always answers with a list.
+        doctor_ids=list(assigned or []),
         username=user.username,
         display_name=user.display_name,
         role=user.role,

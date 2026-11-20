@@ -663,6 +663,15 @@ class TestMultiDoctorValidation:
                 password_hash=pw_hash, display_name="Legacy",
                 role="doctor", doctor_id=doc_id, status="active")
             session.add(u)
+            # PO-RBAC-01: the f8a1b2c3d4e5 migration backfills the legacy
+            # doctor_id into an explicit assignment row, so a migrated account
+            # carries both.  The assignment table is authoritative; removed
+            # rows are a revocation and must not be re-derived from doctor_id.
+            from common.models import StaffDoctorAssignment
+            session.add(StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc_id, organization_id=TEST_ORG_ID,
+                status="active"))
             session.commit()
             uid = u.id
         finally:
@@ -792,8 +801,8 @@ class TestDoctorAssignmentLoading:
         return uuid.uuid4().hex[:6]
 
     def test_table_absent_legacy_fallback_ok(self):
-        """When the assignment table doesn't exist, return [] (legacy
-        fallback may be used by caller)."""
+        """When the assignment table doesn't exist, return None — callers may
+        then fall back to the legacy ``StaffUser.doctor_id`` column."""
         session = SessionFactory()
         try:
             from unittest.mock import patch
@@ -802,7 +811,7 @@ class TestDoctorAssignmentLoading:
             with patch('sqlalchemy.inspect') as mock_inspect:
                 mock_inspect.return_value.has_table.return_value = False
                 result = _load_assigned_doctor_ids(session, "some-user-id")
-                assert result == []
+                assert result is None
         finally:
             session.close()
 
@@ -845,8 +854,8 @@ class TestDoctorAssignmentLoading:
             session.close()
 
     def test_table_exists_no_active_assignments_returns_empty(self):
-        """When table exists but no active assignments, return [] (caller
-        may then use legacy doctor_id fallback)."""
+        """When the table exists but no active assignments remain, return []
+        — the caller must NOT fall back to legacy ``doctor_id``."""
         tag = self._mk_tag()
         session = SessionFactory()
         try:
@@ -922,3 +931,60 @@ class TestDoctorAssignmentLoading:
             assert result == []
         finally:
             session.close()
+
+    def test_get_current_user_ignores_legacy_doctor_id_after_revocation(self):
+        """PO-RBAC-01 regression: a revoked assignment must not be restored by
+        the legacy ``StaffUser.doctor_id`` column.
+
+        The account keeps ``doctor_id`` (pre-migration data) while the active
+        assignment row has been removed.  ``get_current_user()`` must carry an
+        empty ``assigned_doctor_ids`` and ``can_access_doctor()`` must fail
+        closed for that doctor.
+        """
+        from fastapi.security import HTTPAuthorizationCredentials
+        from common.auth import get_current_user
+
+        tag = self._mk_tag()
+        doc_id = f"load_regr_{tag}"
+        session = SessionFactory()
+        try:
+            doc = session.query(Doctor).filter(Doctor.id == doc_id).first()
+            if doc is None:
+                session.add(Doctor(id=doc_id, organization_id=TEST_ORG_ID,
+                                   name=f"Regression Doctor {tag}",
+                                   mobile=f"017{tag[:8]}"))
+
+            pw_hash = bcrypt.hashpw(b"secret123", bcrypt.gensalt()).decode()
+            u = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                branch_id=None, username=f"load_regr_user_{tag}",
+                password_hash=pw_hash, display_name="Regression User",
+                role="assistant", doctor_id=doc_id, status="active")
+            session.add(u)
+
+            from common.models import StaffDoctorAssignment
+            sda = StaffDoctorAssignment(
+                id=str(uuid.uuid4()), staff_user_id=u.id,
+                doctor_id=doc_id, organization_id=TEST_ORG_ID,
+                status="active")
+            session.add(sda)
+            session.commit()
+            user_id = u.id
+
+            # Revoke only the explicit assignment; the legacy column survives.
+            session.delete(sda)
+            session.commit()
+            assert session.query(StaffUser).filter(
+                StaffUser.id == user_id).one().doctor_id == doc_id
+        finally:
+            session.close()
+
+        tok = jwt.encode(
+            {"sub": user_id, "org": TEST_ORG_ID, "branch": None,
+             "role": "assistant",
+             "exp": int((datetime.now(timezone.utc)
+                         + timedelta(hours=1)).timestamp())},
+            _SECRET, algorithm=_ALGO)
+        auth = get_current_user(HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials=tok))
+        assert auth.assigned_doctor_ids == []
+        assert auth.can_access_doctor(doc_id) is False

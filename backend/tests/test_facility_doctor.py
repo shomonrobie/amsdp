@@ -182,6 +182,24 @@ def _create_session(svc, schedule_id, *, day=WEEKDAY, start="09:00",
         json=body)
 
 
+def _publish_hours(svc, schedule_id, *, day=WEEKDAY, start="08:00",
+                   end="18:00", duration=15, capacity=1):
+    """Publish bookable hours *without* creating a clinic session.
+
+    Owner decision Q1 made published availability the precondition for a
+    scheduled booking (the old exact-minute fallback is gone), while the chamber
+    snapshot still comes from a session.  This helper writes the template
+    directly, which is exactly the "hours but no chamber" case.
+    """
+    r = svc.scheduling.patch(
+        f"/api/v1/schedules/{schedule_id}", headers=headers(OWNER),
+        json={"slot_templates": [{
+            "day_of_week": day, "start_time": start, "end_time": end,
+            "slot_duration_minutes": duration, "max_patients": capacity}]})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def _chamber(svc, *, branch_id=BR):
     """A floor + department + room triplet at one branch."""
     floor = _create_floor(svc, branch_id=branch_id)
@@ -863,9 +881,16 @@ class TestAppointmentLocation:
                      start="11:59").status_code == 201
 
     def test_doctor_without_sessions_books_with_no_chamber(self, svc):
-        """Pre-feature behaviour is kept: no session, no chamber, no refusal."""
+        """Published hours, no clinic session: books, unchambered (Q1).
+
+        The hours are what makes the slot bookable; the *session* is what gives
+        it a chamber.  A doctor who has published hours but has not opened a
+        session is therefore still bookable — the appointment simply carries no
+        chamber snapshot.
+        """
         doctor = _create_doctor(svc)
         schedule = _create_schedule(svc, doctor["id"])
+        _publish_hours(svc, schedule["id"], start="08:00", end="09:00")
         booked = _book(svc, doctor_id=doctor["id"], start="08:15")
         assert booked.status_code == 201, booked.text
         appt = booked.json()
@@ -927,14 +952,27 @@ class TestAppointmentLocation:
             f"{floor['name']} / {department['name']} / {room['name']}")
 
         # A doctor with no session today is still registered — just unchambered.
+        # Q1: an arrival outside every published session is an explicit
+        # outside-hours acceptance, so it carries a reason and is persisted as
+        # ``unscheduled`` rather than as a normal walk-in slot.
         without = _create_doctor(svc)
         _create_schedule(svc, without["id"])
         degraded = svc.appointment.post(
             "/api/v1/appointments/walk-in", headers=headers(DESK),
-            json={"patient_id": PATIENT, "doctor_id": without["id"]})
+            json={"patient_id": PATIENT, "doctor_id": without["id"],
+                  "reason": "urgent visit, no session today"})
         assert degraded.status_code == 201, degraded.text
+        assert degraded.json()["appointment_type"] == "unscheduled"
+        assert degraded.json()["override_reason"] == "urgent visit, no session today"
         assert degraded.json()["session_id"] == ""
         assert degraded.json()["location_label"] == ""
+
+        # …and without a reason the same arrival is refused, not silently booked.
+        refused = svc.appointment.post(
+            "/api/v1/appointments/walk-in", headers=headers(DESK),
+            json={"patient_id": PATIENT, "doctor_id": without["id"]})
+        assert refused.status_code == 422, refused.text
+        assert "reason" in refused.text.lower()
 
     def test_bookings_are_invisible_across_tenants(self, svc):
         foreign_patient = f"facility-doctor-foreign-patient-{uniq('p')}"
@@ -945,6 +983,17 @@ class TestAppointmentLocation:
             json={"name": f"Dr. ForeignBook {uniq('doc')}",
                   "mobile": _mobile(), "branch_ids": [OTHER_BR]})
         assert foreign_doctor.status_code == 201, foreign_doctor.text
+        # Q1: the foreign tenant's doctor must publish hours too, or the booking
+        # is refused for availability before tenancy is ever exercised.
+        foreign_schedule = svc.scheduling.post(
+            "/api/v1/schedules", headers=headers(FOREIGN),
+            json={"doctor_id": foreign_doctor.json()["id"],
+                  "organization_id": OTHER_ORG, "branch_id": OTHER_BR,
+                  "slot_templates": [{
+                      "day_of_week": WEEKDAY, "start_time": "09:00",
+                      "end_time": "11:00", "slot_duration_minutes": 15,
+                      "max_patients": 1}]})
+        assert foreign_schedule.status_code == 201, foreign_schedule.text
 
         booked = _book(svc, doctor_id=foreign_doctor.json()["id"],
                        start="10:00", who=FOREIGN, patient_id=foreign_patient)

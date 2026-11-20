@@ -70,9 +70,16 @@ test('the picker reuses the BanglaNameSense language sense', () => {
 test('the catalogue is never hard-coded in the UI', () => {
   const page = stripComments(read(PAGE));
   const picker = stripComments(read(PICKER));
+  /* Letter-bounded, not a bare substring: `প্রকাশিত` ("published") contains the
+     letters of `কাশি` ("cough") without being that word, and flags the Bangla
+     copy that explains published hours.  Bangla joins words with a virama or a
+     space, so the boundary is "not another letter". */
+  const mentions = (text, name) =>
+    new RegExp('(?<!\\p{L})' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?!\\p{L})', 'u')
+      .test(text);
   for (const name of ['মাথাব্যথা', 'Chest pain', 'কাশি', 'জ্বর', 'headache']) {
-    assert.ok(!page.includes(name), `a symptom name leaked into the page: ${name}`);
-    assert.ok(!picker.includes(name), `a symptom name leaked into the picker: ${name}`);
+    assert.ok(!mentions(page, name), `a symptom name leaked into the page: ${name}`);
+    assert.ok(!mentions(picker, name), `a symptom name leaked into the picker: ${name}`);
   }
   assert.match(page, /apiFetch\('\/api\/v1\/symptoms'\)/,
     'the catalogue comes from the API');

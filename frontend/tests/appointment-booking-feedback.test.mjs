@@ -108,6 +108,11 @@ test('each code has a caption, and every caption exists in both languages', () =
     const hits = (page.match(new RegExp(`(^|[\\s{,])${key}:'`, 'g')) || []).length;
     assert.equal(hits, 2, `${key} must be defined in Bangla and in English`);
   }
+  // One code, one caption: the count is the guard against a new refusal code
+  // shipping without words.  Q1 added four outside-hours codes
+  // (`needsOverride`, `overrideLimit`, `overrideDisabled`, `useWalkIn`).
+  assert.equal(Object.keys(REFUSAL_KEYS).length, 17, 'no code is left captionless');
+});
 
 test('the booking dialog translates refusals instead of pasting the server sentence', () => {
   const page = read(PAGE);
@@ -133,9 +138,13 @@ test('an empty day explains the fallback it offers (F-18)', () => {
   assert.match(page, /\{T\('noSlots'\)\}/);
   assert.match(page, /\{T\('noSlotsHint'\)\}/,
     'the free-text field must state that the booking falls outside every session');
-  // The field itself is kept: outside-session bookings are the documented
-  // current behaviour and owner decision Q1 is still open.
+  // The field itself is kept: a time outside every session still places the
+  // card on the day.  Q1 closed the ambiguity — with nothing published the
+  // booking is an outside-hours acceptance, so the dialog asks for the reason
+  // the server requires and sends `appointment_type: 'unscheduled'`.
   assert.match(page, /<input type='time' value=\{book\.time\} aria-label=\{T\('tm'\)\}/);
+  assert.match(page, /id='book-override-reason'/);
+  assert.match(page, /\{T\('overrideHint'\)\}/);
 });
 
 test('the module stays pure, so the browser and these tests run the same code', () => {
@@ -143,7 +152,4 @@ test('the module stays pure, so the browser and these tests run the same code', 
   assert.doesNotMatch(source, /^\s*import\s/m, 'no imports: no React, no fetch, no i18n');
   assert.doesNotMatch(source, /require\(/);
   assert.doesNotMatch(source, /\bwindow\.|\bdocument\./);
-});
-
-  assert.equal(Object.keys(REFUSAL_KEYS).length, 13, 'no code is left captionless');
 });

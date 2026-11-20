@@ -41,7 +41,8 @@ from common.database import SessionFactory                        # noqa: E402
 from common.models import (Appointment, AppointmentSymptom, Branch, Doctor,  # noqa: E402
                            DoctorBranch, Notification, Organization, Patient,
                            QueueEntry, QueueSequence, Schedule, ScheduleSession,
-                           StaffUser, SymptomCatalog, TrackingToken)
+                           StaffCapabilityGrant, StaffUser, SymptomCatalog,
+                           TrackingToken)
 
 #: Password used by every user this module creates.
 PASSWORD = "testpass123"
@@ -110,6 +111,90 @@ def ensure_patient(patient_id: str, org_id: str, *, name: str = "Test Patient",
                           mobile=mobile, sex=sex))
             s.commit()
     return patient_id
+
+
+def ensure_schedule(doctor_id: str, org_id: str, branch_id: str, *,
+                    day_of_week: int = None, start: str = "09:00",
+                    end: str = "17:00", duration: int = 15,
+                    capacity: int = 1) -> str:
+    """Publish slot hours for a doctor and return the schedule id.
+
+    Owner decision Q1 made published availability the precondition for a
+    *scheduled* booking (the old exact-minute fallback is gone), so a fixture
+    that books through the API must publish hours first.  ``day_of_week=None``
+    makes the template apply to every weekday — which is what most fixtures
+    want, since they name a date, not a weekday.
+    """
+    from common.models import Schedule
+    with db_session() as s:
+        row = s.query(Schedule).filter(
+            Schedule.doctor_id == doctor_id,
+            Schedule.organization_id == org_id).first()
+        if row is None:
+            row = Schedule(id=f"sched-{doctor_id}", doctor_id=doctor_id,
+                           organization_id=org_id, branch_id=branch_id,
+                           status="active", slot_templates=[])
+            s.add(row)
+        row.branch_id = branch_id
+        row.status = "active"
+        row.slot_templates = [{
+            "day_of_week": day_of_week, "start_time": start, "end_time": end,
+            "slot_duration_minutes": duration, "max_patients": capacity}]
+        s.commit()
+        return row.id
+
+
+def ensure_session(doctor_id: str, org_id: str, branch_id: str, *,
+                   day_of_week: int, start: str = "00:00", end: str = "23:59",
+                   duration: int = 15, capacity: int = 1) -> str:
+    """Create (idempotently) one clinic session and return its id.
+
+    The walk-in workflow (Q1) distinguishes "inside an active published session"
+    from "outside every session"; a fixture that wants the first outcome has to
+    publish the session.  ``00:00–23:59`` covers any arrival time, which is what
+    a walk-in test needs to be independent of when it runs.
+    """
+    from common.models import Schedule, ScheduleSession
+    with db_session() as s:
+        schedule = s.query(Schedule).filter(
+            Schedule.doctor_id == doctor_id,
+            Schedule.organization_id == org_id).first()
+        if schedule is None:
+            schedule = Schedule(id=f"sched-{doctor_id}", doctor_id=doctor_id,
+                                organization_id=org_id, branch_id=branch_id,
+                                status="active", slot_templates=[])
+            s.add(schedule)
+            s.commit()
+        session_id = f"sess-{doctor_id}-{day_of_week}"
+        row = s.query(ScheduleSession).filter(
+            ScheduleSession.id == session_id).first()
+        if row is None:
+            row = ScheduleSession(
+                id=session_id, organization_id=org_id, branch_id=branch_id,
+                schedule_id=schedule.id, doctor_id=doctor_id,
+                day_of_week=day_of_week, start_time=start, end_time=end,
+                slot_duration_minutes=duration, max_patients=capacity,
+                status="active")
+            s.add(row)
+        row.status = "active"
+        row.branch_id = branch_id
+        s.commit()
+        return session_id
+
+
+def ensure_all_day_session(doctor_id: str, org_id: str, branch_id: str, *,
+                           duration: int = 15, capacity: int = 1) -> None:
+    """Publish an all-day session for every weekday.
+
+    A walk-in or check-in fixture must not depend on the wall clock: the Q1
+    walk-in workflow asks whether a published session covers *now*, so the
+    fixture publishes one for each weekday and the answer is yes whenever the
+    test runs.
+    """
+    for weekday in range(7):
+        ensure_session(doctor_id, org_id, branch_id, day_of_week=weekday,
+                       start="00:00", end="23:59", duration=duration,
+                       capacity=capacity)
 
 
 def ensure_symptom(code: str, org_id: str, *, name_en: str = "",
@@ -230,6 +315,11 @@ def purge_org(org_id: str) -> None:
     with db_session() as s:
         appointment_ids = [row[0] for row in s.query(Appointment.id).filter(
             Appointment.organization_id == org_id).all()]
+        # Q1/Q4: capability grants are this suite's business rows too.  A grant
+        # left behind would silently widen the next test's authority.
+        s.query(StaffCapabilityGrant).filter(
+            StaffCapabilityGrant.organization_id == org_id).delete(
+            synchronize_session=False)
         s.query(Notification).filter(
             Notification.organization_id == org_id).delete(
             synchronize_session=False)

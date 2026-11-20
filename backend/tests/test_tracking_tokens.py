@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone, date
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (Organization, Branch, StaffUser, Doctor,
-                           Patient, Appointment, TrackingToken, QueueEntry)
+                           Patient, Appointment, Schedule, TrackingToken, QueueEntry)
 from identity.models import _SECRET, _ALGO
 
 from common.tracking_tokens import token_hash as _hash
@@ -44,6 +44,21 @@ def _ensure():
         if not s.query(Patient).filter(Patient.mobile == "01788880001").first():
             s.add(Patient(id="m9b-pat", organization_id=ORG_ID, name="PQT Patient",
                           mobile="01788880001", sex="male"))
+        # Q1: published availability is the precondition for a *scheduled*
+        # booking, so the fixture doctor publishes a full-day template.  The
+        # booker spaces its start times five minutes apart, which is the window
+        # size here, so capacity 1 never collides.
+        sched = s.query(Schedule).filter(Schedule.doctor_id == "m9b-doc").first()
+        if sched is None:
+            sched = Schedule(id="m9b-sched", doctor_id="m9b-doc",
+                             organization_id=ORG_ID, branch_id="m9b-br",
+                             status="active", slot_templates=[])
+            s.add(sched)
+        sched.branch_id = "m9b-br"
+        sched.status = "active"
+        sched.slot_templates = [{
+            "day_of_week": None, "start_time": "00:00", "end_time": "23:59",
+            "slot_duration_minutes": 5, "max_patients": 1}]
         u = s.query(StaffUser).filter(StaffUser.username == "m9b_rec").first()
         if not u:
             pw = bcrypt.hashpw(b"pass1234", bcrypt.gensalt()).decode()

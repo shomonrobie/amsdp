@@ -44,7 +44,10 @@ import {
 } from '../lib/calendar/matches';
 /* F-18/F-19 — the booking dialog's two explanations: how full a slot is, said in
    words, and what a refusal means, said in the receptionist's language. */
-import { seatsWord, refusalCode, REFUSAL_KEYS } from '../lib/calendar/booking';
+import {
+  seatsWord, refusalCode, REFUSAL_KEYS, bookingMode, typeLabelKey, typeBadgeKey,
+  overrideProblem,
+} from '../lib/calendar/booking';
 
 const L = {
   bn: { t:'অ্যাপয়েন্টমেন্ট', p:'রোগী', d:'ডাক্তার', dt:'তারিখ', tm:'সময়', st:'অবস্থা',
@@ -61,6 +64,21 @@ const L = {
     /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
     noSlotsHint:'এই ডাক্তার এই দিনে কোনো সময়সূচি দেননি — এখানে লেখা সময় কোনো স্লট বা সেশনের '
       + 'মধ্যে পড়ে না, এবং একসঙ্গে একজন রোগীকেই ধরা হয়',
+    /* AMSDP-APPT-OWNER-DECISIONS-01 (Q1) — scheduled, walk-in and unscheduled are
+       three different things, and the screen says which one it is booking. */
+    typeScheduled:'নির্ধারিত', typeWalkIn:'ওয়াক-ইন', typeUnscheduled:'সময়সূচির বাইরে',
+    typeWalkInShort:'ওয়াক-ইন', typeUnscheduledShort:'বাইরে',
+    typeLabel:'ধরন', overrideReason:'কারণ (আবশ্যক)', overrideReasonLabel:'গ্রহণের কারণ',
+    overrideHint:'এই সময় ডাক্তারের প্রকাশিত সেশনের বাইরে — কারণ লিখে রোগী গ্রহণ করুন। '
+      + 'এটি নির্ধারিত স্লট নয়।',
+    overrideReasonPlaceholder:'যেমন: জরুরি ভিজিট, সময়সূচি ছাড়া এসেছেন',
+    walkInReason:'কারণ (সেশন না থাকলে আবশ্যক)',
+    walkInHint:'রোগী এখন চেম্বারে আছেন — সেশন চললে সরাসরি ওয়াক-ইন, না চললে কারণ লিখে গ্রহণ।',
+    allFullHint:'এই দিনের সব স্লট পূর্ণ — অন্য সময় বা দিন বেছে নিন',
+    errNeedsOverride:'এই সময় প্রকাশিত সেশনে নেই — ওয়াক-ইন বা সময়সূচির বাইরে হিসেবে কারণসহ গ্রহণ করুন',
+    errOverrideLimit:'এই ডাক্তারের জন্য আজ সময়সূচির বাইরে গ্রহণের সীমা শেষ',
+    errOverrideDisabled:'এই প্রতিষ্ঠান সময়সূচির বাইরে রোগী গ্রহণ করে না',
+    errUseWalkIn:'ওয়াক-ইন ওয়ার্কফ্লো দিয়ে রোগী যোগ করুন',
     /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
     seatsLeft:'আরও {n}টি খালি', seatLast:'শেষ আসন', slotFull:'পূর্ণ',
     errSlotFull:'এই সময়টি পূর্ণ — অন্য সময় বেছে নিন',
@@ -123,6 +141,22 @@ const L = {
     /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
     noSlotsHint:'This doctor publishes no session on this day — a time entered here falls outside '
       + 'every slot and session, and is counted one patient at a time',
+    /* AMSDP-APPT-OWNER-DECISIONS-01 (Q1) — the three persisted types. */
+    typeScheduled:'Scheduled', typeWalkIn:'Walk-in', typeUnscheduled:'Outside hours',
+    typeWalkInShort:'Walk-in', typeUnscheduledShort:'Outside',
+    typeLabel:'Type', overrideReason:'Reason (required)', overrideReasonLabel:'Acceptance reason',
+    overrideHint:'This time is outside the doctor\u2019s published sessions — record '
+      + 'why the patient is accepted. This is not a confirmed slot.',
+    overrideReasonPlaceholder:'e.g. urgent visit, arrived without an appointment',
+    walkInReason:'Reason (required outside a session)',
+    walkInHint:'The patient is here now — inside a session this is a walk-in, '
+      + 'otherwise record the reason and accept them.',
+    allFullHint:'Every slot this day is full — choose another time or day',
+    errNeedsOverride:'That time is outside the published sessions — register a '
+      + 'walk-in, or accept an outside-hours visit with a reason',
+    errOverrideLimit:'This doctor has reached today\u2019s outside-hours limit',
+    errOverrideDisabled:'This organization does not accept patients outside its sessions',
+    errUseWalkIn:'Register the patient through the walk-in workflow',
     /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
     seatsLeft:'{n} left', seatLast:'last seat', slotFull:'Full',
     errSlotFull:'That time is fully booked — choose another slot',
@@ -584,6 +618,9 @@ export default function Appointments() {
       symptoms: { ids: [], texts: [] },
       onset: '',
       onsetNote: '',
+      // AMSDP-APPT-OWNER-DECISIONS-01 (Q1) — the override reason, empty until
+      // the dialog decides the requested time falls outside published sessions.
+      overrideReason: '',
     });
   };
 
@@ -592,8 +629,18 @@ export default function Appointments() {
     if (!book.patient) { setBookError(T('needPatient')); return; }
     if (!book.doctorId) { setBookError(T('needDoctor')); return; }
     if (!book.date) { setBookError(T('needDate')); return; }
+    /* Q1: with no published slot the booking is an explicit outside-hours
+       acceptance, so it carries the type and a reason.  A typed time is still
+       recorded (it places the card on the day), but it is no longer presented or
+       sent as a confirmed slot. */
+    const mode = bookingMode(slotChoices).mode;
+    const unscheduled = mode === 'unscheduled';
+    if (unscheduled) {
+      const problem = overrideProblem({ reason: book.overrideReason });
+      if (problem) { setBookError(T(problem)); return; }
+    }
     const time = (book.time || '').slice(0, 5);
-    if (!time) { setBookError(T('needTime')); return; }
+    if (!time && !unscheduled) { setBookError(T('needTime')); return; }
     setSaving(true); setBookError('');
     try {
       const created = await apiFetch('/api/v1/appointments', {
@@ -602,7 +649,9 @@ export default function Appointments() {
           patient_id: book.patient.id,
           doctor_id: book.doctorId,
           appointment_date: book.date,
-          start_time: time,
+          start_time: time || null,
+          appointment_type: unscheduled ? 'unscheduled' : 'scheduled',
+          override_reason: unscheduled ? String(book.overrideReason).trim() : '',
           notes: book.notes || '',
           booking_source: 'reception',
           // Empty lists are the normal case, not a special one.
@@ -657,6 +706,10 @@ export default function Appointments() {
           patient_id: walk.patient.id,
           doctor_id: walk.doctorId,
           notes: walk.notes || '',
+          /* Q1: the server decides whether this arrival is inside a published
+             session.  A reason is required when it is not, and is recorded with
+             the appointment; it is simply ignored when a session covers it. */
+          reason: (walk.reason || '').trim(),
           symptom_ids: (walk.symptoms && walk.symptoms.ids) || [],
           symptom_texts: (walk.symptoms && walk.symptoms.texts) || [],
           symptom_onset: walk.onset || null,
@@ -833,6 +886,9 @@ export default function Appointments() {
                   onClick={() => {
                     setBookError('');
                     setWalk({ patient: null, doctorId: doctorId || (doctors[0] && doctors[0].id) || '', notes: '',
+                      /* Q1: empty until the arrival turns out to be outside every
+                         published session — then the server requires it. */
+                      reason: '',
                       symptoms: { ids: [], texts: [] }, onset: '', onsetNote: '' });
                   }}>{T('wi')}</Button>
               )}
@@ -1020,7 +1076,11 @@ export default function Appointments() {
               today={today}
               lang={locale()}
               labels={{ time: T('tm'), full: T('full'), closed: T('closed'),
-                past: T('past'), bookAt: T('bk'), grid: T('t'), more: T('more') }}
+                past: T('past'), bookAt: T('bk'), grid: T('t'), more: T('more'),
+                /* Q1: a walk-in or outside-hours card says so on its face, so it
+                   can never be read as an ordinary confirmed slot. */
+                typeWalkIn: T(typeBadgeKey('walk_in')),
+                typeUnscheduled: T(typeBadgeKey('unscheduled')) }}
               patientName={patientName}
               doctorName={(a) => a.doctor_name || doctorName(a.doctor_id)}
               /* The committed search term, not the keystroke buffer: what is
@@ -1105,6 +1165,28 @@ export default function Appointments() {
                   </div>
                 )}
               </div>
+              {/* Q1 — when nothing is published for this doctor/day the only honest
+                  path is an outside-hours acceptance, which carries a reason.  The
+                  field is asked for here, before the round trip, instead of letting
+                  the server refuse a booking the dialog already knew was special. */}
+              {bookingMode(slotChoices).requiresReason ? (
+                <div className='form-group'>
+                  <label htmlFor='book-override-reason'>{T('overrideReason')}</label>
+                  <input id='book-override-reason' value={book.overrideReason || ''}
+                    aria-label={T('overrideReason')}
+                    placeholder={T('overrideReasonPlaceholder')}
+                    aria-describedby='book-override-hint'
+                    onChange={(e) => setBook({ ...book, overrideReason: e.target.value })} />
+                  <small id='book-override-hint' className='muted'>{T('overrideHint')}</small>
+                </div>
+              ) : null}
+              {/* F-19 — a day whose slots are all full is stated, not left to a row
+                  of equally grey buttons. */}
+              {bookingMode(slotChoices).mode === 'allFull' ? (
+                <div style={{ fontSize: '0.78rem', color: '#8a6d00' }}>
+                  {T('allFullHint')}
+                </div>
+              ) : null}
               {/* AMSDP-SYMPTOM-01 — optional, empty by default, and the
                   booking completes with nothing recorded here. */}
               <SymptomPicker
@@ -1156,6 +1238,10 @@ export default function Appointments() {
                     [T('dt'), detail.appointment_date], [T('tm'), detail.start_time || '-'],
                     [T('tk'), detail.token_number || '-'],
                     [T('st'), <StatusBadge key='st' status={detail.status} size='sm' />],
+                    // Q1: the persisted type is always stated, and an outside-hours
+                    // acceptance always shows the reason it was recorded with.
+                    [T('typeLabel'), T(typeLabelKey(detail.appointment_type))],
+                    [T('overrideReasonLabel'), detail.override_reason || '-'],
                     [T('loc'), detail.location_label || '-'],
                     [T('source'), detail.booking_source || '-'],
                     [T('sy'), symptomLine(detail)],
@@ -1221,6 +1307,16 @@ export default function Appointments() {
                 labels={symptomLabels}
                 onChange={(code) => setWalk({ ...walk, onset: code, onsetNote: code ? walk.onsetNote : '' })}
                 onNoteChange={(text) => setWalk({ ...walk, onsetNote: text })} />
+              <div className='form-group'>
+                <label htmlFor='walk-reason'>{T('walkInReason')}</label>
+                <input id='walk-reason' value={walk.reason || ''}
+                  aria-label={T('walkInReason')}
+                  placeholder={T('overrideReasonPlaceholder')}
+                  aria-describedby='walk-reason-hint'
+                  onChange={(e) => setWalk({ ...walk, reason: e.target.value })} />
+                {/* Q1: why the field exists, said before the refusal happens. */}
+                <small id='walk-reason-hint' className='muted'>{T('walkInHint')}</small>
+              </div>
               <div className='form-group'>
                 <label>{T('notes')}</label>
                 <input value={walk.notes} aria-label={T('notes')}

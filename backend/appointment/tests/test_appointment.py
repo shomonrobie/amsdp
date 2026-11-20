@@ -17,8 +17,9 @@ own business rows, so it can run against a shared development database.
 import pytest
 from fastapi.testclient import TestClient
 
-from amsdp_test_support import (db_session, ensure_branch, ensure_doctor,
-                               ensure_org, ensure_patient, ensure_user,
+from amsdp_test_support import (db_session, ensure_all_day_session,
+                               ensure_branch, ensure_doctor, ensure_org,
+                               ensure_patient, ensure_schedule, ensure_user,
                                headers, load_app, purge_org)
 from common.models import Appointment
 
@@ -45,6 +46,11 @@ def _world(client):
     ensure_org(OTHER_ORG)
     ensure_branch(BR, ORG)
     ensure_doctor(DOC, ORG, name="Dr. Appointment", mobile="01700001001")
+    # Owner decision Q1: a scheduled booking needs published availability, so the
+    # fixture publishes it instead of relying on the removed exact-minute
+    # fallback.  Capacity 1 keeps the per-slot capacity assertion meaningful.
+    ensure_schedule(DOC, ORG, BR, capacity=1)
+    ensure_all_day_session(DOC, ORG, BR, capacity=1)
     ensure_patient(PAT, ORG, name="Appointment Patient", mobile="01700001002")
     ensure_patient(PAT_WALKIN, ORG, name="Walk-in Patient", mobile="01700001003")
     ensure_patient(PAT_FOREIGN, OTHER_ORG, name="Foreign Patient",
@@ -114,7 +120,8 @@ class TestAppointmentCreate:
 
     def test_capacity_is_enforced_per_slot(self, client):
         assert _book(client, start="10:00").status_code == 201
-        # No schedule exists, so the default slot capacity is one patient.
+        # The fixture publishes one seat per slot, so the second booking of the
+        # same window is refused (Q2: capacity is charged to the window).
         r = _book(client, start="10:00")
         assert r.status_code == 422
         assert "capacity" in r.json()["detail"]
@@ -206,6 +213,9 @@ class TestAppointmentCalendarWindow:
         ensure_branch("legacy-appt-other-br", OTHER_ORG)
         ensure_doctor("legacy-appt-foreign-doc", OTHER_ORG, name="Dr. Foreign",
                       mobile="01700001099")
+        # Q1: the other tenant's fixture publishes its own hours too.
+        ensure_schedule("legacy-appt-foreign-doc", OTHER_ORG,
+                        "legacy-appt-other-br")
         ensure_user("legacy_appt_foreign_recp2", "receptionist", OTHER_ORG,
                     "legacy-appt-other-br")
         foreign = client.post(
