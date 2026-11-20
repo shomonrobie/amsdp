@@ -6,6 +6,7 @@ import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import StatusBadge from '../components/ui/StatusBadge';
+import QueueAnnouncements, { useQueueAnnouncements } from '../components/queue/QueueAnnouncements';
 import { getUser, apiFetch, can, getActiveBranch } from '../lib/auth';
 import { t } from '../lib/i18n';
 
@@ -46,6 +47,26 @@ export default function Queue(){
   const canConsult = can('queue.consult');
   const canRecover = can('queue.recover');
   const canReposition = can('queue.reposition');
+
+  // QUE-006 / OD-1: the audible announcement is a client-side mechanism. It is
+  // offered to the roles the catalogue names as triggers (front desk and doctor)
+  // and it never changes queue state — `call` and recall stay separate actions.
+  const canAnnounce = canManage || canConsult;
+  const announcements = useQueueAnnouncements();
+
+  const announceEntry = (entry) => {
+    announcements.announce(
+      {
+        queueEntryId: entry.id,
+        action: 'announce',
+        token: entry.token,
+        doctorName: entry.doctor_name,
+        // No queue endpoint returns a room yet; omitted rather than invented.
+        room: entry.room,
+      },
+      { source: 'operator', userGesture: true }
+    );
+  };
 
   const loadQueue = () => {
     if (!docId || !date) { setEntries([]); return; }
@@ -158,6 +179,7 @@ return (
         </div>
         {error && <ErrorAlert>{error}</ErrorAlert>}
         {notice && <SuccessAlert>{notice}</SuccessAlert>}
+        <QueueAnnouncements controller={announcements} canAnnounce={canAnnounce} />
         {loading ? <LoadingState /> : entries.length === 0 ? <EmptyState msg={t('empty')} /> : (
           <div className="table-wrap">
             <DataTable rowKey="id" rows={entries}
@@ -175,6 +197,10 @@ return (
                     {canConsult && r.status === 'waiting' && <button className="btn btn-sm" onClick={() => doAction(r.id, 'start_consultation')}>{t('start')}</button>}
                     {canConsult && r.status === 'in_consultation' && <button className="btn btn-sm" style={{ background: '#2e7d32' }} onClick={() => doAction(r.id, 'complete_consultation')}>{t('complete')}</button>}
                     {canManage && r.status === 'waiting' && <button className="btn btn-sm btn-danger" onClick={() => setCancelTarget(r.id)}>{t('cancel')}</button>}
+                    {canAnnounce && r.status === 'called' && (
+                      <button className="btn btn-sm btn-outline" disabled={!!busy}
+                        onClick={() => announceEntry(r)}>{t('announce')}</button>
+                    )}
                     {canRecover && ['waiting', 'called'].includes(r.status) && (
                       <button className="btn btn-sm btn-outline" disabled={!!busy}
                         onClick={() => { setError(''); setNotice(''); setMissedTarget(r); }}>
