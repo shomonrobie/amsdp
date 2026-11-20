@@ -280,3 +280,27 @@ before staging, and only the paths this task changed were staged.
 paths listed in §3 and this report itself — sixteen files, and nothing else. The nine entries of the
 other workstream (`.clinerules` §9) are still uncommitted and were neither staged nor touched.
 **Nothing was pushed**; no `git reset`, `git checkout`, `git stash` or `git clean` was run.
+
+---
+
+## 10. Follow-up (2026-11-19) — the owner decisions that closed F-01 and F-18
+
+This report left two findings open because closing them required an owner decision rather than a
+corrective change: **F-01** (capacity enforced only by an application count, no database
+guarantee) and the *marking* half of **F-18** (an outside-session booking was accepted but was
+not identified as such). Both are now closed by task `AMSDP-APPT-OWNER-DECISIONS-01`, together
+with three further decisions taken in the same session:
+
+| Finding | How it is now closed |
+|---|---|
+| **F-01** capacity integrity | `slot_allocations` with `UNIQUE (doctor_id, appointment_date, slot_key, seat_number)` and `UNIQUE (appointment_id)`, claimed under the existing doctor row lock and released by the single status writer. Application lock **and** database constraint, as the owner required. Migration `a9c4e1f7b2d8`. |
+| **F-18** outside-session booking | `appointment_type` (`scheduled` / `walk_in` / `unscheduled`) is a persisted column, not a value inferred from a missing `start_time`; the override needs the `appointment.create_unscheduled` capability, a stated reason, the organization's daily limit, and writes its own audit event. |
+
+Behavioural specification: `docs/architecture/AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md`.
+Implementation report: `docs/implementation/AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md`.
+
+**Nothing in this report's §8 test evidence is invalidated by the follow-up work**: the nineteen
+findings' tests still pass, and the suites listed there have grown (the follow-up adds 64 backend
+tests across six new modules). Where a test name or count in §8 differs from the follow-up
+report, the follow-up report is the later measurement.
+

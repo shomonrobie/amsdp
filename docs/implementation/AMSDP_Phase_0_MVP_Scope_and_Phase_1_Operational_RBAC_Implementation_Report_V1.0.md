@@ -306,6 +306,7 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 | Branch | `hackathon-mvp` |
 | Starting HEAD | `6d71156c0c320aefbb3e9983ab5069f529aec3a9` |
 | Final commit | Not yet committed (pending owner review) |
+| Phase 1D commits on branch | `dee9499`, `c6a9d30`, `6d3acdf` (sequential; each verified below) |
 | Working-tree changes | 12 modified files, 2 new migration files, 1 preserved untracked file |
 
 ### Workstream A — Multiple Doctor Assignments (PO-RBAC-01) — IMPLEMENTED · TESTED
@@ -314,7 +315,7 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 
 **Changes:**
 - `backend/common/models.py` — Added `StaffDoctorAssignment` model (explicit staff→doctor assignment table with `UNIQUE(staff_user_id, doctor_id)` constraint, FKs to `staff_users`, `doctors`, `organizations`, plus indexes). Legacy `StaffUser.doctor_id` column preserved as compatibility field.
-- `backend/common/auth.py` — Extended `AuthContext` with `assigned_doctor_ids: list[str]`; `can_access_doctor()` checks membership in `assigned_doctor_ids` for doctor/assistant roles; `get_current_user()`/`get_optional_user()` load assignments from DB with legacy `doctor_id` fallback.
+- `backend/common/auth.py` — Extended `AuthContext` with `assigned_doctor_ids: list[str]`; `can_access_doctor()` checks membership in `assigned_doctor_ids` for doctor/assistant roles; `get_current_user()`/`get_optional_user()` load assignments from `staff_doctor_assignments`. `_load_assigned_doctor_ids()` returns `None` **only** when the table is absent (pre-migration); that is the sole case in which the legacy `StaffUser.doctor_id` column is used as a fallback. An existing table with no active rows returns `[]` and the legacy column is ignored, so a revoked assignment cannot restore access; query failures propagate (fail closed).
 - `backend/identity/main.py` — `create_staff_user()` accepts `doctor_ids` list, validates each doctor exists/active/same-org, creates assignment rows; `_user_to_response()` returns `doctor_ids`.
 - `backend/identity/models.py` — Added `doctor_ids: Optional[list[str]]` to `StaffUserCreate`, `StaffUserUpdate`, `StaffUserResponse`.
 - `backend/identity/routes.py` — `update_staff_user()` replaces assignment set when `doctor_ids` provided; validates each doctor; legacy `doctor_id` fallback preserved.
@@ -334,7 +335,25 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 - Update cannot introduce invalid doctor (422)
 - Legacy `doctor_id` still readable in response
 
-**Verification:** All 57 queue tests pass (52 baseline + 5 new). All identity multi-doctor validation tests pass.
+**Verification at first implementation:** All 57 queue tests pass (52 baseline + 5 new). All identity multi-doctor validation tests pass. (After the correction recorded below the queue module runs 58 tests.)
+
+**Correction record (2026-11-18) — a revoked assignment must not be restored by the legacy column**
+
+The first implementation collapsed two different loader outcomes into an empty list, so the caller fell back to the legacy `StaffUser.doctor_id` column even when the assignment table existed with no active rows. An explicitly revoked assistant could therefore regain doctor access (PO-RBAC-01 privilege restoration).
+
+- `backend/common/auth.py` — `_load_assigned_doctor_ids()` returns `None` for "table absent" and `[]` for "table exists, no active rows". `get_current_user()`/`get_optional_user()` fall back to the legacy column only on `None`, and `AuthContext.assigned_doctor_ids` is always a list (`None` normalised to `[]`).
+- `backend/identity/main.py`, `backend/identity/routes.py` — `_user_to_response()`/`_user_to_dict()` apply the same contract and always answer with a list.
+- Test fixtures in `backend/queuing/tests/test_queue.py`, `backend/identity/tests/test_identity.py` and `backend/tests/test_sequence3.py` now create the assignment row that the `f8a1b2c3d4e5` migration backfills, so a fixture user carrying a legacy `doctor_id` represents a migrated account instead of an unassigned one.
+- Regression tests: `test_get_current_user_ignores_legacy_doctor_id_after_revocation` (identity) asserts `assigned_doctor_ids == []` and `can_access_doctor() is False` once the assignment row is deleted while `doctor_id` survives; `test_revoked_legacy_doctor_id_does_not_restore_access` (queuing) asserts `GET /api/v1/queue` answers 404 in the same state.
+
+| Suite | Command | Result |
+|---|---|---|
+| Identity | `python3 -m pytest identity/tests/test_identity.py -q` | **44 passed** |
+| Queuing | `python3 -m pytest queuing/tests/test_queue.py -q` | **58 passed** |
+| Sequence 3 + audit + patient | `python3 -m pytest tests/test_sequence3.py audit/tests/ patient/tests/ -q` | **62 passed** |
+| Full backend suite | `python3 -m pytest . -q --ignore=tests/test_e2e.py` | **507 passed, 10 failed** — all ten failures are in `doctor/tests/test_doctor.py` (`409 a doctor with this mobile number already exists`), the pre-existing test-isolation defect recorded as **O-2** in `docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` §10.3; the module is unmodified and creates no doctor assignments, so this change cannot cause it |
+
+The suites above read the DSN from the environment; the local run needed `POSTGRES_PASSWORD` sourced from the gitignored `.env` (no credential is recorded here).
 
 ### Workstream B — Separate Patient Permissions (PO-RBAC-02) — IMPLEMENTED · TESTED
 
@@ -427,11 +446,36 @@ Three remaining authorization areas (C1, C2, C3) plus one architecture limitatio
 | `scheduling/tests/test_scheduling.py` | 36 passed |
 | **Total confirmed** | **270 passed, 0 failed** |
 
+**Re-verified after the PO-RBAC-01 correction (2026-11-18, same tree):**
+
+| Command | Result |
+|---|---|
+| `python3 -m pytest identity/tests/test_identity.py -q` | **44 passed** (43 + 1 revocation regression test) |
+| `python3 -m pytest queuing/tests/test_queue.py -q` | **58 passed** (57 + 1 revocation regression test) |
+| `python3 -m pytest tests/test_sequence3.py audit/tests/ patient/tests/ -q` | **62 passed** |
+| `python3 -m pytest . -q --ignore=tests/test_e2e.py` (full backend suite) | **507 passed, 10 failed** |
+
+The ten failures are all in `doctor/tests/test_doctor.py` with `409 a doctor with this mobile number already exists` — the pre-existing test-isolation defect recorded as **O-2** in `docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` §10.3. That module is unmodified by this work, creates no doctor assignments, and the failure is produced by a leftover reference doctor row (`purge_org()` deliberately keeps doctors), so this change cannot cause it.
+
 ### Disposition
 **IMPLEMENTED AND TESTED — READY FOR INDEPENDENT REVIEW** (not Product Owner accepted).
 
 **Corrections applied in this checkpoint (fix(rbac)):**
-1. **Doctor assignment loading fails closed** (`backend/common/auth.py`, `backend/identity/main.py`, `backend/identity/routes.py`): When `staff_doctor_assignments` table exists but the query fails, the exception now propagates instead of being silently caught and converted to a legacy `doctor_id` fallback. Table absence still returns `[]` (pre-migration compatibility). Fail-closed prevents restored access after assignment revocation.
+1. **Doctor assignment loading fails closed** (`backend/common/auth.py`, `backend/identity/main.py`, `backend/identity/routes.py`): When `staff_doctor_assignments` table exists but the query fails, the exception now propagates instead of being silently caught and converted to a legacy `doctor_id` fallback. Table absence returns `None` (pre-migration compatibility — the only case in which the legacy `doctor_id` fallback may be used); an existing table with no active rows returns `[]` and the caller must not fall back, so an assignment revocation cannot be undone. (Corrected 2026-11-18 — see the correction record under Workstream A.)
 2. **Genuine concurrency test for last-admin protection** (`backend/identity/tests/test_identity.py`): `test_concurrent_deactivation_one_remains` now uses `ThreadPoolExecutor` with separate request execution contexts and a 10-second timeout, proving the organization-row serialization mechanism works under concurrent deactivation attempts.
 
 Workstream E groundwork implemented; full platform identity system remains SPECIFIED, NOT IMPLEMENTED.
+
+### Governance and Skill Compliance (PO-RBAC-01 correction, recorded 2026-11-18)
+
+Per `.clinerules` §6 and the Evidence Standard (§7).
+
+| Item | Detail |
+|---|---|
+| Domains identified (§4 routing) | Authentication/RBAC/permissions · multi-tenant data (token-derived org/branch, unchanged) · backend API/service endpoints · audit and data integrity · documentation reading/writing |
+| Governance documents applied | `docs/governance/AMSDP_Docs_Index_V1.0.md` (index, read first) · `docs/governance/AMSDP_Engineering_Governance_Assessment.md` (adapted `saas-auth-and-authorisation` / `saas-multitenant-data` rows) · `docs/governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` (R-12) · this report · `docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` §10.3 (pre-existing O-2 evidence) · Business Rules §7–§8 via the implementation code paths already cited above |
+| Skills | **None installed** (Skills Registry: NONE). No skill was claimed or simulated; the governance documents above were applied directly. |
+| Non-negotiables upheld | Authorisation stays server-side and token-derived — a legacy `doctor_id` claim cannot widen scope after revocation; cross-tenant/branch behaviour unchanged (non-disclosing 404); query failures fail closed rather than degrading to the legacy column; no secret, token or DSN is recorded here; no audit row was deleted or rewritten; **no schema change**, so no migration was required this round |
+| Verification performed (real results) | identity **44 passed** · queuing **58 passed** · sequence 3 + audit + patient **62 passed** · full backend suite **507 passed, 10 failed** (all 10 pre-existing doctor-module isolation failures, O-2). These results were produced in this tree against the local PostgreSQL; the suite needs `POSTGRES_PASSWORD` from the gitignored `.env` |
+| Evidence level | The two regression tests are **TESTED**; the behaviour is **IMPLEMENTED**; independent confirmation by a second artefact or Product Owner sign-off was not performed, so nothing here is **VERIFIED** or **ACCEPTED** |
+| Deviations / open items | Test fixtures in three files were updated to create the assignment row the `f8a1b2c3d4e5` migration backfills (a migrated account carries both `doctor_id` and an assignment row); pre-existing **O-2** (`doctor/tests/test_doctor.py` isolation) remains open and unfixed; `_tools/write_identity_main.py` is a stale one-off generator that no longer matches `backend/identity/main.py` and was left untouched |

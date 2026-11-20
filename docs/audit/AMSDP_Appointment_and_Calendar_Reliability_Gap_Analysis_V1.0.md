@@ -974,3 +974,33 @@ $ diff <before> <after>
 ---
 
 *End of document — V1.0, 2026-11-19. Read-only analysis; no product code, test, migration or configuration was modified.*
+
+---
+
+## Appendix D — Closure status after `AMSDP-APPT-OWNER-DECISIONS-01` (2026-11-19)
+
+**This appendix supersedes the "two are closed only in part" clause of the front-matter's
+*Remediation outcome* row and nothing else.** The analysis above is untouched: it remains a
+`CODE-READ` record of the tree at `6d3acdf`, and the front matter's revision history is
+deliberately not rewritten. What follows states where each finding stands after the second work
+order.
+
+| Finding | Status after the second work order | Evidence |
+|---|---|---|
+| **F-01** | **CLOSED** — the application lock *and* the database constraint the rules require: `slot_allocations` with `UNIQUE (doctor_id, appointment_date, slot_key, seat_number)` and `UNIQUE (appointment_id)`, claimed under the doctor row lock, released by the single status writer. Historical keys are approximated on backfill; pre-existing overruns are reported, not repaired. | `appointment/tests/test_capacity_integrity.py` (10), migration `a9c4e1f7b2d8` |
+| **F-18** | **CLOSED** — the outside-session booking is now a persisted type (`unscheduled`) created only through a reasoned, capability-gated, organization-limited, audited override; a day with no published slots no longer invites an arbitrary time. | `test_appointment.py` override cases, `appointment-booking-feedback.test.mjs` |
+| F-03, F-04, F-11 | unchanged — closed by the first work order; the window-based seat count now also charges a mid-window booking to its window (§3.1 of the specification), which strengthens rather than weakens them | first report §4 |
+| All other findings (F-02, F-05 … F-10, F-12 … F-17, F-19) | unchanged from the first work order | first report §4 |
+
+**Three further questions this analysis raised are now answered** and were not findings in their
+own right: check-in was a side effect of `appointment.modify` (now `appointment.check_in`, own
+capability, ownership-narrowed); a doctor working without a receptionist could not register a
+walk-in (now may, for their own patients, without gaining `appointment.modify`); and a
+central-receptionist had no way to book across branches (now an explicit, branch-scoped,
+revocable grant).
+
+Behavioural specification: `docs/architecture/AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md`.
+Implementation report: `docs/implementation/AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md`.
+
+*This appendix is an addition, not a rewrite. No line above it was modified.*
+

@@ -546,7 +546,7 @@ MFA is NOT IMPLEMENTED, NOT TESTED, NOT VERIFIED.
 | R-09 | No MFA for platform operators | P0 / High | No MFA endpoints or enforcement | ABSENT (documented exception) | MFA required before production per O-SaaS-15; temporary hackathon exception documented and time-limited; not deferred or optional |
 | R-10 | No support-grant mechanism | P0 / High | No support-grant routes, consent recording, or time-limited grants | ABSENT |
 | R-11 | No tenant suspension/access revocation enforcement | Medium | `Organization.status` column exists but not checked by endpoints | NOT ENFORCED |
-| R-12 | Doctor assignment loading silent fallback to legacy `doctor_id` on query failure | P0 / High | `common/auth.py:37-57` — `_load_assigned_doctor_ids()` caught all exceptions and returned `[]`, triggering legacy `doctor_id` fallback in `get_current_user()`/`get_optional_user()`, potentially restoring access after assignment revocation | RESOLVED | Broad `except Exception` removed; table absence still returns `[]` (pre-migration compatibility); table-existence query failure now propagates (fail closed) |
+| R-12 | Doctor assignment loading could restore access after an assignment revocation | P0 / High | `common/auth.py` — `_load_assigned_doctor_ids()` reported "table absent" and "table present, no active rows" with the same empty list, so `get_current_user()`/`get_optional_user()` fell back to the legacy `StaffUser.doctor_id` column even after the explicit assignment had been revoked (PO-RBAC-01 privilege restoration) | RESOLVED | Loader now distinguishes the two states: `None` = assignment table absent (pre-migration, legacy fallback allowed); `[]` = table exists with no active rows (legacy fallback forbidden, revocation remains effective). Query failures propagate (fail closed), and `AuthContext.assigned_doctor_ids` normalises `None` to `[]`. Regression tests: `identity/tests/test_identity.py::TestDoctorAssignmentLoading::test_get_current_user_ignores_legacy_doctor_id_after_revocation` and `queuing/tests/test_queue.py::TestQueueMultiDoctorAssignments::test_revoked_legacy_doctor_id_does_not_restore_access` |
 | R-13 | Last-admin concurrency test was sequential, not genuinely concurrent | Medium | `identity/tests/test_identity.py` — `test_concurrent_deactivation_one_remains` sent two PATCH requests sequentially | RESOLVED | Replaced with `ThreadPoolExecutor`-based concurrent test with 10-second timeout, separate request execution contexts, verifying organization-row serialization mechanism |
 | R-12 | `queue.recover`/`queue.reposition` permission gap for doctors | RESOLVED — NOT A GAP | Doctors hold `queue.recover` + `queue.reposition` (`permissions.py:99`); recovery module correctly scoped by branch (`recovery.py:86-88`) | RESOLVED |
 | R-13 | Patient update uses `patient.create` permission (not `patient.update`) | Low | `patient/main.py:195` — `require_permission("patient.create")` on PATCH | RESOLVED | Changed to `require_permission("patient.update")` (PO-RBAC-02); permissions matrix split into explicit patient.read/search/create/update |
@@ -853,3 +853,50 @@ Verification: `backend/queuing/tests/test_queue.py` 50 passed; `backend/scheduli
 - **Verification:** All 52 queue tests pass. Cross-tenant organization data is never returned for unauthorized branch IDs.
 
 ### Not implemented (out of scope): Same as Phase 1C — multi-doctor assistant assignment remains BLOCKED pending Product Owner decision.
+
+---
+
+## Capability catalogue delta — 2026-11-19 (`AMSDP-APPT-OWNER-DECISIONS-01`)
+
+This section is **additive**; it does not revise any row above. It records three capability strings
+added to `backend/common/permissions.py` and the delegation mechanism that did not exist when this
+audit was written. The authoritative description is
+`docs/architecture/AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md` §4.
+
+| Capability | receptionist | doctor | assistant | `branch_admin` / `org_admin` / `super_admin` |
+|---|---|---|---|---|
+| `appointment.check_in` | yes | yes — own patients only | yes — assigned doctors only | yes, via the existing `appointment.*` namespace |
+| `appointment.create_unscheduled` | yes | yes — own patients only | — | yes, via `appointment.*` |
+| `appointment.book_cross_branch` | grant only | grant only | — | yes, via `appointment.*` |
+
+**What changed in the model, not just the list.**
+
+1. `appointment.check_in` is a capability in its own right. It is **not** folded into
+   `appointment.modify` (which remains receptionist/administrator work). Both check-in doors
+   (`POST /api/v1/appointments/{id}/check-in` and `POST /api/v1/queue/check-in`) require it, and
+   both narrow a doctor or assistant caller with `can_access_doctor` against the explicit
+   assignment, answering `404` — never `403` — when it does not match.
+2. `doctor` gained `appointment.create` and `appointment.create_unscheduled` (Scenario A: a doctor
+   working without a receptionist) but **not** `appointment.modify`. Cancel, reschedule and
+   transfer stay front-desk work.
+3. `DELEGABLE_CAPABILITIES` is a closed, three-item list
+   (`appointment.book_cross_branch`, `appointment.create_unscheduled`, `appointment.check_in`).
+   A grant can only add to what the role already holds (`check_granted` = matrix ∪ grants), so it
+   can never invent access the matrix does not contain — `appointment.modify`, `org.manage` and
+   `audit.read` are structurally not delegable.
+4. Grant administration: `GET`/`POST`/`DELETE /api/v1/staff/users/{id}/capabilities`, gated on
+   `staff.read` / `staff.manage`, with `_granting_authority` admitting only `org_admin` and
+   `super_admin`. A `branch_admin` is refused by design, because the grant exists to cross exactly
+   the boundary they administer. Foreign staff are `404`.
+5. Revocation is a state change (`status='revoked'`, `revoked_by`, `revoked_at`), never a delete,
+   and grants are loaded per request — so a revocation binds on the next request. Events:
+   `staff.capability_granted`, `staff.capability_revoked`.
+6. Branch narrowing is not applied by `require_permission`; it is applied by
+   `AuthContext.has_capability(capability, branch_id)`, which accepts a grant only when its
+   `branch_id` is `NULL` or matches. Cross-branch **booking** uses the narrowed form; cross-branch
+   **reading** is not unlocked by any grant.
+
+Tests: `identity/tests/test_capability_grants.py` (16),
+`appointment/tests/test_check_in_permissions.py` (15),
+`appointment/tests/test_cross_branch_capability.py` (5).
+
