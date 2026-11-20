@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-19) · **Snapshot:** **88** markdown documents on disk, **86** of them registered below — **11** at the `docs/` root, **73** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk.)*
+> **Date:** 2026-11-10 (revised 2026-11-20) · **Snapshot:** **92** markdown documents on disk, **89** of them registered below — **11** at the `docs/` root, **77** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk; Revision 33 added the appointment-types/capacity/capability specification and the Q1–Q5 implementation report → **88** registered, against **90** on disk; Revision 34 added the QUE-006/OD-1 browser speech-synthesis implementation report → **89** registered, against **91** on disk, the same two documents still unregistered under O-3; Revision 35 corrected that disk figure by one — the **92**nd document is the Phase 3 queue/DQDS/QUE-006 gap analysis, on disk but unregistered, its row proposed in its own Appendix C and not applied → **89** registered, against **92** on disk.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -635,6 +635,65 @@
 > workstreams whose work is still uncommitted; `.clinerules` §11 says documents of uncertain
 > ownership are reported and left in place, so no row was invented for them here.
 
+> **Revision 33 — 2026-11-19**, task `AMSDP-APPT-OWNER-DECISIONS-01` (documentation half, owner
+> decision **Q6**) — **two documents registered, no document moved, renamed or deleted** (no
+> migration-manifest entry, §11):
+> `architecture/AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md` (the behavioural
+> specification of Q1–Q5: appointment types and the outside-session override, the `slot_allocations`
+> capacity guarantee with its stated limits, the capability catalogue and the closed delegable list,
+> the check-in matrix, the grant endpoints, the audited schedule/session/policy events) and
+> `implementation/AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md`
+> (what was built and what the evidence for each claim is, plus open owner items O-1…O-7).
+> Three existing records were **appended to, never rewritten**: the gap analysis gained
+> **Appendix D** (closure status of all 19 findings — F-01 and F-18 are now closed, superseding the
+> front matter's "closed only in part"), the remediation report gained **§10** (same two closures),
+> and — outside this index — the RBAC audit gained a capability-catalogue delta. The size cells for
+> both appended reports were refreshed and their *Read when* text updated; the predecessor's
+> **open item O-3** is unchanged, so the RBAC audit and the QUE-006 catalogue addition remain
+> unregistered by their own workstreams. Row count increased from 85 to **88 registered**, against
+> **90** files on disk (the same two documents remain unregistered under **O-3**, which this
+> revision does not touch). No product code, schema, migration, endpoint, component or test was touched
+> by *this documentation task*; the suite results it cites belong to the implementation task and are
+> attributed to it, not claimed here.
+
+> **Revision 34 — 2026-11-20**, task `AMSDP-QUE-006-OD-1` — **one document registered, no document
+> moved, renamed or deleted** (no migration-manifest entry, §11):
+> `implementation/AMSDP_QUE-006_OD-1_Browser_Speech_Synthesis_Implementation_Report_V1.0.md`
+> (the browser-native Web Speech API mechanism for QUE-006 under owner decision OD-1: the adapter,
+> the approved Bangla/English content with the token-serial pronunciation rule, voice selection that
+> never substitutes a language, activation/autoplay refusal detection, duplicate and overlap control,
+> the `/queue` operator boundary, 49 new frontend tests with the exact command and result, and open
+> items O-1…O-10 — including the room clause no queue payload can supply, the absent facility
+> configuration (OD-2), the absent server-side event and audit, and the fact that **no browser or
+> device playback run was performed**, so nothing is claimed VERIFIED).
+> This revision also refreshes the snapshot counts in the header (90 → **91** on disk, 88 → **89**
+> registered, subject-folder rows 75 → **76**). **Open item O-3 is unchanged**: the previous two
+> revisions already record that `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md`
+> and `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` remain to be registered by
+> their own workstreams, and this revision does not adopt them either. No backend file, schema,
+> migration, endpoint, permission or product document was touched by this task; the frontend suite
+> result it cites belongs to that implementation task.
+
+> **Revision 35 — 2026-11-20**, task `AMSDP-QUE-006-OD-1` (count correction only) — **no document
+> registered, moved, renamed or deleted; no row added**. Revision 34 stated "91 on disk"; the
+> measured figure is **92** (`find docs -name '*.md' | wc -l`), and the subject-folder count is
+> **77**, not 76, because the 92nd document is
+> `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md` — on disk, but neither named nor
+> registered here. It was created by task `AMSDP-PHASE-3-GAP-ANALYSIS` (read-only discovery,
+> 2026-11-20), and that task deliberately supplied its own row in its **Appendix C** "for owner
+> review, not applied"; this revision **does not apply it** either — an index row is the index
+> owner's editorial decision, not a side effect of correcting a count. The arithmetic therefore
+> reads: **89** registered + the **2** documents recorded under **O-3** + this **1** unregistered
+> gap analysis = **92** on disk. **O-3 is unchanged**, and committing the two documents it names
+> (done in the same push as this revision) does not register them here.
+> No code, schema, migration, endpoint or test was touched. The figure is a measurement, not a
+> verdict: nothing about the gap analysis is ACCEPTED by being counted. Two stale **size cells**
+> were refreshed to the bytes on disk (measurements only, no text rewritten): this task's own
+> report row (26,520 → **28,119**, this revision's §15.1 amendment), and
+> `implementation/AMSDP_Phase_0_MVP_Scope_and_Phase_1_Operational_RBAC_Implementation_Report_V1.0.md`
+> (16,394 → **41,767**, grown by that document's own Phase-1D capability record of 2026-11-18,
+> which is not this task's work).
+
 ---
 
 
@@ -712,6 +771,7 @@ side.
 | `AMSDP_AI_Development_Workflow_V1.0.md` | 46,237 | Changing how work is sequenced, reviewed or evidenced | R |
 | `AMSDP_AI_Factory_Architecture_V1.0.md` | 56,079 | Touching `ai_factory/` internals (engine, harness, routing) | R |
 | `AMSDP_AI_Factory_Implementation_Prompt_V1.0.md` | 44,288 | Prompt/behaviour changes inside the AI Factory | R |
+| `AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md` | 28,085 | **Before changing appointment types, walk-ins, the outside-session override, slot capacity/seat allocation, the check-in capability, staff capability grants, or the cross-branch booking rule** — the behavioural specification of owner decisions Q1–Q5: the three persisted types and their refusal vocabulary, the `slot_allocations` guarantee and its stated limits, the capability catalogue with the closed delegable list, the check-in matrix, the grant endpoints, the audited schedule/session/policy events, the API surface and the statement→test map | — |
 
 ### `architecture/saas/` — the Hybrid SaaS architecture set (six coordinated documents)
 
@@ -800,7 +860,10 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_Facility_Doctor_Frontend_Implementation_Report_V1.0.md` | 20,296 | Doctor Management (`/doctors`), chamber assignment (`/schedules`), the facility tree (`/facilities`), `lib/phone.js`, `lib/facility.js`, BMDC verification UI, why a conflicting session is warned about client-side but still decided by the server, and what the post-rebuild runtime probes do and do not prove (§5.4) | — |
 | `AMSDP_Frontend_Usability_Shared_Design_System_and_Demo_Readiness_V1.0.md` | 45,536 | **Before touching a dialog, a form field, the shared UI primitives, `/doctors`, `/facilities`, the appointment calendar, or the demo dataset** — the focus-loss root cause (`useEffect(… el.focus() …, [onClose])`) and why the Radix rewrite removes it, the token/Tailwind layer and the 14 primitives, the legacy `.flex` alias that shadowed Tailwind and the two layout defects it caused (§6), what was redesigned where, the calendar polish that keeps its SSR contract green, the hydrated-session fix and the page-level hydration remainder (**O-1**), the reset+reseed of the developer database with its audit-preserving `--reset` (54 husk organisations, **O-4**), and the full evidence set: 96/96 frontend, 216 backend, build exit 0, 6/6 demo logins, and the headless-Chrome run that typed three chunks into a real dialog while asserting the caret stayed — **12/12 checks**. §9.7 explains what the shipped focus test does and does not prove | — |
 | `AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md` | 67,128 | **Before touching the booking form's symptom control, the symptom catalogue, the onset question, or any appointment payload** — why the catalogue is one API response searched in memory (and why server-side search would fork the Bengali normaliser), the `symptom_catalog` / `appointment_symptoms` model with its booking-time name snapshot and two partial unique indexes, the closed onset vocabulary versus a forced date, the four optional booking fields and the three response keys, the copy-forward rule for reschedule/transfer, the ranking order (`rank → speciality tie-break → sort_order → code`) and why age/sex are never used, the 79-entry curated catalogue and its `curated` (not clinically validated) review status, the authorization matrix, the exact test/build results including the **9 pre-existing doctor-module failures**, the explicit statement that **no browser run was performed** in the morning (§12, superseded by §18), and open items O-1…O-10; **§18 is the Phase-1 runtime record** — rebuilt `appointment`/`frontend` images, only those two containers recreated, the six booking cases with their HTTP/DB/audit evidence, the Bangla/English search matrix executed against the live 79 entries, and the real-Chrome keyboard/focus run (34/35 checks, 7/7 on the detail read path), plus the O-1/O-3 closures and new items O-11…O-15 | — |
-| `AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md` | 26,788 | **Before changing an appointment/scheduling write path, a slot or capacity rule, or the booking dialog's messages** — what each of F-01…F-19 was fixed by (with the function and test that prove it), the two partial closures (F-01's database constraint needs Q2, F-18's *unscheduled* marking needs Q1/Q3), the Q1–Q5 rulings still owed, and the exact evidence: 12 pre-existing failures accounted for, 269/269 on the affected backend subset, 179/179 frontend, `next build` compiled | — |
+| `AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md` | 28,589 | **Before changing an appointment/scheduling write path, a slot or capacity rule, or the booking dialog's messages** — what each of F-01…F-19 was fixed by (with the function and test that prove it), the two partial closures (F-01's database constraint, F-18's *unscheduled* marking) — **§10** records how the owner decisions Q1–Q5 then closed both, with a pointer to the Q1–Q5 report — and the original evidence: 12 pre-existing failures accounted for, 269/269 on the affected backend subset, 179/179 frontend, `next build` compiled | — |
+| `AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md` | 25,642 | **Before changing appointment types, walk-ins, `slot_allocations`, `appointment.check_in`, `appointment.create_unscheduled`, staff capability grants or cross-branch booking** — what Q1–Q5 actually produced (code, endpoint, migration `a9c4e1f7b2d8`, test), the evidence standard reached for each claim, the backfill caveat for pre-existing slot overruns, and the open owner items O-1…O-7 (Business Rules vocabulary, no formal decision record, grants being API-only, no historic repair) | — |
+| `AMSDP_QUE-006_OD-1_Browser_Speech_Synthesis_Implementation_Report_V1.0.md` | 28,119 | **Before changing queue announcements, `lib/announcements/`, the `/queue` announcement panel, or the OD-3 wording** — the Web Speech API adapter and its "silence is not success" rule, the voice-selection rules that never substitute a language, the token-serial pronunciation rule and the PII boundary, the duplicate/overlap policy, the room clause no queue payload can supply (**O-1**), the absent facility configuration (**O-2**), the absent server-side event/audit (**O-3**), and the fact that **no browser or device playback run was performed** — nothing is VERIFIED | — |
+
 
 
 ---
@@ -825,8 +888,8 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` | 115,496 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` / decision-register correction** — the corrected D-01…D-03 records (two permitted payment answers; `.clinerules` §1/§10 authority references; authorisation to prepare this material), the restated decisions R-1…R-4, the evidence-checked capability status table, the C-01…C-09 matrix with exact replacement wording, the six verified patches and the combined patch in Appendix A, the near-misses checked and left alone, and the open items U-1…U-7 (U-1/U-2 closed). Proposal only: nothing in it is applied and no capability in it is implemented | — |
 | `AMSDP_Current_State_Demo_Diagnosis_and_Feature_Audit_V1.0.md` | 60,907 | **Before any attempt to "fix the demo" or to claim the demo is ready** — why the demo fails and staff cannot sign in (D1 frontend container absent since the stack-wide stop of 2026-11-12 and skipped in the 2026-11-14 nine-of-ten restart; D2 host-level container↔container forwarding dropped after the 2026-11-14 Docker daemon restarts with `ufw` active; D3 the isolated `amsdp_demo` stack never created, queue empty and appointments stale-dated; D4 the `/orgs` SSR `sessionStorage` crash), the evidence that the demo credentials are **correct** and **demonstrably worked** (6/6 bcrypt verifications; authenticated `super_admin` audit events at 2026-11-12T20:46:41Z), the 64-route / 14-page / 311-test matrix graded IMPLEMENTED / TESTED / VERIFIED, the prioritised repair plan R-1…R-10 with exact verification gates, the evidence appendix (26 rows), the actions deliberately not performed, the open items O-A…O-I, and **Part G** — reconciliation with the owner's account, the four corrections to Parts A–C, and the container-level timeline. Read-only: nothing was fixed | — |
 | `AMSDP_Appointment_Calendar_Filter_Diagnosis_V1.0.md` | 50,236 | **Before wiring or "fixing" the appointment calendar's search box or its Status/Branch filters** — why they do nothing in Week and Day view: the toolbar writes only the paged list's query state while the grid is rendered from a separate `GET /api/v1/appointments` request built from the window and doctor alone (measured: 0 requests after typing a name, chips unchanged at 40, while switching to List issues the correct `?q=…&status=…&branch_id=…`); the grid endpoint has no `q`/`branch_id` and the page never sends the `status` it does support; grid 47 rows (org) vs list 42 (branch) for one receptionist; the list silently clamps to the visible week; no highlighting; unknown status → `200`/0 rows; no names in the grid payload (30 lookups per week); the source-contract test that **asserts** the defective request shape and the therefore-green 146/146 suite; Bangla-name search unverified (no such data). Includes the per-filter and per-view evidence matrices, four root-cause classes, minimal correction options with blast radius, and the two decisions left to the owner — **O-AA** (calendar branch scope) and **O-AB** (may a search leave the visible week). **Part I (2026-11-16)** records the resolution: both decisions taken, every finding F-1…F-9 mapped to the correction that shipped and to its evidence, and the one sentence defect the browser run of the fix caught | — |
-| `AMSDP_Phase_0_MVP_Scope_and_Phase_1_Operational_RBAC_Implementation_Report_V1.0.md` | 16,394 | MVP scope lock (25 KEEP / 1 DEFER) and Operational RBAC authorization hardening; six P0 defects fixed and regression-tested | — |
-| `AMSDP_Appointment_and_Calendar_Reliability_Gap_Analysis_V1.0.md` | 111,158 | **Before planning appointment/calendar capacity, slot, booking or scheduling-configuration work** — the 19 `CODE-READ` findings (WP-2.1…WP-2.7) with `file:line` evidence, the four-stage roadmap and decisions Q1–Q5; its remediation is `implementation/AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md` | — |
+| `AMSDP_Phase_0_MVP_Scope_and_Phase_1_Operational_RBAC_Implementation_Report_V1.0.md` | 41,767 | MVP scope lock (25 KEEP / 1 DEFER) and Operational RBAC authorization hardening; six P0 defects fixed and regression-tested | — |
+| `AMSDP_Appointment_and_Calendar_Reliability_Gap_Analysis_V1.0.md` | 113,662 | **Before planning appointment/calendar capacity, slot, booking or scheduling-configuration work** — the 19 `CODE-READ` findings (WP-2.1…WP-2.7) with `file:line` evidence, the four-stage roadmap and decisions Q1–Q5; its remediation is `implementation/AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md`, and **Appendix D** records the closure status of all 19 findings after the Q1–Q5 work order | — |
 
 ---
 
