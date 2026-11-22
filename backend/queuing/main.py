@@ -41,6 +41,18 @@ except ImportError:
     from recovery import router as recovery_router
 app.include_router(recovery_router)
 
+# QUE-006 / W2 — server-generated identity for a queue `call` event, and the
+# announcement delivery claim that stops two terminals announcing one call.
+try:
+    from .events import current_call_event
+except ImportError:
+    from events import current_call_event
+try:
+    from .announcements import router as announcements_router
+except ImportError:
+    from announcements import router as announcements_router
+app.include_router(announcements_router)
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +92,11 @@ def _now_iso():
 
 
 def _entry_to_dict(e):
+    # QUE-006 / W2: the latest `call` event, derived from the persisted status
+    # history (queuing/events.py). Published so a browser can deduplicate an
+    # announcement on a server-generated identity instead of a local counter,
+    # and so the claim endpoint can validate what the client claims.
+    event = current_call_event(e.id, e.status_history)
     return {"id": e.id, "queue_entry_id": e.id,
         "organization_id": e.organization_id, "branch_id": e.branch_id,
         "doctor_id": e.doctor_id, "date": str(e.date),
@@ -88,8 +105,13 @@ def _entry_to_dict(e):
         "entry_source": e.entry_source, "status": e.status,
         "status_history": e.status_history or [],
         "position_history": e.position_history or [],
+        # Empty for an entry that has never been called.
+        "call_event_id": (event or {}).get("call_event_id", ""),
+        "call_event_at": (event or {}).get("call_event_at", ""),
+        "call_count": (event or {}).get("call_count", 0),
         "notes": e.notes or "", "added_by": e.added_by or "",
         "created_at": str(e.created_at) if e.created_at else ""}
+
 
 
 def _next_sequence(session, doctor_id: str, day):

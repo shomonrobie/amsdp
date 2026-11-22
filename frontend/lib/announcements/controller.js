@@ -19,6 +19,7 @@
  */
 import { announcementEventKey, buildAnnouncement } from './content.js';
 import { CAPABILITY, OUTCOME } from './speech-synthesis.js';
+import { PLAYBACK } from './prerecorded-audio.js';
 
 export const ACTIVATION = Object.freeze({
   UNKNOWN: 'unknown',   // no gesture yet — the operator has not enabled audio
@@ -34,6 +35,12 @@ const DEFAULT_DEDUPE_WINDOW_MS = 5000;
 /**
  * @param {object} options
  * @param {ReturnType<import('./speech-synthesis.js').createSpeechSynthesisAdapter>} options.adapter
+ * @param {ReturnType<import('./prerecorded-audio.js').createPrerecordedPlayer>} [options.player]
+ *        the prerecorded engine. QUE-006 makes prerecorded playback the primary
+ *        mechanism, so it is the default transport whenever a player is given.
+ * @param {'prerecorded'|'speech'} [options.strategy] explicit transport choice.
+ *        Asking for `prerecorded` without a player is refused rather than
+ *        silently downgraded: a substituted mechanism must never be accidental.
  * @param {'bn'|'en'} [options.language]
  * @param {boolean} [options.enabled]
  * @param {number} [options.dedupeWindowMs]
@@ -45,6 +52,13 @@ export function createAnnouncementController(options = {}) {
   if (!adapter || typeof adapter.speak !== 'function') {
     throw new TypeError('createAnnouncementController requires a speech adapter');
   }
+  const player = options.player && typeof options.player.play === 'function'
+    ? options.player : null;
+  if (options.strategy === 'prerecorded' && !player) {
+    throw new TypeError('strategy "prerecorded" requires a prerecorded player');
+  }
+  const transport = options.strategy === 'speech' ? 'speech'
+    : (player && options.strategy !== 'speech' ? 'prerecorded' : 'speech');
 
   const now = typeof options.now === 'function' ? options.now : () => Date.now();
   const dedupeWindowMs = Number.isFinite(options.dedupeWindowMs)
@@ -66,6 +80,15 @@ export function createAnnouncementController(options = {}) {
   const listeners = new Set();
 
   function capabilityNow() {
+    if (transport === 'prerecorded') {
+      // A pack reports its own readiness; the browser's voice list is irrelevant
+      // to prerecorded playback and must never decide it.
+      const cap = typeof player.capability === 'function'
+        ? player.capability() : { status: 'no_voice' };
+      const status = cap.status === 'ready' ? CAPABILITY.READY
+        : (cap.status === 'pending' ? CAPABILITY.PENDING : CAPABILITY.NO_VOICE);
+      return { status, voice: null, voices: [] };
+    }
     if (!adapter.isSupported()) {
       return { status: CAPABILITY.UNSUPPORTED, voice: null, voices: [] };
     }
@@ -74,19 +97,26 @@ export function createAnnouncementController(options = {}) {
 
   function getState() {
     const cap = capabilityNow();
-    const supported = adapter.isSupported();
+    const supported = transport === 'prerecorded' ? true : adapter.isSupported();
     const voice = cap.voice || null;
+    const playerState = transport === 'prerecorded' && typeof player.getState === 'function'
+      ? player.getState() : {};
     return {
       enabled,
       language,
+      transport,
       supported,
       capability: cap.status,
+      packId: playerState.packId || '',
+      packVersion: playerState.version || 0,
       voiceLang: voice ? voice.voiceLang : null,
       voiceName: voice ? voice.name : null,
       voiceFallback: voice ? voice.fallback === true : false,
       activation,
       requiresActivation: supported && enabled && activation !== ACTIVATION.GRANTED,
-      speaking: typeof adapter.isSpeaking === 'function' ? adapter.isSpeaking() : false,
+      speaking: transport === 'prerecorded'
+        ? playerState.playing === true
+        : (typeof adapter.isSpeaking === 'function' ? adapter.isSpeaking() : false),
       dedupeWindowMs,
       last: last ? { ...last } : null,
     };
@@ -134,18 +164,71 @@ export function createAnnouncementController(options = {}) {
   function appliesActivation(result) {
     if (result.status === OUTCOME.SPOKEN) activation = ACTIVATION.GRANTED;
     else if (result.status === OUTCOME.BLOCKED) activation = ACTIVATION.BLOCKED;
+    else if (result.status === 'failed' && result.reason === 'blocked') {
+      activation = ACTIVATION.BLOCKED;
+    }
+  }
+
+  /**
+   * Play one announcement through the prerecorded engine.
+   *
+   * The mapping is the honest one: `completed` becomes `spoken` only because the
+   * engine reports completion from the final clip's `ended` event, and every
+   * other outcome becomes `failed` with its reason. Nothing here can make a
+   * half-played sentence look like success.
+   */
+  async function playPrerecorded(payload) {
+    let outcome;
+    try {
+      outcome = await player.play({ token: payload.token, room: payload.room });
+    } catch (err) {
+      return { status: 'failed', reason: 'player_threw' };
+    }
+    if (!outcome || typeof outcome !== 'object') {
+      return { status: 'failed', reason: 'player_no_outcome' };
+    }
+    if (outcome.status === PLAYBACK.COMPLETED) {
+      return { status: OUTCOME.SPOKEN, transport: 'prerecorded', completed: true };
+    }
+    if (outcome.status === PLAYBACK.BUSY) return { status: OUTCOME.BUSY };
+    if (outcome.status === PLAYBACK.CANCELLED) return { status: OUTCOME.CANCELLED };
+    const failure = {
+      status: 'failed',
+      reason: outcome.reason || 'playback_failed',
+      transport: 'prerecorded',
+    };
+    if (Array.isArray(outcome.missing)) failure.missing = outcome.missing;
+    return failure;
   }
 
   /**
    * Unlock audio from an operator gesture ("Enable announcements").
    *
-   * The prime utterance is deliberately silent and language-independent: its
-   * only job is to prove the browser accepts playback. It is not an
-   * announcement, so it never becomes `last`.
+   * Prerecorded playback unlocks by playing the catalogue's silent pause clip;
+   * speech playback primes with a silent utterance. Either way the prime is not
+   * an announcement, so it never becomes `last`.
    *
    * @returns {Promise<{status: string, reason?: string}>}
    */
   async function activate() {
+    if (transport === 'prerecorded') {
+      if (typeof player.prime !== 'function') {
+        notify();
+        return { status: 'unavailable', reason: 'no_prime_support' };
+      }
+      let primed;
+      try {
+        primed = await player.prime();
+      } catch (err) {
+        primed = { status: 'failed', reason: 'player_threw' };
+      }
+      if (primed && primed.status === 'primed') activation = ACTIVATION.GRANTED;
+      else if (primed && primed.status === 'failed' && primed.reason === 'blocked') {
+        activation = ACTIVATION.BLOCKED;
+      }
+      notify();
+      return primed;
+    }
     if (!adapter.isSupported()) {
       notify();
       return { status: OUTCOME.UNSUPPORTED };
@@ -181,7 +264,7 @@ export function createAnnouncementController(options = {}) {
     const input = payload && typeof payload === 'object' ? payload : {};
 
     if (!enabled) return record({ status: 'disabled' }, null, input, source, lang);
-    if (!adapter.isSupported()) {
+    if (transport === 'speech' && !adapter.isSupported()) {
       return record({ status: OUTCOME.UNSUPPORTED }, null, input, source, lang);
     }
 
@@ -207,10 +290,14 @@ export function createAnnouncementController(options = {}) {
     }
 
     let result;
-    try {
-      result = await adapter.speak(content.text, { language: content.language });
-    } catch (err) {
-      result = { status: OUTCOME.ERROR, reason: 'adapter_threw' };
+    if (transport === 'prerecorded') {
+      result = await playPrerecorded(input);
+    } else {
+      try {
+        result = await adapter.speak(content.text, { language: content.language });
+      } catch (err) {
+        result = { status: OUTCOME.ERROR, reason: 'adapter_threw' };
+      }
     }
     appliesActivation(result);
     return record(result, content, input, source, lang);
@@ -229,6 +316,12 @@ export function createAnnouncementController(options = {}) {
     enabled = next;
     notify();
   }
+
+  /**
+   * Re-read the transport's capability and tell the UI.
+   * Used when the voice pack finishes loading after the controller exists.
+   */
+  function refresh() { notify(); }
 
   /**
    * Start observing the browser's voice list. Returns an unsubscribe function.
@@ -276,9 +369,14 @@ export function createAnnouncementController(options = {}) {
     stop,
     activate,
     announce,
-    cancel: () => { if (typeof adapter.cancel === 'function') adapter.cancel(); notify(); },
+    cancel: () => {
+      if (transport === 'prerecorded' && typeof player.cancel === 'function') player.cancel();
+      else if (typeof adapter.cancel === 'function') adapter.cancel();
+      notify();
+    },
     setLanguage,
     setEnabled,
+    refresh,
     dispose,
   };
 

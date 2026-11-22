@@ -898,6 +898,64 @@ class QueueSequence(Base):
     last_value  = Column(Integer, nullable=False, default=0)
 
 
+class QueueAnnouncementDelivery(Base):
+    """QUE-006 / W2 — one announcement *claim* per queue call event.
+
+    The announcement is audible, so it can only be played by one terminal per
+    call. This row is that coordination record and, at the same time, the
+    persisted answer to "was this call actually announced?" (POD-4).
+
+    Identity
+    --------
+    ``call_event_id`` is derived from ``QueueEntry.status_history`` by
+    ``queuing.events`` — server-generated, stable across refreshes, distinct on
+    a legitimate recall. Its UNIQUE constraint is what makes the claim atomic:
+    the first terminal to insert wins, every later terminal is refused. This
+    mirrors the existing notification outbox (``Notification.dedup_key``
+    UNIQUE), not a new locking scheme.
+
+    Lifecycle
+    ---------
+    ``requested`` -> ``completed`` | ``failed`` | ``blocked`` | ``interrupted``
+                  | ``skipped_busy`` ; the loser of the claim writes a
+    ``skipped_duplicate`` row of its own only by reporting the outcome on the
+    winner's delivery, never by inserting a second claim.
+
+    ``completed`` is written only after the *final* clip reported ``ended``;
+    a started-but-unfinished announcement resolves ``interrupted``/``failed``.
+    Rows are never deleted: they are the audit counterpart of the append-only
+    ``audit_events`` record written for the same outcome. Retention therefore
+    follows the audit trail's policy (see the W2 reliability report, section 5.3).
+    """
+
+    __tablename__ = "queue_announcement_deliveries"
+    __service__ = "queuing"
+
+    id                 = Column(String, primary_key=True, default=_new_id)
+    organization_id    = Column(String, ForeignKey("organizations.id"), nullable=False)
+    branch_id          = Column(String, ForeignKey("branches.id"))
+    queue_entry_id     = Column(String, ForeignKey("queue_entries.id"), nullable=False)
+    call_event_id      = Column(String(120), nullable=False, unique=True)
+    language           = Column(String(8), nullable=False, server_default="")
+    voice_pack_id      = Column(String(80), nullable=False, server_default="")
+    voice_pack_version = Column(Integer, nullable=False, server_default="0")
+    transport          = Column(String(20), nullable=False, server_default="")
+    requested_by       = Column(String, nullable=False)
+    requested_by_role  = Column(String(30))
+    requested_at       = Column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    status             = Column(String(24), nullable=False, server_default="requested")
+    outcome_at         = Column(DateTime(timezone=True))
+    outcome_reason     = Column(String(120), nullable=False, server_default="")
+
+    __table_args__ = (
+        # No separate index on ``call_event_id``: the UNIQUE constraint above
+        # already maintains a B-tree on it (the same lesson recorded for
+        # ``TrackingToken.token_hash`` in Sequence 4, SEQ4-INDEX-P3).
+        Index("idx_queue_announcement_entry", "queue_entry_id"),
+        Index("idx_queue_announcement_org_time", "organization_id", "requested_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Audit — service: audit
 # ---------------------------------------------------------------------------

@@ -47,7 +47,6 @@ const ENTRY = {
   action: 'call',
   revision: 1,
   token: 'T-3F2A9C-004',
-  doctorName: 'Rahim Uddin',
 };
 
 test('a controller needs a speech adapter', () => {

@@ -6,16 +6,20 @@
  * pin the exact Bangla and English strings.
  *
  * Privacy contract (QUE-006 acceptance criterion 9, ANN-007):
- *   - the spoken payload is built from three fields only — the token serial,
- *     the doctor's name and an optional room number;
+ *   - the spoken payload is built from two fields only — the token serial and
+ *     an optional room number;
+ *   - the doctor's name and honourific are never spoken: they are removed from
+ *     every template so no doctor identity can leak into the announcement;
  *   - patient identity is never read, so it cannot leak into the template;
  *   - the raw token is never spoken, because today's token is
  *     `T-<doctor-id fragment>-<serial>` and the fragment is an internal
  *     identifier. Only the trailing serial is spoken, as a plain number.
  *
- * Approved wording (OD-3):
- *   bn  টোকেন নম্বর [সংখ্যা], ডা. [ডাক্তারের নাম], কক্ষ [কক্ষ নম্বর]-এ আসুন।
- *   en  Token number [number], Dr. [doctor name], Room [room].
+ * Approved wording (OD-3, doctor name removed):
+ *   bn (with room)  টোকেন নম্বর [সংখ্যা], কক্ষ [কক্ষ নম্বর]-ে আসুন।
+ *   bn (no room)    টোকেন নম্বর [সংখ্যা], অনুগ্রহ করে সামনে আসুন।
+ *   en (with room)  Token number [number], please proceed to Room [number].
+ *   en (no room)    Token number [number], please come to the front.
  *
  * Room-less variants (documented dependency, see the implementation report):
  * no queue payload or queue endpoint carries a room today, so the room clause
@@ -26,15 +30,15 @@
 /** Languages a queue announcement may be spoken in (OD-3). */
 export const ANNOUNCEMENT_LANGUAGES = Object.freeze(['bn', 'en']);
 
-/** Approved templates. `{number}`, `{doctor}` and `{room}` are the only slots. */
+/** Approved templates. `{number}` and `{room}` are the only slots. */
 export const TEMPLATES = Object.freeze({
   bn: Object.freeze({
-    withRoom: 'টোকেন নম্বর {number}, ডা. {doctor}, কক্ষ {room}-এ আসুন।',
-    noRoom: 'টোকেন নম্বর {number}, ডা. {doctor}, আসুন।',
+    withRoom: 'টোকেন নম্বর {number}, কক্ষ {room}-এ আসুন।',
+    noRoom: 'টোকেন নম্বর {number}, অনুগ্রহ করে সামনে আসুন।',
   }),
   en: Object.freeze({
-    withRoom: 'Token number {number}, Dr. {doctor}, Room {room}.',
-    noRoom: 'Token number {number}, Dr. {doctor}.',
+    withRoom: 'Token number {number}, please proceed to Room {room}.',
+    noRoom: 'Token number {number}, please come to the front.',
   }),
 });
 
@@ -95,10 +99,12 @@ export function spokenTokenNumber(token) {
 /**
  * Build the spoken text for one queue announcement.
  *
- * Only `token`, `doctorName` and `room` are read from `input`; every other key
- * is ignored, which is what keeps patient identity out of the spoken payload.
+ * Only `token` and `room` are read from `input`; every other key — including
+ * `doctorName`, `patientName`, `patient_id`, `mobile`, `notes` — is ignored,
+ * which is what keeps patient identity and doctor identity out of the spoken
+ * payload. A doctor name is never required and never spoken.
  *
- * @param {{token?: unknown, doctorName?: unknown, room?: unknown}} input
+ * @param {{token?: unknown, room?: unknown}} input
  * @param {string} language `'bn'` or `'en'` (OD-3; no silent fallback)
  * @returns {{ok: true, language: string, text: string, fields: object}
  *          | {ok: false, reason: string}}
@@ -108,8 +114,6 @@ export function buildAnnouncement(input, language) {
   if (!lang) return { ok: false, reason: 'unsupported_language' };
 
   const source = input && typeof input === 'object' ? input : {};
-  const doctorName = cleanText(source.doctorName);
-  if (!doctorName) return { ok: false, reason: 'missing_doctor_name' };
 
   const number = spokenTokenNumber(source.token);
   if (!number) return { ok: false, reason: 'unspeakable_token' };
@@ -120,7 +124,6 @@ export function buildAnnouncement(input, language) {
 
   const text = template
     .replace('{number}', spokenNumber)
-    .replace('{doctor}', doctorName)
     .replace('{room}', room);
 
   return {
@@ -129,7 +132,6 @@ export function buildAnnouncement(input, language) {
     text,
     fields: {
       tokenNumber: spokenNumber,
-      doctorName,
       room: room || null,
       hasRoom: !!room,
       template: room ? 'with_room' : 'no_room',

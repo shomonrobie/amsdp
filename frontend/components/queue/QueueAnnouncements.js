@@ -13,14 +13,19 @@
 import React from 'react';
 import { t, getLocale } from '../../lib/i18n';
 import { createSpeechSynthesisAdapter } from '../../lib/announcements/speech-synthesis';
+import { createPrerecordedPlayer } from '../../lib/announcements/prerecorded-audio';
+import { resolveAnnouncementConfig } from '../../lib/announcements/voice-packs';
 import { createAnnouncementController, ACTIVATION } from '../../lib/announcements/controller';
 
 /** The state before the browser has been asked anything. */
 export const INITIAL_STATE = Object.freeze({
   enabled: true,
   language: 'bn',
+  transport: 'prerecorded',
   supported: false,
-  capability: 'unsupported',
+  capability: 'pending_voices',
+  packId: '',
+  packVersion: 0,
   voiceLang: null,
   voiceName: null,
   voiceFallback: false,
@@ -31,7 +36,7 @@ export const INITIAL_STATE = Object.freeze({
 });
 
 /**
- * Own one adapter + controller for the lifetime of the page.
+ * Own one adapter + player + controller for the lifetime of the page.
  * @returns {{state: object, announce: Function, activate: Function, cancel: Function}}
  */
 export function useQueueAnnouncements() {
@@ -39,21 +44,62 @@ export function useQueueAnnouncements() {
   const controllerRef = React.useRef(null);
 
   React.useEffect(() => {
-    const adapter = createSpeechSynthesisAdapter();
     // The facility language setting (OD-2) does not exist yet, so the client
     // speaks the operator's current interface language and never guesses.
-    const controller = createAnnouncementController({
-      adapter,
-      language: getLocale() === 'en' ? 'en' : 'bn',
-    });
+    const language = getLocale() === 'en' ? 'en' : 'bn';
+
+    // QUE-006: prerecorded playback is the primary mechanism. The pack is read
+    // from the installed catalogue; until it arrives the player reports
+    // "pending", never a substituted mechanism.
+    let pack = null;
+    let disposed = false;
+    const player = createPrerecordedPlayer({ packProvider: () => pack });
+    const adapter = createSpeechSynthesisAdapter();
+    // A speech adapter is still required by the controller: browser speech is
+    // the documented alternative transport, chosen explicitly by configuration.
+    const controller = createAnnouncementController({ adapter, player, language });
     controllerRef.current = controller;
     const unsubscribe = controller.subscribe(setState);
     controller.start();
     setState(controller.getState());
+
+    const loadPack = async () => {
+      try {
+        const response = await fetch('/audio/manifest.json', { cache: 'force-cache' });
+        if (!response.ok || disposed) return;
+        const manifest = await response.json();
+        if (disposed) return;
+        // The shipped catalogue is the built-in draft pack. Selection goes
+        // through the precedence resolver so an organisation override (W3)
+        // only has to supply configuration, not a new code path.
+        const builtin = {
+          [language]: {
+            id: 'platform.' + language + '.draft.v1',
+            language,
+            version: 1,
+            scope: 'platform',
+            source: 'builtin',
+            status: 'draft',
+            basePath: '/audio',
+            manifest,
+          },
+        };
+        const resolved = resolveAnnouncementConfig({ builtin });
+        pack = resolved.packs[language];
+        controller.refresh();
+      } catch (err) {
+        // Offline or missing catalogue: the panel says so instead of speaking
+        // with a different voice or a different language.
+      }
+    };
+    loadPack();
+
     return () => {
+      disposed = true;
       unsubscribe();
       controller.dispose();
       adapter.dispose();
+      player.dispose();
       controllerRef.current = null;
     };
   }, []);
@@ -89,7 +135,9 @@ function badgeClass(state) {
 function statusLabel(state) {
   if (!state.enabled) return t('announceAudioOff');
   if (state.capability === 'unsupported') return t('announceAudioUnsupported');
-  if (state.capability === 'no_voice') return t('announceNoVoice');
+  if (state.capability === 'no_voice') {
+    return state.transport === 'prerecorded' ? t('announcePackMissing') : t('announceNoVoice');
+  }
   if (state.capability === 'pending_voices') return t('announceAudioPending');
   if (state.activation === ACTIVATION.BLOCKED) return t('announceAudioBlocked');
   if (state.activation !== ACTIVATION.GRANTED) return t('announceAudioOff');
@@ -100,13 +148,35 @@ function outcomeLabel(last) {
   if (!last) return '';
   if (last.status === 'spoken') return t('announceLastSpoken');
   if (last.status === 'duplicate') return t('announceLastDuplicate');
+  if (last.status === 'failed') return t('announceLastFailed');
   return t('announceLastSkipped');
 }
 
 /**
- * @param {{controller: {state: object, activate: Function}, canAnnounce: boolean}} props
+ * QUE-006 / W2 — how the *delivery claim* ended, when it is worth saying.
+ *
+ * A claim that another terminal won, or that the server refused, is not an error:
+ * the call is being announced somewhere, or it is no longer the current call.
+ * It is reported as a quiet note so an operator watching a second screen knows
+ * why their terminal stayed silent. A stale or already-seen event says nothing.
+ *
+ * The note is deliberately *not* an error: the three reasons below are all
+ * "someone else is handling this call", which the operator cannot fix.
  */
-export default function QueueAnnouncements({ controller, canAnnounce }) {
+function deliveryNote(delivery) {
+  if (!delivery || delivery.status !== 'skipped') return '';
+  const reason = delivery.reason || '';
+  if (reason === 'duplicate_event' || reason === 'not_owner' || reason === 'claim_rejected') {
+    return t('announceElsewhere');
+  }
+  return '';
+}
+
+/**
+ * @param {{controller: {state: object, activate: Function}, canAnnounce: boolean,
+ *          delivery?: object}} props
+ */
+export default function QueueAnnouncements({ controller, canAnnounce, delivery }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => { setMounted(true); }, []);
 
@@ -133,7 +203,11 @@ export default function QueueAnnouncements({ controller, canAnnounce }) {
       {showEnable && state.capability === 'ready' && (
         <p className="muted">{t('announceActivationHint')}</p>
       )}
-      {state.capability === 'no_voice' && <p className="muted">{t('announceNoVoiceHint')}</p>}
+      {state.capability === 'no_voice' && (
+        <p className="muted">
+          {state.transport === 'prerecorded' ? t('announcePackHint') : t('announceNoVoiceHint')}
+        </p>
+      )}
       {(state.capability === 'unsupported' || state.capability === 'no_voice'
         || state.activation === ACTIVATION.BLOCKED) && (
         <p className="muted">{t('announceNeverBlocks')}</p>
@@ -143,6 +217,9 @@ export default function QueueAnnouncements({ controller, canAnnounce }) {
           {t('announceLast')}: {outcomeLabel(state.last)}
           {state.last.text ? ' — “' + state.last.text + '”' : ''}
         </p>
+      )}
+      {deliveryNote(delivery) && (
+        <p className="muted">{deliveryNote(delivery)}</p>
       )}
     </div>
   );

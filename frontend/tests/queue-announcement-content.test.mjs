@@ -1,8 +1,9 @@
 /* QUE-006 / OD-1 — announcement content, token pronunciation and PII boundary.
  *
  * These are assertions about *what the patient hears*, not about the
- * implementation: the approved OD-3 wording, the read-aloud form of a token,
- * and the guarantee that patient identity cannot reach the spoken text.
+ * implementation: the approved OD-3 wording (doctor name removed), the
+ * read-aloud form of a token, and the guarantee that patient identity and
+ * doctor identity cannot reach the spoken text.
  *
  * Run: cd frontend && npm test        (node --test, no dependency added)
  */
@@ -17,42 +18,65 @@ import {
   toBanglaDigits,
 } from '../lib/announcements/content.js';
 
-test('the approved Bangla template is spoken exactly as OD-3 records it', () => {
+test('the approved Bangla template with room is spoken exactly as OD-3 records it', () => {
   const result = buildAnnouncement(
-    { token: 'T-3F2A9C-004', doctorName: 'রহিম উদ্দিন', room: '৩০৫' },
+    { token: 'T-3F2A9C-004', room: '৩০৫' },
     'bn'
   );
   assert.equal(result.ok, true);
   assert.equal(result.language, 'bn');
-  assert.equal(result.text, 'টোকেন নম্বর ৪, ডা. রহিম উদ্দিন, কক্ষ ৩০৫-এ আসুন।');
+  assert.equal(result.text, 'টোকেন নম্বর ৪, কক্ষ ৩০৫-এ আসুন।');
   assert.equal(result.fields.template, 'with_room');
   assert.equal(result.fields.derived, false);
 });
 
-test('the approved English template is spoken exactly as OD-3 records it', () => {
+test('the approved English template with room is spoken exactly as OD-3 records it', () => {
   const result = buildAnnouncement(
-    { token: 'T-3F2A9C-004', doctorName: 'Rahim Uddin', room: '305' },
+    { token: 'T-3F2A9C-004', room: '305' },
     'en'
   );
-  assert.equal(result.text, 'Token number 4, Dr. Rahim Uddin, Room 305.');
+  assert.equal(result.text, 'Token number 4, please proceed to Room 305.');
   assert.equal(result.fields.tokenNumber, '4');
 });
 
+test('the approved Bangla template without room is spoken exactly as OD-3 records it', () => {
+  const result = buildAnnouncement(
+    { token: 'T-3F2A9C-004' },
+    'bn'
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.text, 'টোকেন নম্বর ৪, অনুগ্রহ করে সামনে আসুন।');
+  assert.equal(result.fields.template, 'no_room');
+  assert.equal(result.fields.derived, true);
+});
+
+test('the approved English template without room is spoken exactly as OD-3 records it', () => {
+  const result = buildAnnouncement(
+    { token: 'T-3F2A9C-004' },
+    'en'
+  );
+  assert.equal(result.text, 'Token number 4, please come to the front.');
+  assert.equal(result.fields.template, 'no_room');
+  assert.equal(result.fields.derived, true);
+});
+
 test('the templates themselves carry the approved punctuation', () => {
-  assert.equal(TEMPLATES.bn.withRoom, 'টোকেন নম্বর {number}, ডা. {doctor}, কক্ষ {room}-এ আসুন।');
-  assert.equal(TEMPLATES.en.withRoom, 'Token number {number}, Dr. {doctor}, Room {room}.');
+  assert.equal(TEMPLATES.bn.withRoom, 'টোকেন নম্বর {number}, কক্ষ {room}-এ আসুন।');
+  assert.equal(TEMPLATES.bn.noRoom, 'টোকেন নম্বর {number}, অনুগ্রহ করে সামনে আসুন।');
+  assert.equal(TEMPLATES.en.withRoom, 'Token number {number}, please proceed to Room {room}.');
+  assert.equal(TEMPLATES.en.noRoom, 'Token number {number}, please come to the front.');
 });
 
 test('with no room assigned the room clause is dropped, not invented', () => {
-  const bn = buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: 'রহিম উদ্দিন' }, 'bn');
-  const en = buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: 'Rahim Uddin' }, 'en');
-  assert.equal(bn.text, 'টোকেন নম্বর ৪, ডা. রহিম উদ্দিন, আসুন।');
-  assert.equal(en.text, 'Token number 4, Dr. Rahim Uddin.');
+  const bn = buildAnnouncement({ token: 'T-3F2A9C-004' }, 'bn');
+  const en = buildAnnouncement({ token: 'T-3F2A9C-004' }, 'en');
+  assert.equal(bn.text, 'টোকেন নম্বর ৪, অনুগ্রহ করে সামনে আসুন।');
+  assert.equal(en.text, 'Token number 4, please come to the front.');
   assert.equal(bn.fields.derived, true);
   assert.equal(en.fields.derived, true);
   // A blank room is "no room", not a room called space.
-  assert.equal(buildAnnouncement({ token: '4', doctorName: 'X', room: '   ' }, 'en').text,
-    'Token number 4, Dr. X.');
+  assert.equal(buildAnnouncement({ token: '4', room: '   ' }, 'en').text,
+    'Token number 4, please come to the front.');
 });
 
 test('the spoken token is the serial number, never the doctor-id fragment', () => {
@@ -65,7 +89,7 @@ test('the spoken token is the serial number, never the doctor-id fragment', () =
 
 test('Bangla announcements speak Bangla digits', () => {
   assert.equal(toBanglaDigits('305'), '৩০৫');
-  const bn = buildAnnouncement({ token: 'T-3F2A9C-012', doctorName: 'ডাক্তার' }, 'bn');
+  const bn = buildAnnouncement({ token: 'T-3F2A9C-012' }, 'bn');
   assert.equal(bn.fields.tokenNumber, '১২');
   assert.ok(bn.text.includes('১২'));
 });
@@ -78,14 +102,13 @@ test('an internal identifier is never spoken', () => {
   assert.equal(spokenTokenNumber(''), null);
   assert.equal(spokenTokenNumber(null), null);
   assert.equal(spokenTokenNumber('T-ABCDEF-'), null);
-  assert.equal(buildAnnouncement({ token: '3f2a9c11-2222-4333-8444-555566667777', doctorName: 'X' }, 'en').reason,
+  assert.equal(buildAnnouncement({ token: '3f2a9c11-2222-4333-8444-555566667777' }, 'en').reason,
     'unspeakable_token');
 });
 
 test('patient identity cannot reach the spoken text', () => {
   const payload = {
     token: 'T-3F2A9C-004',
-    doctorName: 'Rahim Uddin',
     room: '305',
     patientName: 'Karim Mia',
     patient_name: 'Karim Mia',
@@ -95,22 +118,54 @@ test('patient identity cannot reach the spoken text', () => {
     notes: 'fever, 3 days',
   };
   const result = buildAnnouncement(payload, 'en');
-  assert.equal(result.text, 'Token number 4, Dr. Rahim Uddin, Room 305.');
+  assert.equal(result.text, 'Token number 4, please proceed to Room 305.');
   ['Karim', '01712345678', 'fever', 'aaaaaaaa'].forEach((leak) => {
     assert.ok(!result.text.includes(leak), 'leaked: ' + leak);
   });
 });
 
-test('a missing doctor name or language is refused, not spoken', () => {
-  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004' }, 'en').reason, 'missing_doctor_name');
-  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: '   ' }, 'bn').reason, 'missing_doctor_name');
-  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: 'X' }, 'fr').reason, 'unsupported_language');
-  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: 'X' }, undefined).reason, 'unsupported_language');
+test('a missing doctor name does not prevent announcement generation', () => {
+  // Doctor name is never required; omission must not block an announcement.
+  const withDoctor = buildAnnouncement({ token: 'T-3F2A9C-004', doctorName: 'Rahim Uddin', room: '305' }, 'en');
+  const withoutDoctor = buildAnnouncement({ token: 'T-3F2A9C-004', room: '305' }, 'en');
+  assert.equal(withDoctor.ok, true);
+  assert.equal(withoutDoctor.ok, true);
+  assert.equal(withDoctor.text, 'Token number 4, please proceed to Room 305.');
+  assert.equal(withoutDoctor.text, 'Token number 4, please proceed to Room 305.');
+});
+
+test('doctor name and honourific never appear in the announcement', () => {
+  // Even when doctor-name input is supplied, it must not surface in speech.
+  const cases = [
+    { token: 'T-3F2A9C-004', doctorName: 'Dr. Rahim Uddin', room: '305' },
+    { token: 'T-3F2A9C-004', doctorName: 'Rahim Uddin', room: '305' },
+    { token: 'T-3F2A9C-004', doctorName: 'ডা. রহিম উদ্দিন', room: '৩০৫' },
+    { token: 'T-3F2A9C-004', doctorName: 'ডাক্তার রহিম উদ্দিন', room: '৩০৫' },
+  ];
+  for (const c of cases) {
+    const en = buildAnnouncement(c, 'en');
+    const bn = buildAnnouncement(c, 'bn');
+    assert.equal(en.ok, true, 'English must not refuse doctor-name input');
+    assert.equal(bn.ok, true, 'Bangla must not refuse doctor-name input');
+    assert.ok(!en.text.includes('Dr.'), 'English must not contain Dr.');
+    assert.ok(!en.text.includes('Doctor'), 'English must not contain Doctor');
+    assert.ok(!en.text.includes('Rahim'), 'English must not contain the doctor name');
+    assert.ok(!en.text.includes('Uddin'), 'English must not contain the doctor name');
+    assert.ok(!bn.text.includes('ডা.'), 'Bangla must not contain ডা.');
+    assert.ok(!bn.text.includes('ডাক্তার'), 'Bangla must not contain ডাক্তার');
+    assert.ok(!bn.text.includes('রহিম'), 'Bangla must not contain the doctor name');
+    assert.ok(!bn.text.includes('উদ্দিন'), 'Bangla must not contain the doctor name');
+  }
+});
+
+test('a missing language is refused, not spoken', () => {
+  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004', room: '305' }, 'fr').reason, 'unsupported_language');
+  assert.equal(buildAnnouncement({ token: 'T-3F2A9C-004', room: '305' }, undefined).reason, 'unsupported_language');
 });
 
 test('free text is whitespace-collapsed so the sentence stays speakable', () => {
-  const result = buildAnnouncement({ token: '7', doctorName: '  Dr.  A.   Rahman ' }, 'en');
-  assert.equal(result.text, 'Token number 7, Dr. Dr. A. Rahman.');
+  const result = buildAnnouncement({ token: '7', room: '  305  ' }, 'en');
+  assert.equal(result.text, 'Token number 7, please proceed to Room 305.');
 });
 
 test('the event key identifies one queue event and repeats predictably', () => {
