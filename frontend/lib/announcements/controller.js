@@ -19,6 +19,7 @@
  */
 import { announcementEventKey, buildAnnouncement } from './content.js';
 import { CAPABILITY, OUTCOME } from './speech-synthesis.js';
+import { createAnnouncementStore, DEDUPE_DEFAULTS } from './dedupe.js';
 
 export const ACTIVATION = Object.freeze({
   UNKNOWN: 'unknown',   // no gesture yet — the operator has not enabled audio
@@ -29,14 +30,19 @@ export const ACTIVATION = Object.freeze({
 /** Spoken during activation only. Silent, and short enough to be inaudible. */
 export const PRIME_TEXT = ' ';
 
-const DEFAULT_DEDUPE_WINDOW_MS = 5000;
+const DEFAULT_DEDUPE_WINDOW_MS = DEDUPE_DEFAULTS.completedTtlMs;
 
 /**
  * @param {object} options
  * @param {ReturnType<import('./speech-synthesis.js').createSpeechSynthesisAdapter>} options.adapter
  * @param {'bn'|'en'} [options.language]
  * @param {boolean} [options.enabled]
- * @param {number} [options.dedupeWindowMs]
+ * @param {number} [options.dedupeWindowMs] compatibility knob: sets the
+ *        completed-event TTL. `0` disables per-event memory entirely, which is
+ *        only appropriate in tests.
+ * @param {object} [options.dedupe] explicit F3 policy overrides
+ *        (`completedTtlMs`, `failureTtlMs`, `blockedTtlMs`, `maxAttempts`,
+ *        `maxKeys`, `baseRetryMs`, `maxRetryMs`).
  * @param {() => number} [options.now]
  * @param {(entry: object) => void|object} [options.logger]
  */
@@ -47,9 +53,20 @@ export function createAnnouncementController(options = {}) {
   }
 
   const now = typeof options.now === 'function' ? options.now : () => Date.now();
-  const dedupeWindowMs = Number.isFinite(options.dedupeWindowMs)
+  const overrides = options.dedupe && typeof options.dedupe === 'object' ? options.dedupe : {};
+  const legacyWindow = Number.isFinite(options.dedupeWindowMs)
     ? Math.max(0, options.dedupeWindowMs)
     : DEFAULT_DEDUPE_WINDOW_MS;
+  // The legacy window keeps every TTL equal and the retry backoff at zero, so
+  // `dedupeWindowMs: 0` still means "remember nothing". `options.dedupe` wins.
+  const store = createAnnouncementStore({
+    completedTtlMs: legacyWindow,
+    failureTtlMs: legacyWindow,
+    blockedTtlMs: legacyWindow,
+    ...(Number.isFinite(options.dedupeWindowMs) ? { baseRetryMs: 0, maxRetryMs: 0 } : {}),
+    ...overrides,
+    now,
+  });
   const logger = typeof options.logger === 'function' ? options.logger
     : (options.logger && typeof options.logger.info === 'function' ? options.logger : null);
 
@@ -59,8 +76,8 @@ export function createAnnouncementController(options = {}) {
   /** @type {null|{key: string|null, source: string, status: string, reason: string,
    *               language: string, text: string, at: number}} */
   let last = null;
-  let lastEventKey = null;
-  let lastEventAt = 0;
+  /** One automatic recovery attempt for the event the browser blocked. */
+  let blockedRetry = null;
   let unsubscribeVoices = null;
   let disposed = false;
   const listeners = new Set();
@@ -87,7 +104,9 @@ export function createAnnouncementController(options = {}) {
       activation,
       requiresActivation: supported && enabled && activation !== ACTIVATION.GRANTED,
       speaking: typeof adapter.isSpeaking === 'function' ? adapter.isSpeaking() : false,
-      dedupeWindowMs,
+      dedupeWindowMs: Number.isFinite(options.dedupeWindowMs)
+        ? Math.max(0, options.dedupeWindowMs) : DEFAULT_DEDUPE_WINDOW_MS,
+      dedupe: { keys: store.size(), maxKeys: store.maxKeys, maxAttempts: store.maxAttempts },
       last: last ? { ...last } : null,
     };
   }
@@ -132,8 +151,18 @@ export function createAnnouncementController(options = {}) {
   }
 
   function appliesActivation(result) {
-    if (result.status === OUTCOME.SPOKEN) activation = ACTIVATION.GRANTED;
+    if (result.status === OUTCOME.COMPLETED) activation = ACTIVATION.GRANTED;
     else if (result.status === OUTCOME.BLOCKED) activation = ACTIVATION.BLOCKED;
+  }
+
+  /**
+   * Remember the event the browser refused so one gesture can recover it.
+   * Only an event-sourced announcement is replayed; an operator's repeat is
+   * already under the operator's control.
+   */
+  function rememberBlockedRetry(payload, lang, source) {
+    if (source !== 'event') return;
+    blockedRetry = { payload: { ...payload }, language: lang };
   }
 
   /**
@@ -148,15 +177,25 @@ export function createAnnouncementController(options = {}) {
   async function activate() {
     if (!adapter.isSupported()) {
       notify();
-      return { status: OUTCOME.UNSUPPORTED };
+      return { status: OUTCOME.UNAVAILABLE, reason: 'unsupported' };
     }
     let result;
     try {
       result = await adapter.speak(PRIME_TEXT, { language, prime: true, volume: 0 });
     } catch (err) {
-      result = { status: OUTCOME.ERROR, reason: 'adapter_threw' };
+      result = { status: OUTCOME.FAILED, reason: 'adapter_threw' };
     }
     appliesActivation(result);
+    if (result.status === OUTCOME.COMPLETED && blockedRetry) {
+      // Exactly one automatic recovery per blocked event, from the gesture that
+      // unlocked audio (F3.4). Cleared before the retry so a second refusal
+      // cannot loop.
+      const pending = blockedRetry;
+      blockedRetry = null;
+      await announce(pending.payload, {
+        language: pending.language, source: 'event', userGesture: true,
+      });
+    }
     notify();
     return result;
   }
@@ -180,9 +219,9 @@ export function createAnnouncementController(options = {}) {
     const lang = opts.language === 'en' ? 'en' : (opts.language === 'bn' ? 'bn' : language);
     const input = payload && typeof payload === 'object' ? payload : {};
 
-    if (!enabled) return record({ status: 'disabled' }, null, input, source, lang);
+    if (!enabled) return record({ status: 'disabled', reason: 'facility_disabled' }, null, input, source, lang);
     if (!adapter.isSupported()) {
-      return record({ status: OUTCOME.UNSUPPORTED }, null, input, source, lang);
+      return record({ status: OUTCOME.UNAVAILABLE, reason: 'unsupported' }, null, input, source, lang);
     }
 
     const content = buildAnnouncement(input, lang);
@@ -192,17 +231,29 @@ export function createAnnouncementController(options = {}) {
     }
 
     const key = announcementEventKey(input);
-    if (source === 'event' && key) {
-      const at = now();
-      if (lastEventKey === key && (at - lastEventAt) < dedupeWindowMs) {
-        return record({ status: 'duplicate' }, content, input, source, lang);
+    const watched = source === 'event' && !!key;
+    if (watched) {
+      const verdict = store.shouldSuppress(key, {
+        userGesture,
+        activationGranted: activation === ACTIVATION.GRANTED,
+      });
+      if (verdict.suppress) {
+        // A suppressed delivery is reported, never spoken and never silently
+        // dropped: the operator panel shows why nothing was heard.
+        if (verdict.status === 'needs_activation') rememberBlockedRetry(input, lang, source);
+        return record({ status: verdict.status, reason: verdict.reason }, content, input, source, lang);
       }
-      lastEventKey = key;
-      lastEventAt = at;
+      // Reserve before speaking, so an overlapping delivery of the same event
+      // cannot start its own attempt.
+      store.begin(key, 'event');
     }
 
     if (activation === ACTIVATION.BLOCKED && !userGesture) {
-      // Do not hammer a browser that has already refused playback.
+      // Do not hammer a browser that has already refused playback. This is not
+      // an attempt: the key is released, so the event is still announcable
+      // after activation instead of being remembered as announced (F3.3).
+      if (watched) store.release(key);
+      rememberBlockedRetry(input, lang, source);
       return record({ status: 'needs_activation' }, content, input, source, lang);
     }
 
@@ -210,9 +261,19 @@ export function createAnnouncementController(options = {}) {
     try {
       result = await adapter.speak(content.text, { language: content.language });
     } catch (err) {
-      result = { status: OUTCOME.ERROR, reason: 'adapter_threw' };
+      result = { status: OUTCOME.FAILED, reason: 'adapter_threw' };
     }
     appliesActivation(result);
+    if (watched) {
+      const terminal = result.status === OUTCOME.COMPLETED
+        || result.status === OUTCOME.FAILED
+        || result.status === OUTCOME.INTERRUPTED
+        || result.status === OUTCOME.BLOCKED;
+      if (terminal) store.settle(key, { status: result.status, reason: result.reason });
+      // `busy`/`unavailable`: nothing was heard, so nothing is remembered.
+      else store.release(key);
+    }
+    if (result.status === OUTCOME.BLOCKED) rememberBlockedRetry(input, lang, source);
     return record(result, content, input, source, lang);
   }
 

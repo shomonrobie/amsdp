@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-20) · **Snapshot:** **92** markdown documents on disk, **89** of them registered below — **11** at the `docs/` root, **77** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk; Revision 33 added the appointment-types/capacity/capability specification and the Q1–Q5 implementation report → **88** registered, against **90** on disk; Revision 34 added the QUE-006/OD-1 browser speech-synthesis implementation report → **89** registered, against **91** on disk, the same two documents still unregistered under O-3; Revision 35 corrected that disk figure by one — the **92**nd document is the Phase 3 queue/DQDS/QUE-006 gap analysis, on disk but unregistered, its row proposed in its own Appendix C and not applied → **89** registered, against **92** on disk.)*
+> **Date:** 2026-11-10 (revised 2026-11-22) · **Snapshot:** **95** markdown documents on disk, **91** of them registered below — **11** at the `docs/` root, **79** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **5** files in `docs/chatgpt/`, of which the **4** planning documents carry rows in that section (§12) and the fifth is recorded as unregistered in Revision 36; the **4** unregistered documents are enumerated in Revision 36. Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk; Revision 33 added the appointment-types/capacity/capability specification and the Q1–Q5 implementation report → **88** registered, against **90** on disk; Revision 34 added the QUE-006/OD-1 browser speech-synthesis implementation report → **89** registered, against **91** on disk, the same two documents still unregistered under O-3; Revision 35 corrected that disk figure by one — the **92**nd document is the Phase 3 queue/DQDS/QUE-006 gap analysis, on disk but unregistered, its row proposed in its own Appendix C and not applied → **89** registered, against **92** on disk; Revision 36 registered the QUE-006 local-audio architecture/implementation plan and the QUE-006 F1–F4 corrections report → **91** registered, against **95** on disk.)* *(Document-count check, 2026-11-22, Revision 37: `find docs -name '*.md'` = **98** — three documents appeared in the tree after the 2026-11-20 snapshot; Revision 37 registered one of them, so **92** registered against **98** on disk, with the **6** unregistered files enumerated in Revision 37. The 95/91 figures above are left as the 2026-11-20 record and were not rewritten.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -694,6 +694,84 @@
 > (16,394 → **41,767**, grown by that document's own Phase-1D capability record of 2026-11-18,
 > which is not this task's work).
 
+> **Revision 36 — 2026-11-20**, task `AMSDP-QUE-006-F1-F4` — **two documents registered, no document
+> moved, renamed or deleted** (no migration-manifest entry, §11):
+> `architecture/AMSDP_QUE-006_Local_Audio_Announcement_Architecture_and_Implementation_Plan_V1.0.md`
+> (the plan of record for QUE-006 Intelligent Queue Announcements — the plan document that decides
+> the content/voice/dedupe/room questions, with its decision register `D-1…D-17`, open items
+> `O-1…O-10`, and the `A-4`/`A-13` gates that keep a browser-engine implementation from being described
+> as produced audio) and
+> `implementation/AMSDP_QUE-006_F1_F4_Announcement_Corrections_Implementation_Report_V1.0.md`
+> (the four corrections: **F1** the approved Bangla/English wording with the honorific owned by the
+> segment builder and rooms announced only as numbers, **F2** the six terminal outcomes where only
+> `end` proves delivery, **F3** the bounded per-event dedupe store replacing the single
+> `lastEventKey`/`lastEventAt` slot, and **F4** the room snapshot on the queue payload — additive
+> `room_id`/`room_name`/`location_label`/`room_source` resolved once per page from
+> `appointments.room_*` and wired into `pages/queue.js` — with 73/73 frontend announcement tests,
+> 253/253 frontend suite, 15/15 new backend room-snapshot tests and 464 backend suite results, and
+> the explicit statement that **no browser, device or playback run was performed**, so nothing is
+> claimed VERIFIED).
+> Row count increased from **89** to **91 registered**, against **95** files on disk. **The four
+> unregistered documents are enumerated so the arithmetic is honest:** the two **O-3** documents
+> (`implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md`,
+> `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` — O-3 is unchanged and this
+> revision does not adopt them), the Phase 3 gap analysis of Revision 35, and
+> `chatgpt/AMSDP_Project_Handover_2026-11-20.md` (26,412 bytes; **not** this task's document — it
+> appeared in the working tree from another session, it sits in a folder outside the §11 set, and its
+> ownership is unconfirmed, so per §11 it is **reported and left in place**, not registered and not
+> migrated). No product code, schema, migration, endpoint, permission or owner-controlled document
+> was touched by *this documentation act*; the test results cited above belong to the implementation
+> task and are attributed there, not re-claimed here. Nothing was staged, committed or pushed by this
+> task.
+
+> **Revision 37 — 2026-11-22**, task `AMSDP-WIN7-COMPAT-ASSESSMENT-2026-11-22` — **one document
+> registered, no document moved, renamed or deleted** (no migration-manifest entry, §11):
+> `implementation/AMSDP_Windows_Commit_Seven_File_Compatibility_Assessment_V1.0.md`
+> (a read-only compatibility assessment answering whether the seven files of remote commit `2fc007a`
+> can safely replace the Ubuntu working-copy versions — verdict **NOT SAFE TO REPLACE** on three
+> independently blocking grounds: the commit's `backend/queuing/main.py` imports `events.py` and
+> `announcements.py`, which do not exist in this tree, and its `announcements.py` needs a
+> `QueueAnnouncementDelivery` model that `common/models.py` does not define, so the queuing service
+> cannot start; the commit's `frontend` files import `prerecorded-audio.js`, `lib/queue/*`,
+> `call-announcer.js` and `queue-transitions.js`, none of which exist here, so `npm run build` in
+> `frontend/Dockerfile` fails; and the swap deletes the uncommitted QUE-006 **F1–F4** corrections —
+> doctor honorific, rooms spoken as numbers, the Bengali room-less refusal, `end`-only delivery and
+> the bounded client dedupe store — plus the four additive queue-payload room keys, while adding two
+> migrations (`a7c3f19d2b64`, `c4d8e2a91f60`) that would sit beside the current head `a9c4e1f7b2d8`
+> as a second head. The report also records the three-way blob matrix — **three of the seven files
+> (`backend/appointment/main.py`, `backend/queuing/recovery.py`,
+> `frontend/lib/announcements/speech-synthesis.js`) are byte-identical at Ubuntu HEAD**, so the
+> behaviour at risk is uncommitted working-tree work — a mixed-pairing matrix, and the corrective
+> gates **G-1…G-7** to satisfy before any replacement. Its executed evidence is the frontend
+> announcement suite before and after a sandbox overlay: **73/73 green on Ubuntu**, then two test
+> files unloadable (`DOCTOR_PREFIX` missing, `prerecorded-audio.js` not found) and **8 assertion
+> failures**, with the baseline reproduced in the sandbox first (**60/60**). **Nothing was verified at
+> runtime**: no container rebuilt or restarted, no live database contacted, no migration run, no
+> browser or audio run — so the container-crash and image-build conclusions are TESTED at the
+> module-resolution level and INSPECTED at the Dockerfile level, not VERIFIED end-to-end.
+> Row count increased from **91** to **92 registered**. **Document-count check, 2026-11-22
+> (Revision 37):** `find docs -name '*.md'` = **98** — the **95** files present on 2026-11-20 plus
+> three documents that appeared afterwards in the working tree — so **92 registered, 6 unregistered**,
+> and the six are enumerated so the arithmetic is honest:
+> `implementation/AMSDP_UBUNTU_REPLACEMENT_PREFLIGHT_REPORT.md`,
+> `implementation/QUE-006_UBUNTU_REPOSITORY_RECONCILIATION_EVIDENCE_REPORT.md` (both `??` in the
+> working tree, **not** this task's documents, ownership unconfirmed, so per §11 they are reported and
+> left in place, not registered and not migrated),
+> `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md` and
+> `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` (**O-3** unchanged — this revision
+> does not adopt them), `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md` (Revision 35's
+> proposed-but-unapplied row), and `chatgpt/AMSDP_Project_Handover_2026-11-20.md` (Revision 36's
+> out-of-tree artefact of unconfirmed ownership). The **95/91 snapshot sentence at the head of this
+> file is left as the 2026-11-20 record** and was not rewritten; this revision appends the dated
+> count-check note after it instead, in the style Revision 32 used, because two of the six unregistered
+> files are not this task's and rewriting the historical parenthetical would misattribute them. The
+> header's own *revised* date was bumped to **2026-11-22** — the only pre-existing line this task
+> replaced, and the only deleted line in this file's uncommitted diff against `HEAD` (`git diff
+> --numstat`); every other change is an addition. The Revision 36 text above, and this file's other
+> uncommitted Revision 36 edits, are untouched: this task **appended only**. No existing row was
+> overwritten. No product code, schema, migration, endpoint, permission, container or owner-controlled
+> document was touched; nothing was staged, committed or pushed by this task.
+
 ---
 
 
@@ -772,6 +850,7 @@ side.
 | `AMSDP_AI_Factory_Architecture_V1.0.md` | 56,079 | Touching `ai_factory/` internals (engine, harness, routing) | R |
 | `AMSDP_AI_Factory_Implementation_Prompt_V1.0.md` | 44,288 | Prompt/behaviour changes inside the AI Factory | R |
 | `AMSDP_Appointment_Types_Capacity_and_Capability_Spec_V1.0.md` | 28,085 | **Before changing appointment types, walk-ins, the outside-session override, slot capacity/seat allocation, the check-in capability, staff capability grants, or the cross-branch booking rule** — the behavioural specification of owner decisions Q1–Q5: the three persisted types and their refusal vocabulary, the `slot_allocations` guarantee and its stated limits, the capability catalogue with the closed delegable list, the check-in matrix, the grant endpoints, the audited schedule/session/policy events, the API surface and the statement→test map | — |
+| `AMSDP_QUE-006_Local_Audio_Announcement_Architecture_and_Implementation_Plan_V1.0.md` | 146,910 | **Before changing queue announcements, `lib/announcements/`, the queue payload's room fields, or the announcement wording** — the plan of record for QUE-006 Intelligent Queue Announcements: the four findings **F1–F4** with their remediation specifications and the code they prescribe, the decision register `D-1…D-17`, the open owner items `O-1…O-10`, the local-audio composition layers and fixed-phrase catalogue (§4–§5), the approved English/Bangla sentence composition (§6.2/§6.3), and the gates **A-4** (a browser engine is an optional alternative, never the requirement) and **A-13** (no claim of produced audio without a real playback run) | — |
 
 ### `architecture/saas/` — the Hybrid SaaS architecture set (six coordinated documents)
 
@@ -863,6 +942,9 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md` | 28,589 | **Before changing an appointment/scheduling write path, a slot or capacity rule, or the booking dialog's messages** — what each of F-01…F-19 was fixed by (with the function and test that prove it), the two partial closures (F-01's database constraint, F-18's *unscheduled* marking) — **§10** records how the owner decisions Q1–Q5 then closed both, with a pointer to the Q1–Q5 report — and the original evidence: 12 pre-existing failures accounted for, 269/269 on the affected backend subset, 179/179 frontend, `next build` compiled | — |
 | `AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md` | 25,642 | **Before changing appointment types, walk-ins, `slot_allocations`, `appointment.check_in`, `appointment.create_unscheduled`, staff capability grants or cross-branch booking** — what Q1–Q5 actually produced (code, endpoint, migration `a9c4e1f7b2d8`, test), the evidence standard reached for each claim, the backfill caveat for pre-existing slot overruns, and the open owner items O-1…O-7 (Business Rules vocabulary, no formal decision record, grants being API-only, no historic repair) | — |
 | `AMSDP_QUE-006_OD-1_Browser_Speech_Synthesis_Implementation_Report_V1.0.md` | 28,119 | **Before changing queue announcements, `lib/announcements/`, the `/queue` announcement panel, or the OD-3 wording** — the Web Speech API adapter and its "silence is not success" rule, the voice-selection rules that never substitute a language, the token-serial pronunciation rule and the PII boundary, the duplicate/overlap policy, the room clause no queue payload can supply (**O-1**), the absent facility configuration (**O-2**), the absent server-side event/audit (**O-3**), and the fact that **no browser or device playback run was performed** — nothing is VERIFIED | — |
+| `AMSDP_QUE-006_F1_F4_Announcement_Corrections_Implementation_Report_V1.0.md` | 29,118 | **Before changing the announcement wording, the outcome vocabulary, `lib/announcements/dedupe.js`, or the queue payload's room fields** — what F1–F4 actually changed and what proves it: the honorific owned by the segment builder and numeric-only room speech (with the Bengali room-less refusal `no_room`), the six terminal outcomes where only `end` proves delivery, the bounded per-event dedupe store with its TTL/backoff/`maxKeys` table and the `busy`/`unavailable` `release()` rule, the additive `room_id`/`room_name`/`location_label`/`room_source` resolved once per page from `appointments.room_*`, and the `pages/queue.js` wiring gap it closed (`entry.room` → `entry.room_name`); 73/73 announcement tests, 253/253 frontend suite, 15/15 room-snapshot tests, 464 backend suite — and **no browser/device playback run**, so nothing is VERIFIED and nothing is ACCEPTED | — |
+| `AMSDP_Windows_Commit_Seven_File_Compatibility_Assessment_V1.0.md` | 53,312 | **Before replacing any Ubuntu working-copy file with remote commit `2fc007a`** — the verdict (**NOT SAFE TO REPLACE**) and the three reasons: the commit's `queuing/main.py` imports `events.py`/`announcements.py` and a `QueueAnnouncementDelivery` model that do not exist here (the container cannot start), the commit's frontend imports `prerecorded-audio.js`, `lib/queue/*`, `call-announcer.js`, `queue-transitions.js` that do not exist either (the image build fails), the two new migrations would put a second Alembic head beside `a9c4e1f7b2d8`, and the swap deletes the uncommitted F1–F4 behaviours (doctor honorific, spoken room, room-less refusal, `end`-only delivery, client dedupe) while changing what patients hear; also carries the three-way blob matrix (**three of the seven files are identical at Ubuntu HEAD** — the Ubuntu work exists only in the working tree), the mixed-pairing matrix, the executed probe run (Ubuntu 73/73 → 2 unloadable files + 8 assertion failures) and the gates G-1…G-7 to satisfy first | — |
+
 
 
 

@@ -66,13 +66,18 @@ def _notify(event: str, *args) -> None:
         logger.warning("notification hook %s failed", event, exc_info=False)
 
 
-def _entry_payload(entry):
-    """Serialize with the queue service's own shape (single source of truth)."""
+def _entry_payload(session, entry):
+    """Serialize with the queue service's own shape (single source of truth).
+
+    The room is resolved from the entry's appointment snapshot inside the queue
+    service's helper, so a recovered entry announces exactly the same room it
+    would have announced before the recovery (QUE-006 F4).
+    """
     try:
-        from .main import _entry_to_dict
+        from .main import _entry_to_dict, _room_for_entry
     except ImportError:  # service launched as ``main:app`` in its container
-        from main import _entry_to_dict
-    return _entry_to_dict(entry)
+        from main import _entry_to_dict, _room_for_entry
+    return _entry_to_dict(entry, _room_for_entry(session, entry))
 
 
 def _scoped_entry(session, auth: AuthContext, entry_id: str) -> QueueEntry:
@@ -172,7 +177,7 @@ def mark_missed_turn(entry_id: str, data: MissedTurnRequest,
                             "appointment_id": entry.appointment_id or ""},
                      reason=data.reason)
         session.commit()
-        payload = _entry_payload(entry)
+        payload = _entry_payload(session, entry)
         payload["recovery"] = {"state": "awaiting_recovery",
                                "previous_status": previous_status,
                                "position": entry.position,
@@ -260,7 +265,7 @@ def recover_entry(entry_id: str, data: RecoveryRequest,
                             "repositioned_others": repositioned},
                      reason=reason)
         session.commit()
-        payload = _entry_payload(entry)
+        payload = _entry_payload(session, entry)
         payload["recovery"] = {"state": "recovered", "mode": mode,
                                "previous_status": previous_status,
                                "previous_position": previous_position,

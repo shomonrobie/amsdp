@@ -7,17 +7,24 @@
  * boundary) is browser-free and unit-testable; everything browser-specific —
  * voice enumeration, utterance construction, autoplay refusal — is here.
  *
- * Contract:
- *   - `speak()` never throws and never rejects. It resolves with an outcome
- *     object, so a queue operation can never be failed by audio.
+ * Contract (`AMSDP_QUE-006_Local_Audio_Announcement_Architecture_and_
+ * Implementation_Plan_V1.0.md` §8.2 — the vocabulary shared by every engine):
+ *
+ *   - `speak()` never throws and never rejects. It resolves with one **terminal
+ *     outcome** — `completed`, `failed`, `interrupted`, `blocked`, `busy`,
+ *     `unavailable` — so a queue operation can never be failed by audio.
+ *   - `completed` is emitted **only** when the utterance reports `end`. A
+ *     `start` event is progress, not proof: resolving on `start` is the F2
+ *     defect this contract removes, because a browser that begins an utterance
+ *     and then dies would otherwise be reported as a delivered announcement.
  *   - "returned without an exception" is NOT treated as proof of audio. An
  *     utterance that never fires `start` is reported as `blocked`, which is how
  *     a browser autoplay refusal actually looks.
  *   - one utterance at a time. A second call while speaking resolves `busy`
  *     rather than overlapping; `replace: true` cancels the first instead.
  *   - a language is never substituted. If Bangla is configured and no Bangla
- *     voice exists, the outcome is `no_voice` — an English voice is never used
- *     to read Bangla text.
+ *     voice exists, the outcome is `unavailable` with `reason: 'voice_unavailable'`
+ *     — an English voice is never used to read Bangla text.
  */
 
 /** What the browser can do for a language right now. */
@@ -28,16 +35,26 @@ export const CAPABILITY = Object.freeze({
   NO_VOICE: 'no_voice',         // voices exist, none for the requested language
 });
 
-/** The outcome of one playback attempt. */
+/**
+ * The terminal outcome of one playback attempt (§8.2). Every engine reports the
+ * same six words; `reason` carries the specific cause.
+ */
 export const OUTCOME = Object.freeze({
-  SPOKEN: 'spoken',             // the browser reported that speech started
-  BLOCKED: 'blocked',           // refused: autoplay policy, no device, or no start
+  COMPLETED: 'completed',       // the engine reported that speech finished
+  FAILED: 'failed',             // synthesis started but did not finish, or refused
+  INTERRUPTED: 'interrupted',   // cancelled by us, by the page, or by the browser
+  BLOCKED: 'blocked',           // refused before it began: autoplay policy / no start
   BUSY: 'busy',                 // another utterance is in progress
-  CANCELLED: 'cancelled',       // cancelled by us, by the page, or by the browser
-  NO_VOICE: 'no_voice',
-  UNSUPPORTED: 'unsupported',
-  PENDING: 'pending_voices',
-  ERROR: 'error',
+  UNAVAILABLE: 'unavailable',   // the engine cannot serve this language/voice
+
+  // Names kept for callers written before the shared vocabulary landed. They map
+  // onto the six terminal words above, so old and new code agree on every value.
+  SPOKEN: 'completed',
+  CANCELLED: 'interrupted',
+  NO_VOICE: 'unavailable',
+  UNSUPPORTED: 'unavailable',
+  PENDING: 'unavailable',
+  ERROR: 'failed',
 });
 
 /** BCP-47 tag used for each supported announcement language (OD-3). */
@@ -123,6 +140,12 @@ export function createSpeechSynthesisAdapter(options = {}) {
     clearTimeout: (id) => clearTimeout(id),
   };
   const startTimeoutMs = Number.isFinite(options.startTimeoutMs) ? options.startTimeoutMs : 1500;
+  // Upper bound for "started but never finished". Without it a stuck engine
+  // leaves the controller believing it is speaking for ever.
+  const endTimeoutMs = Number.isFinite(options.endTimeoutMs)
+    ? Math.max(0, options.endTimeoutMs)
+    : Math.max(5000, (typeof text === 'string' ? text.length : 0) * 250);
+  const now = typeof options.now === 'function' ? options.now : () => Date.now();
 
   const supported = !!(
     synth
@@ -171,16 +194,21 @@ export function createSpeechSynthesisAdapter(options = {}) {
       timers.clearTimeout(current.timer);
       current.timer = null;
     }
+    if (current && current.endTimer != null) {
+      timers.clearTimeout(current.endTimer);
+      current.endTimer = null;
+    }
   }
 
-  /** Cancel whatever is playing; the pending `speak()` resolves `cancelled`. */
+  /** Cancel whatever is playing; the pending `speak()` resolves `interrupted`. */
   function cancel() {
     if (!supported) return;
     const pending = current;
     current = null;
     if (pending) {
       if (pending.timer != null) timers.clearTimeout(pending.timer);
-      pending.resolve({ status: OUTCOME.CANCELLED, reason: 'cancelled' });
+      if (pending.endTimer != null) timers.clearTimeout(pending.endTimer);
+      pending.resolve({ status: OUTCOME.INTERRUPTED, reason: 'cancelled' });
     }
     try { synth.cancel(); } catch (err) { /* a cancel must never throw upwards */ }
   }
@@ -198,9 +226,9 @@ export function createSpeechSynthesisAdapter(options = {}) {
    */
   function speak(text, opts = {}) {
     const value = typeof text === 'string' ? text : '';
-    if (disposed) return Promise.resolve({ status: OUTCOME.UNSUPPORTED, reason: 'disposed' });
-    if (!value) return Promise.resolve({ status: OUTCOME.ERROR, reason: 'empty_text' });
-    if (!supported) return Promise.resolve({ status: OUTCOME.UNSUPPORTED });
+    if (disposed) return Promise.resolve({ status: OUTCOME.UNAVAILABLE, reason: 'disposed' });
+    if (!value) return Promise.resolve({ status: OUTCOME.FAILED, reason: 'empty_text' });
+    if (!supported) return Promise.resolve({ status: OUTCOME.UNAVAILABLE, reason: 'unsupported' });
 
     const language = isLanguage(opts.language) ? opts.language : 'bn';
 
@@ -212,10 +240,14 @@ export function createSpeechSynthesisAdapter(options = {}) {
     let voice = null;
     if (!opts.prime) {
       const voices = listVoices();
-      if (!voices.length) return Promise.resolve({ status: OUTCOME.PENDING, language });
+      if (!voices.length) {
+        return Promise.resolve({ status: OUTCOME.UNAVAILABLE, language, reason: 'voices_not_loaded' });
+      }
       const picked = pickVoice(voices, language);
       // A missing language is reported, never substituted with another one.
-      if (!picked) return Promise.resolve({ status: OUTCOME.NO_VOICE, language });
+      if (!picked) {
+        return Promise.resolve({ status: OUTCOME.UNAVAILABLE, language, reason: 'voice_unavailable' });
+      }
       voice = picked.voice;
     }
 
@@ -223,7 +255,7 @@ export function createSpeechSynthesisAdapter(options = {}) {
     try {
       utterance = new Utterance(value);
     } catch (err) {
-      return Promise.resolve({ status: OUTCOME.ERROR, language, reason: 'utterance_failed' });
+      return Promise.resolve({ status: OUTCOME.FAILED, language, reason: 'utterance_failed' });
     }
 
     try {
@@ -241,6 +273,7 @@ export function createSpeechSynthesisAdapter(options = {}) {
 
     return new Promise((resolve) => {
       let resolved = false;
+      let startedAt = 0;
       const settle = (result) => {
         if (resolved) return;
         resolved = true;
@@ -249,39 +282,57 @@ export function createSpeechSynthesisAdapter(options = {}) {
       const stopTracking = () => {
         if (current && current.utterance === utterance) {
           if (current.timer != null) timers.clearTimeout(current.timer);
+          if (current.endTimer != null) timers.clearTimeout(current.endTimer);
           current = null;
         }
       };
 
+      // `start` is progress, not an outcome. It proves the engine accepted the
+      // utterance; only `end` proves the patient heard it (§8.1 rule 1).
       utterance.onstart = () => {
-        if (current && current.utterance === utterance && current.timer != null) {
-          timers.clearTimeout(current.timer);
-          current.timer = null;
+        startedAt = now();
+        if (current && current.utterance === utterance) {
+          if (current.timer != null) {
+            timers.clearTimeout(current.timer);
+            current.timer = null;
+          }
+          current.endTimer = timers.setTimeout(() => {
+            if (current && current.utterance === utterance) {
+              current = null;
+              try { synth.cancel(); } catch (err) { /* ignore */ }
+              settle({ status: OUTCOME.FAILED, language, reason: 'no_end_event' });
+            }
+          }, endTimeoutMs);
         }
-        settle({
-          status: OUTCOME.SPOKEN,
-          language,
-          voice: voice ? { name: voice.name || '', lang: voice.lang || '' } : null,
-        });
+        if (typeof utterance.onprogress === 'function') {
+          try { utterance.onprogress({ phase: 'speaking' }); } catch (err) { /* progress only */ }
+        }
       };
 
       utterance.onend = () => {
         stopTracking();
-        // A very short utterance can end before `start` is observed.
         settle({
-          status: OUTCOME.SPOKEN,
+          status: OUTCOME.COMPLETED,
           language,
           voice: voice ? { name: voice.name || '', lang: voice.lang || '' } : null,
+          durationMs: startedAt ? Math.max(0, now() - startedAt) : 0,
         });
       };
 
       utterance.onerror = (event) => {
         stopTracking();
         const code = event && event.error ? String(event.error) : '';
-        let status = OUTCOME.ERROR;
-        if (CANCELLED_CODES.includes(code)) status = OUTCOME.CANCELLED;
-        else if (BLOCKED_CODES.includes(code)) status = OUTCOME.BLOCKED;
-        settle({ status, language, reason: code || 'synthesis_error' });
+        let status = OUTCOME.FAILED;
+        let reason = code || 'synthesis_error';
+        if (CANCELLED_CODES.includes(code)) {
+          // A cancellation is an interruption whether or not `start` was
+          // observed; only a blocked/refused engine or a silent engine is
+          // reported as `blocked`.
+          status = OUTCOME.INTERRUPTED;
+        } else if (BLOCKED_CODES.includes(code)) {
+          status = OUTCOME.BLOCKED;
+        }
+        settle({ status, language, reason });
       };
 
       current = {
@@ -296,13 +347,14 @@ export function createSpeechSynthesisAdapter(options = {}) {
             settle({ status: OUTCOME.BLOCKED, language, reason: 'no_start_event' });
           }
         }, startTimeoutMs),
+        endTimer: null,
       };
 
       try {
         synth.speak(utterance);
       } catch (err) {
         stopTracking();
-        settle({ status: OUTCOME.ERROR, language, reason: 'speak_threw' });
+        settle({ status: OUTCOME.FAILED, language, reason: 'speak_threw' });
       }
     });
   }

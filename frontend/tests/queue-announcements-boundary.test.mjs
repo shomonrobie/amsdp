@@ -77,6 +77,18 @@ test('announcing is not a queue action', () => {
   assert.match(body, /userGesture: true/, 'a click may recover audio the browser blocked');
 });
 
+test('the page announces the room the payload carries', () => {
+  const page = read('pages/queue.js');
+  const start = page.indexOf('const announceEntry');
+  const body = page.slice(start, page.indexOf('\n  };', start));
+  // QUE-006 / F4: the room reaches the announcement from the queue payload's
+  // appointment snapshot (`room_name`), never from a placeholder field.
+  assert.match(body, /room: entry\.room_name/,
+    'the announcement reads the room the payload carries');
+  assert.ok(!/room: entry\.room,/.test(body),
+    'the stale `entry.room` placeholder is gone');
+});
+
 test('the panel defers browser state until after mount', () => {
   const src = read('components/queue/QueueAnnouncements.js');
   assert.match(src, /if \(!mounted\) return null;/,

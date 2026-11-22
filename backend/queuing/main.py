@@ -16,6 +16,7 @@ from common.models import QueueEntry, QueueSequence, Appointment, Patient, Docto
 from common.auth import AuthContext, get_current_user, require_permission, branch_accessible
 from common.permissions import check as permission_check
 from common.audit import record_audit
+from common.locations import room_payload
 from common.queue_tokens import allocate_daily_token, token_for
 from common.timeutil import operational_today
 from common.log_redaction import install_token_redaction
@@ -79,7 +80,21 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _entry_to_dict(e):
+def _entry_to_dict(e, room=None):
+    """Serialize a queue entry.
+
+    ``room`` is the entry's **appointment location snapshot**, resolved by the
+    caller (QUE-006 F4 option R1). It is passed in rather than looked up here so
+    a page of entries costs one query instead of one per row, and so no code path
+    can accidentally read the doctor's *current* chamber instead of the room the
+    patient was told at booking.
+
+    The four room fields are additive and backward compatible. ``room_source``
+    is ``'appointment_snapshot'`` only when the snapshot carries an announceable
+    room name; walk-ins (no appointment, no capture yet) report ``''`` and the
+    announcement correctly degrades to the approved room-less sentence.
+    """
+    room = room or {}
     return {"id": e.id, "queue_entry_id": e.id,
         "organization_id": e.organization_id, "branch_id": e.branch_id,
         "doctor_id": e.doctor_id, "date": str(e.date),
@@ -89,7 +104,41 @@ def _entry_to_dict(e):
         "status_history": e.status_history or [],
         "position_history": e.position_history or [],
         "notes": e.notes or "", "added_by": e.added_by or "",
+        "room_id": room.get("room_id") or "",
+        "room_name": room.get("room_name") or "",
+        "location_label": room.get("label") or "",
+        "room_source": room.get("source") or "",
         "created_at": str(e.created_at) if e.created_at else ""}
+
+
+def _rooms_for(session, entries):
+    """Batch-resolve appointment location snapshots for a page of entries.
+
+    One query for the whole page — the same pattern the existing patient/doctor
+    name maps use — so listing N entries never becomes N+1 queries. The snapshot
+    read is ``appointments.room_*`` (booking-time truth), never
+    ``schedule_sessions`` or ``doctor_branches`` (current truth).
+    """
+    appt_ids = {e.appointment_id for e in entries if e.appointment_id}
+    if not appt_ids:
+        return {}
+    appts = session.query(Appointment).filter(
+        Appointment.id.in_(appt_ids),
+        Appointment.organization_id.in_({e.organization_id for e in entries}),
+    ).all()
+    return {a.id: room_payload(a) for a in appts}
+
+
+def _room_for_entry(session, entry):
+    """Resolve one entry's room for a single-entry action response."""
+    if not entry.appointment_id:
+        return None
+    appt = session.query(Appointment).filter(
+        Appointment.id == entry.appointment_id,
+        Appointment.organization_id == entry.organization_id,
+    ).first()
+    return room_payload(appt) if appt else None
+
 
 
 def _next_sequence(session, doctor_id: str, day):
@@ -144,7 +193,8 @@ def get_queue(doctor_id: str = Query(...), date: str = Query(...),
         elif auth.branch_id and not (auth.is_super_admin or auth.is_org_admin):
             q = q.filter(QueueEntry.branch_id == auth.branch_id)
         entries = q.order_by(QueueEntry.position).all()
-        result = [_entry_to_dict(e) for e in entries]
+        rooms = _rooms_for(session, entries)
+        result = [_entry_to_dict(e, rooms.get(e.appointment_id)) for e in entries]
         pnames = {p.id: p.name for p in session.query(Patient).filter(
             Patient.id.in_({e.patient_id for e in entries})).all()}
         dnames = {d.id: d.name for d in session.query(Doctor).filter(
@@ -266,7 +316,8 @@ def check_in_appointment(data: CheckInRequest,
                      after={"status": "waiting", "position": pos, "token": token},
                      reason="check-in from appointment")
         session.commit()
-        result = _entry_to_dict(entry); result["patient_name"] = ""
+        result = _entry_to_dict(entry, room_payload(appt))
+        result["patient_name"] = ""
         # Sequence 3: the patient is physically here — cancel the pending
         # reminder and re-plan the reminders of everybody still waiting.
         _notify("on_appointment_closed", appt.id, "checked in to queue")
@@ -453,7 +504,7 @@ def queue_action(entry_id: str, data: QueueAction,
                     f"queue {data.action}")
         _notify("on_queue_changed", entry.organization_id, entry.doctor_id,
                 entry.date, f"queue {data.action}")
-        return _entry_to_dict(entry)
+        return _entry_to_dict(entry, _room_for_entry(session, entry))
     except HTTPException:
         session.rollback(); raise
     except Exception:
@@ -580,7 +631,8 @@ def queue_history(doctor_id: str = Query(...), date: str = Query(...),
             # branch_id is omitted.
             q = q.filter(QueueEntry.branch_id == auth.branch_id)
         entries = q.order_by(QueueEntry.position).all()
-        return [_entry_to_dict(e) for e in entries]
+        rooms = _rooms_for(session, entries)
+        return [_entry_to_dict(e, rooms.get(e.appointment_id)) for e in entries]
     finally:
         session.close()
         session.close()

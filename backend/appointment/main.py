@@ -21,6 +21,7 @@ from common.auth import (AuthContext, branch_accessible, get_current_user,
                          require_permission)
 from common.config import get_appointment_config, reserved_for_capacity
 from common.audit import record_audit
+from common.locations import location_label
 from common.capacity import SlotFull, claim_seat, release_seat
 from common.queue_tokens import allocate_daily_token, token_for
 from common.timeutil import operational_now, operational_today
@@ -236,9 +237,14 @@ class WalkInCreate(BaseModel):
 
 
 def _location_label(a) -> str:
-    """Human-readable chamber snapshot, e.g. ``2nd Floor / Cardiology / 204``."""
-    parts = [p for p in (a.floor_name, a.department_name, a.room_name) if p]
-    return " / ".join(parts)
+    """Human-readable chamber snapshot, e.g. ``2nd Floor / Cardiology / 204``.
+
+    Delegates to ``common.locations`` so the appointment API, the printed slip
+    and the QUE-006 queue announcement cannot disagree about how a location
+    reads. The queue carries ``room_name`` separately for speech; this label is
+    the human-facing form.
+    """
+    return location_label(a)
 
 
 def _appt_to_dict(a, symptoms):

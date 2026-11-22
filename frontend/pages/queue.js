@@ -61,8 +61,11 @@ export default function Queue(){
         action: 'announce',
         token: entry.token,
         doctorName: entry.doctor_name,
-        // No queue endpoint returns a room yet; omitted rather than invented.
-        room: entry.room,
+        // QUE-006 / F4: the room is the appointment's *booking snapshot*, which
+        // the queue payload now carries as `room_name`. A walk-in has no
+        // snapshot, so this is empty and the announcement falls back to the
+        // approved room-less sentence rather than guessing a chamber.
+        room: entry.room_name,
       },
       { source: 'operator', userGesture: true }
     );

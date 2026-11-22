@@ -52,6 +52,7 @@ function fakeSynth(voices, options = {}) {
       if (options.onSpeak) { options.onSpeak(utterance); return; }
       if (options.fireStart === false) return;
       if (typeof utterance.onstart === 'function') utterance.onstart();
+      if (options.fireEnd === false) return;
       if (typeof utterance.onend === 'function') utterance.onend();
     },
     cancel() { calls.cancel += 1; },
@@ -75,11 +76,13 @@ function build(voices, options = {}) {
   return { synth, timers, adapter };
 }
 
-test('without a speech engine the adapter is unsupported, not broken', async () => {
+test('without a speech engine the adapter is unavailable, not broken', async () => {
   const adapter = createSpeechSynthesisAdapter({ scope: {}, synth: null, Utterance: null });
   assert.equal(adapter.isSupported(), false);
   assert.equal(adapter.capability('bn').status, CAPABILITY.UNSUPPORTED);
-  assert.deepEqual(await adapter.speak('hello', { language: 'en' }), { status: OUTCOME.UNSUPPORTED });
+  assert.deepEqual(await adapter.speak('hello', { language: 'en' }), {
+    status: OUTCOME.UNAVAILABLE, reason: 'unsupported',
+  });
   adapter.cancel();
   adapter.dispose();
 });
@@ -117,15 +120,35 @@ test('capability distinguishes "no voices yet" from "no voice for this language"
   englishOnly.adapter.dispose();
 });
 
-test('speaking sets the language and the chosen voice, and reports spoken', async () => {
+test('speaking sets the language and the chosen voice, and reports completed', async () => {
   const { adapter, synth } = build([BN_VOICE]);
   const result = await adapter.speak('টোকেন নম্বর ৪', { language: 'bn' });
-  assert.equal(result.status, OUTCOME.SPOKEN);
+  assert.equal(result.status, OUTCOME.COMPLETED);
   assert.equal(result.voice.lang, 'bn-BD');
+  assert.equal(typeof result.durationMs, 'number');
   assert.equal(synth.calls.speak.length, 1);
   assert.equal(synth.calls.speak[0].text, 'টোকেন নম্বর ৪');
   assert.equal(synth.calls.speak[0].voice, BN_VOICE);
   assert.equal(synth.calls.speak[0].lang, 'bn-BD');
+  adapter.dispose();
+});
+
+test('start is progress, not completion: only `end` resolves completed', async () => {
+  // The F2 defect: resolving on `start` reported an announcement as delivered
+  // before it had finished. After `start` the adapter must still be speaking.
+  const { adapter, timers } = build([EN_VOICE], { fireEnd: false });
+  let settled = null;
+  const pending = adapter.speak('Token number 4', { language: 'en' })
+    .then((result) => { settled = result; return result; });
+
+  assert.equal(settled, null, '`start` alone must not settle the promise');
+  assert.equal(adapter.isSpeaking(), true);
+
+  timers.runAll();
+  const result = await pending;
+  assert.equal(result.status, OUTCOME.FAILED);
+  assert.equal(result.reason, 'no_end_event');
+  assert.equal(adapter.isSpeaking(), false, 'a stuck engine is released, not left speaking');
   adapter.dispose();
 });
 
@@ -168,12 +191,13 @@ test('an autoplay refusal reported by the engine is blocked', async () => {
   adapter.dispose();
 });
 
-test('a cancelled utterance is reported as cancelled, not as spoken', async () => {
+test('a cancelled utterance is reported as interrupted, not as spoken', async () => {
   const { adapter } = build([EN_VOICE], {
     onSpeak: (u) => u.onerror({ error: 'canceled' }),
   });
   const result = await adapter.speak('hello', { language: 'en' });
-  assert.equal(result.status, OUTCOME.CANCELLED);
+  assert.equal(result.status, OUTCOME.INTERRUPTED);
+  assert.equal(result.reason, 'canceled');
   adapter.dispose();
 });
 

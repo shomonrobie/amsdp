@@ -64,3 +64,4 @@ Thumbs.db
 ai_factory/var/
 ai_factory/runs/
 ai_factory/workspaces/
+.aider*

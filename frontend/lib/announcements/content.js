@@ -1,4 +1,4 @@
-/* QUE-006 — approved announcement content (product owner decision OD-3).
+/* QUE-006 — approved announcement content.
  *
  * This module is the *only* place announcement wording is assembled, so the
  * spoken surface can be reviewed in one file. It is deliberately pure: no DOM,
@@ -13,29 +13,63 @@
  *     `T-<doctor-id fragment>-<serial>` and the fragment is an internal
  *     identifier. Only the trailing serial is spoken, as a plain number.
  *
- * Approved wording (OD-3):
- *   bn  টোকেন নম্বর [সংখ্যা], ডা. [ডাক্তারের নাম], কক্ষ [কক্ষ নম্বর]-এ আসুন।
- *   en  Token number [number], Dr. [doctor name], Room [room].
+ * Approved wording — `AMSDP_QUE-006_Local_Audio_Announcement_Architecture_and_
+ * Implementation_Plan_V1.0.md` §6.2/§6.3, quoted there as the sentence the
+ * content tests must assert:
  *
- * Room-less variants (documented dependency, see the implementation report):
- * no queue payload or queue endpoint carries a room today, so the room clause
- * is dropped rather than invented. Both variants are marked `derived` in the
- * returned `fields` so a caller can tell which one was used.
+ *   en  with room    Token number 4, Dr. Rahim Uddin, please proceed to Room 305.
+ *   en  no room      Token number 4, Dr. Rahim Uddin, please proceed.
+ *   bn  with room    টোকেন নম্বর ৪, ডা. রহিম উদ্দিন, কক্ষ ৩০৫-এ আসুন।
+ *   bn  no room      NOT APPROVED (§18 O-3) — refuse with `no_room` rather than
+ *                    speak a sentence that reads as "…come".
+ *
+ * Two defects of the previous shipped wording are fixed here, not worked around
+ * in the caller (§3.1 F1.4/F1.6):
+ *
+ *   1. the English sentence carries "please proceed to" (it used to jump
+ *      straight from the doctor to "Room 305");
+ *   2. the honorific is part of the *segment builder*, so a doctor name that
+ *      already starts "Dr." is never spoken as "Dr. Dr.".
  */
 
-/** Languages a queue announcement may be spoken in (OD-3). */
+/** Languages a queue announcement may be spoken in. */
 export const ANNOUNCEMENT_LANGUAGES = Object.freeze(['bn', 'en']);
 
-/** Approved templates. `{number}`, `{doctor}` and `{room}` are the only slots. */
+/** The honorific each language's doctor segment is prefixed with (§6.2/§6.3). */
+export const DOCTOR_PREFIX = Object.freeze({ bn: 'ডা.', en: 'Dr.' });
+
+/**
+ * Approved templates. `{number}`, `{doctor}` and `{room}` are the only slots.
+ *
+ * `{doctor}` arrives already carrying its honorific exactly once (see
+ * `doctorSegment`), which is why the template does not hard-code `Dr.`.
+ *
+ * `bn.noRoom` is `null` on purpose: the room-less Bangla sentence is an open
+ * wording question (§18 O-3). A `null` template makes the refusal structural
+ * instead of a comment somebody can forget.
+ */
 export const TEMPLATES = Object.freeze({
   bn: Object.freeze({
-    withRoom: 'টোকেন নম্বর {number}, ডা. {doctor}, কক্ষ {room}-এ আসুন।',
-    noRoom: 'টোকেন নম্বর {number}, ডা. {doctor}, আসুন।',
+    withRoom: 'টোকেন নম্বর {number}, {doctor}, কক্ষ {room}-এ আসুন।',
+    noRoom: null,
   }),
   en: Object.freeze({
-    withRoom: 'Token number {number}, Dr. {doctor}, Room {room}.',
-    noRoom: 'Token number {number}, Dr. {doctor}.',
+    withRoom: 'Token number {number}, {doctor}, please proceed to Room {room}.',
+    noRoom: 'Token number {number}, {doctor}, please proceed.',
   }),
+});
+
+/**
+ * Why a sentence was refused or degraded, in the shared vocabulary of the
+ * architecture plan §8.2. Returned verbatim by `buildAnnouncement().reason` and
+ * by a plan's `reason`, so the panel never has to invent a phrase.
+ */
+export const SKIP_REASON = Object.freeze({
+  UNSUPPORTED_LANGUAGE: 'unsupported_language',
+  MISSING_DOCTOR_NAME: 'missing_doctor_name',
+  UNSPEAKABLE_TOKEN: 'unspeakable_token',
+  NO_ROOM: 'no_room',
+  ROOM_NOT_ANNOUNCEABLE: 'room_not_announceable',
 });
 
 /** Fields that must never influence the spoken text. Declared so it is explicit. */
@@ -69,6 +103,17 @@ function cleanText(value) {
     .trim();
 }
 
+/** Honorifics a doctor name may already carry. Matched once, at the start. */
+const HONORIFIC_RE = /^(?:dr\.?|doctor\.?|ডা\.?|ডাক্তার)(?=\s|$)/i;
+
+/**
+ * A room is announced as a number. Anything else ("Cabin A", "Room 305",
+ * "৩০৫-এ") is not guessed at: it degrades to the room-less sentence and says
+ * why (§6.4), because speaking a plausible-but-wrong room is worse than
+ * speaking none.
+ */
+export const MAX_ROOM_DIGITS = 4;
+
 /**
  * The number an announcement may speak for a queue token.
  *
@@ -93,35 +138,108 @@ export function spokenTokenNumber(token) {
 }
 
 /**
+ * The token serial as an integer — what the local-audio plan speaks as a clip
+ * id. `null` means "not speakable", never `NaN` and never a guess.
+ *
+ * @param {unknown} token
+ * @returns {number|null}
+ */
+export function tokenSerial(token) {
+  const number = spokenTokenNumber(token);
+  return number === null ? null : Number(number);
+}
+
+/**
+ * Remove an honorific the name already carries so it is spoken exactly once.
+ * `'Dr. Rahim Uddin'` and `'Rahim Uddin'` both yield `'Rahim Uddin'`.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function doctorNameWithoutHonorific(value) {
+  let name = cleanText(value);
+  // Bounded, not `while(true)`: a pathological name ("Dr. Dr. Dr. …") must not
+  // become an unbounded loop in an audio path.
+  for (let pass = 0; pass < 3 && name; pass += 1) {
+    const next = name.replace(HONORIFIC_RE, '').trim();
+    if (next === name) break;
+    name = next;
+  }
+  return name;
+}
+
+/**
+ * The spoken doctor segment, honorific included exactly once, or `''` when the
+ * name is absent after normalisation (which the caller treats as a refusal).
+ *
+ * @param {unknown} value
+ * @param {'bn'|'en'} language
+ * @returns {string}
+ */
+export function doctorSegment(value, language) {
+  const lang = ANNOUNCEMENT_LANGUAGES.includes(language) ? language : null;
+  if (!lang) return '';
+  const name = doctorNameWithoutHonorific(value);
+  if (!name) return '';
+  return DOCTOR_PREFIX[lang] + ' ' + name;
+}
+
+/**
+ * A room the announcer may speak, as ASCII digits, or `null`.
+ *
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export function roomNumberForSpeech(value) {
+  const raw = cleanText(value);
+  if (!raw) return null;
+  const digits = toAsciiDigits(raw).trim();
+  if (!new RegExp('^[0-9]{1,' + MAX_ROOM_DIGITS + '}$').test(digits)) return null;
+  return digits;
+}
+
+/**
  * Build the spoken text for one queue announcement.
  *
  * Only `token`, `doctorName` and `room` are read from `input`; every other key
  * is ignored, which is what keeps patient identity out of the spoken payload.
  *
  * @param {{token?: unknown, doctorName?: unknown, room?: unknown}} input
- * @param {string} language `'bn'` or `'en'` (OD-3; no silent fallback)
+ * @param {string} language `'bn'` or `'en'` (no silent fallback)
  * @returns {{ok: true, language: string, text: string, fields: object}
- *          | {ok: false, reason: string}}
+ *          | {ok: false, reason: string, fields?: object}}
  */
 export function buildAnnouncement(input, language) {
   const lang = ANNOUNCEMENT_LANGUAGES.includes(language) ? language : null;
-  if (!lang) return { ok: false, reason: 'unsupported_language' };
+  if (!lang) return { ok: false, reason: SKIP_REASON.UNSUPPORTED_LANGUAGE };
 
   const source = input && typeof input === 'object' ? input : {};
-  const doctorName = cleanText(source.doctorName);
-  if (!doctorName) return { ok: false, reason: 'missing_doctor_name' };
+  const doctor = doctorSegment(source.doctorName, lang);
+  if (!doctor) return { ok: false, reason: SKIP_REASON.MISSING_DOCTOR_NAME };
 
   const number = spokenTokenNumber(source.token);
-  if (!number) return { ok: false, reason: 'unspeakable_token' };
+  if (!number) return { ok: false, reason: SKIP_REASON.UNSPEAKABLE_TOKEN };
 
-  const room = cleanText(source.room);
-  const spokenNumber = lang === 'bn' ? toBanglaDigits(number) : number;
+  const roomProvided = cleanText(source.room) || null;
+  const room = roomNumberForSpeech(source.room);
   const template = room ? TEMPLATES[lang].withRoom : TEMPLATES[lang].noRoom;
+  if (!template) {
+    // Bangla without a room has no approved sentence (§18 O-3): refuse, never
+    // speak the half-sentence that the old template produced.
+    return {
+      ok: false,
+      reason: SKIP_REASON.NO_ROOM,
+      fields: { roomProvided, hasRoom: false },
+    };
+  }
+
+  const spokenNumber = lang === 'bn' ? toBanglaDigits(number) : number;
+  const spokenRoom = lang === 'bn' && room ? toBanglaDigits(room) : room;
 
   const text = template
     .replace('{number}', spokenNumber)
-    .replace('{doctor}', doctorName)
-    .replace('{room}', room);
+    .replace('{doctor}', doctor)
+    .replace('{room}', spokenRoom || '');
 
   return {
     ok: true,
@@ -129,12 +247,18 @@ export function buildAnnouncement(input, language) {
     text,
     fields: {
       tokenNumber: spokenNumber,
-      doctorName,
-      room: room || null,
+      tokenSerial: Number(number),
+      doctorName: doctorNameWithoutHonorific(source.doctorName),
+      doctor,
+      room: spokenRoom || null,
+      roomProvided,
       hasRoom: !!room,
       template: room ? 'with_room' : 'no_room',
       /** `true` when the approved template had to lose its room clause. */
       derived: !room,
+      /** Why the room clause is absent; `''` on a complete sentence. */
+      reason: room ? '' : (roomProvided
+        ? SKIP_REASON.ROOM_NOT_ANNOUNCEABLE : SKIP_REASON.NO_ROOM),
     },
   };
 }
