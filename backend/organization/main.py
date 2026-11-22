@@ -48,6 +48,23 @@ except ImportError:
     from facility import router as facility_router
 app.include_router(facility_router)
 
+# QUE-006 / W3 — language and voice configuration.  The voice-pack registry and
+# its lifecycle live in ``voice_packs``; the platform defaults and the
+# organisation override live in ``announcement_config``.  Both are additive: no
+# existing route, model or permission changes, and the policy that decides who
+# may do what is in ``voice_pack_policy`` (stdlib only, unit-tested).
+try:
+    from .voice_packs import router as voice_packs_router
+except ImportError:
+    from voice_packs import router as voice_packs_router
+app.include_router(voice_packs_router)
+
+try:
+    from .announcement_config import router as announcement_config_router
+except ImportError:
+    from announcement_config import router as announcement_config_router
+app.include_router(announcement_config_router)
+
 
 
 # ---------------------------------------------------------------------------
