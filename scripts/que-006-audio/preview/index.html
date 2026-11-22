@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QUE-006 — composed announcement preview</title>
+<link rel="stylesheet" href="/preview.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="page-head">
+  <p class="eyebrow">AMSDP · QUE-006 · reviewer tool</p>
+  <h1>Composed announcement preview</h1>
+  <p class="lede">
+    Twenty composed announcements built from the 28 delivered clips, plus a live composer that
+    uses the same clip order and pauses as the generator. Listen, then record a verdict in the
+    review template. <strong>Nothing here is approved.</strong> Every asset is still
+    <code>humanReviewStatus: pending</code>, and this page cannot change that.
+  </p>
+  <dl class="facts" id="facts">
+    <div><dt>Delivery contract</dt><dd id="fact-contract">loading…</dd></div>
+    <div><dt>Samples</dt><dd id="fact-samples">loading…</dd></div>
+    <div><dt>Catalogue</dt><dd id="fact-catalogue">loading…</dd></div>
+    <div><dt>Generated</dt><dd id="fact-generated">loading…</dd></div>
+  </dl>
+</header>
+
+<main id="main">
+  <p class="status" id="status" role="status" aria-live="polite">Loading the sample collection…</p>
+
+  <section class="panel" id="how-to" aria-labelledby="how-to-heading">
+    <h2 id="how-to-heading">How to review</h2>
+    <ol class="steps">
+      <li>Play each of the 20 samples below. They are <em>byte-for-byte concatenations</em> of the delivered clips — no re-encoding, no trimming, no loudness change.</li>
+      <li>Compare what you hear with the caption. The caption is produced by the product's own <code>buildAnnouncement()</code>, not typed here.</li>
+      <li>Open the clip timeline (▸) if a sample sounds wrong; it names the exact clip and pause at each position, so a defect can be reported against one asset.</li>
+      <li>Use the live composer to hear any token or room number you like, including the ones you were not expecting.</li>
+      <li>Record pass / fail per sample in the review template, and say which asset is at fault when a sample fails.</li>
+    </ol>
+  </section>
+
+  <section class="panel" id="samples" aria-labelledby="samples-heading">
+    <div class="panel-head">
+      <h2 id="samples-heading">The 20 composed samples</h2>
+      <div class="panel-tools">
+        <label class="filter" for="language-filter">Show</label>
+        <select id="language-filter">
+          <option value="all">all languages</option>
+          <option value="en">English only</option>
+          <option value="bn">Bangla only</option>
+        </select>
+        <button type="button" id="play-all">Play all shown</button>
+        <button type="button" id="stop-all">Stop</button>
+      </div>
+    </div>
+    <p class="hint">
+      Five test cases × four announcement patterns. Duration is measured from the written file's
+      own frame count; the short hash identifies the exact bytes you are hearing.
+    </p>
+    <table class="samples">
+      <caption class="visually-hidden">Composed announcement samples, one row per sample</caption>
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Sample</th>
+          <th scope="col">Pattern</th>
+          <th scope="col">Caption</th>
+          <th scope="col">Duration</th>
+          <th scope="col">Play</th>
+          <th scope="col">Timeline</th>
+        </tr>
+      </thead>
+      <tbody id="samples-body"></tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="compose" aria-labelledby="compose-heading">
+    <h2 id="compose-heading">Live composer</h2>
+    <p class="hint">
+      Composed here from the delivered clips in the same order the generator uses, with the junction
+      pause as a gap in the schedule rather than an edit. If a clip is missing the announcement is
+      refused and the clip is named — nothing is played partially.
+    </p>
+
+    <form id="composer" novalidate>
+      <div class="field">
+        <label for="language">Language</label>
+        <select id="language" name="language">
+          <option value="en">English</option>
+          <option value="bn">বাংলা (Bangla)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="token">Token number</label>
+        <input id="token" name="token" type="text" inputmode="numeric" value="7" autocomplete="off">
+      </div>
+      <div class="field check">
+        <input id="has-room" name="has-room" type="checkbox" checked>
+        <label for="has-room">Announce a room</label>
+      </div>
+      <div class="field">
+        <label for="room">Room number</label>
+        <input id="room" name="room" type="text" inputmode="numeric" value="204" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="pause">Junction pause</label>
+        <select id="pause" name="pause"></select>
+      </div>
+      <div class="field actions">
+        <button type="submit" id="compose-play">Play</button>
+        <button type="button" id="compose-stop">Stop</button>
+      </div>
+    </form>
+
+    <div class="plan" id="plan" aria-live="polite">
+      <p class="hint">Enter a token number, then press Play.</p>
+    </div>
+  </section>
+
+
+  <section class="panel" id="review-record" aria-labelledby="review-heading">
+    <h2 id="review-heading">Review record</h2>
+    <p>
+      One row per sample, one blank verdict per row:
+      <a href="/generated/review-template.csv" download>review-template.csv</a>.
+      Fill it in and return it; a sample without a filled row is still unreviewed.
+    </p>
+    <table class="fields">
+      <caption class="visually-hidden">Columns in the review template</caption>
+      <thead>
+        <tr><th scope="col">Column</th><th scope="col">What the reviewer writes</th></tr>
+      </thead>
+      <tbody id="review-fields"></tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="limits" aria-labelledby="limits-heading">
+    <h2 id="limits-heading">What this preview does not prove</h2>
+    <ul class="limits">
+      <li><strong>Approval.</strong> Playing a sample here is not approval. The manifest stays <code>pending</code> until a human signs the review record.</li>
+      <li><strong>Product integration.</strong> The app does not play these clips yet; this page composes them itself, exactly as documented, outside product code.</li>
+      <li><strong>Room-number range.</strong> The catalogue records 1–999 as a <em>recommendation awaiting owner approval</em>, not a rule. The composer guards at 9 digits for both token and room and refuses longer input rather than inventing a limit.</li>
+      <li><strong>Trim and pause.</strong> Each delivered clip keeps its recorded trailing silence — up to ~1.15 s in the Bangla set — which is why Bangla samples run much longer than English ones. Removing it would change the delivered files, so it is reported, not fixed.</li>
+      <li><strong>Device.</strong> Playback here uses this machine's default output. Clinic hardware still has to be tested by ear.</li>
+    </ul>
+  </section>
+</main>
+
+<footer class="page-foot">
+  <p>
+    Generated by <code>scripts/que-006-audio/preview/compose-wav.mjs</code>; page served by
+    <code>scripts/que-006-audio/preview/server.mjs</code>. Read-only: no product code, no database,
+    no writes outside <code>preview/generated/</code>.
+  </p>
+</footer>
+
+<script type="module" src="/preview.js"></script>
+</body>
+</html>
+

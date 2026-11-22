@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "assets": {
+    "en.phrase.room-suffix": {
+      "generationStatus": "generated",
+      "source": "synthetic-silence",
+      "model": null,
+      "voice": null,
+      "style": null,
+      "responsePath": null,
+      "generatedAt": "2026-11-20T16:30:20.370Z",
+      "attempts": 0,
+      "sha256": "651d0bac16d2010f6d3ff53b1b4493814736616c0e89528e7a723bee13a8152d",
+      "bytes": 14444,
+      "durationMs": 300,
+      "note": "Punctuation-only asset written as a 300 ms silent pause; the playback engine must pause here, not speak.",
+      "spokenText": ".",
+      "filename": "en/phrase/room-suffix.wav",
+      "recordedAt": "2026-11-20T16:30:20.371Z"
+    }
+  }
+}
