@@ -1,7 +1,7 @@
 # AMSDP — Documentation Index (navigation)
 
 > **Task ID:** `AMSDP-DOC-GOVERNANCE-OUTPUT-LOCATION-2026-11-10`
-> **Date:** 2026-11-10 (revised 2026-11-20) · **Snapshot:** **92** markdown documents on disk, **89** of them registered below — **11** at the `docs/` root, **77** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk; Revision 33 added the appointment-types/capacity/capability specification and the Q1–Q5 implementation report → **88** registered, against **90** on disk; Revision 34 added the QUE-006/OD-1 browser speech-synthesis implementation report → **89** registered, against **91** on disk, the same two documents still unregistered under O-3; Revision 35 corrected that disk figure by one — the **92**nd document is the Phase 3 queue/DQDS/QUE-006 gap analysis, on disk but unregistered, its row proposed in its own Appendix C and not applied → **89** registered, against **92** on disk.)*
+> **Date:** 2026-11-10 (revised 2026-11-21) · **Snapshot:** **109** markdown documents on disk, **106** of them registered below (mechanical basename check, Revision 37; re-counted in Revision 47) — **11** at the `docs/` root, **94** across the subject folders (including the 6 `architecture/saas/` documents registered in Revision 27 and the SaaS reconciliation report registered in Revision 29), and the **4** `docs/chatgpt/` planning files listed in that section (§12). Per-file sizes below; recompute with the *Maintenance* command. *(Document-count check, 2026-11-19, Revision 32: `find docs -name '*.md'` = 88; every basename on disk is named in a row except the two recorded in Revision 32's open item **O-3**. Earlier history: Revision 27 registered the six-document SaaS set → 81; Revision 28 closed **O-Y** (the `chatgpt/` count drift) at 81; Revision 29 added `governance/AMSDP_Hybrid_SaaS_Decision_Reconciliation_Report_V1.0.md` → 82; Revision 30 corrected three records in place with no row-count change, still 82; Revision 31 added `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` → 83; Revision 32 added the appointment/calendar reliability gap analysis and its remediation report → 85 registered, against 88 on disk; Revision 33 added the appointment-types/capacity/capability specification and the Q1–Q5 implementation report → **88** registered, against **90** on disk; Revision 34 added the QUE-006/OD-1 browser speech-synthesis implementation report → **89** registered, against **91** on disk, the same two documents still unregistered under O-3; Revision 35 corrected that disk figure by one — the **92**nd document is the Phase 3 queue/DQDS/QUE-006 gap analysis, on disk but unregistered, its row proposed in its own Appendix C and not applied → **89** registered, against **92** on disk.)*
 > **Status:** active navigation artefact — intended to be read at the start of every task
 > **Enforced by:** `.clinerules` §12 (reading) and §11 (writing)
 > **Revision 2 — 2026-11-10**, task `AMSDP-DOC-GOVERNANCE-OWNER-DECISIONS-O1-O6-2026-11-10`:
@@ -697,7 +697,464 @@
 ---
 
 
+> **Revision 36 — 2026-11-20**, task `AMSDP-QUE-006-DOCTOR-NAME-REMOVAL-AND-AUDIO-CATALOGUE` — **two new documents registered under `implementation/`**, so the registered row count goes **89 → 91** and the on-disk snapshot stays **92**: `implementation/QUE-006_AUDIO_GENERATION_CATALOGUE.md` — complete audio generation catalogue (28 recording assets for the doctor-name-free QUE-006 announcement composition strategy), and `implementation/QUE-006_Doctor_Name_Removal_and_Audio_Catalogue_Implementation_Report.md` — implementation report covering doctor-name removal, the four approved sentences, test results, and remaining limitations. No document was moved, renamed or deleted; no migration-manifest entry is required (§11).
+> **Revision 37 — 2026-11-20**, task `AMSDP-QUE-006-GEMINI-TTS-UTILITY` — **one new
+> document registered under `implementation/`**: `implementation/QUE-006_Gemini_Audio_Generation_Implementation_Report.md`
+> — the standalone Gemini TTS audio-generation utility in `scripts/que-006-audio/`
+> (10 modules + README, no dependency added), the command runs that were actually
+> executed with their observed exit codes, the honest state of the asset set
+> (**1 of 28 clips on disk** — the deliberate 300 ms silent pause; the 27 spoken
+> clips are not generated because `GEMINI_API_KEY` is absent), container-structure-only
+> validation with no audio decoder on the machine, the declared
+> `en.phrase.no-room` comma override awaiting an owner decision, and the fact that
+> nothing in it is VERIFIED or ACCEPTED.
+>
+> **Count recheck (mechanical, not a tally).** `Get-ChildItem docs -Recurse -Filter '*.md'`
+> now returns **95** documents — **11** at the `docs/` root, **80** across the subject
+> folders, **4** in `chatgpt/`. Matching every disk basename against this file's text
+> finds **94** named and **1** unregistered:
+> `docs/AMSDP — E-Health Hackathon Concept Note & Application Summary.md`, an
+> owner-controlled document (§11) that this task has no authority to register or
+> annotate. The running row tally was **91** after Revision 36 and is **92** after
+> this one, so the tally understates the mechanical count by two — a drift of the
+> same kind already recorded for O-3, carried forward here as **open item O-4**
+> rather than guessed at. The subtitle below now carries the verified 95/94 figures
+> instead of the stale 92/89. No document was moved, renamed, overwritten or
+> deleted; no migration-manifest entry is required (§11).
+>
+> **Revision 38 — 2026-11-20**, task `AMSDP-QUE-006-GEMINI-TTS-UTILITY` (continuation) —
+> **no document added, moved, renamed or deleted**, so the registered row count stays
+> **92** and the on-disk snapshot stays **95** (94 named, 1 intentionally unregistered;
+> O-4 open). Two measurement/content refreshes only:
+> `implementation/QUE-006_Gemini_Audio_Generation_Implementation_Report.md`
+> (18,327 → **26,986**, grown by its own §11 Revision 2 record) and that row's
+> *Read when* text, which previously stated two facts that verified runtime state has
+> since contradicted: the key is no longer absent but **rejected** by Google
+> (`API_KEY_INVALID`; the resolved value is 35 characters, not the 39 of an AI Studio
+> key), and `ffmpeg`/`ffprobe` 9.1 **are** installed and now used, so validation is
+> container-plus-codec rather than container-only. The utility gained
+> `scripts/que-006-audio/lib/decode.mjs`, key-shape diagnostics (`describeKeyShape()`)
+> and an `api-key-invalid` error classification; nothing was generated (still
+> **1/28** clips on disk) and nothing is VERIFIED or ACCEPTED.
+>
+> **Revision 39 — 2026-11-20**, task `AMSDP-QUE-006-GEMINI-TTS-UTILITY` (continuation) —
+> **no document added, moved, renamed or deleted**; registered rows stay **92**, on-disk
+> snapshot stays **95** (O-4 still open). One measurement/content refresh: the same
+> report (**26,986 → 36,519**, grown by its own §12 "Revision 3" record) and that row's
+> *Read when* text. The utility is no longer Gemini-only: it now selects a provider
+> (`--provider gemini|elevenlabs`, default gemini) over two new modules
+> (`lib/elevenlabs-tts.mjs`, `lib/provider.mjs`) plus a shared `lib/tts-error.mjs`.
+> Verified in this session: syntax of all 16 modules, the catalogue self-check, both
+> dry-run paths, absence-of-key exit codes, `validate.mjs` (still 1/28), and — most
+> importantly — a **live 401 from `api.elevenlabs.io` with a placeholder key**,
+> classified `api-key-invalid` with `stopRun` and followed by a probe short-circuit.
+> **No ElevenLabs clip was generated** (no valid key exists) and **no claim is made that
+> Bangla works** on `eleven_multilingual_v2`: the documented language list returned
+> HTTP 403 to this session, so the preflight probe and a native speaker remain the only
+> acceptable evidence. Nothing is VERIFIED as audio and nothing is ACCEPTED.
+
+> **Revision 40 — 2026-11-21**, task `AMSDP-QUE-006-GEMINI-TTS-UTILITY` (continuation) —
+> **no document added, moved, renamed or deleted**; registered rows stay **92**, on-disk
+> snapshot stays **95** (O-4 still open). One measurement/content refresh: the same
+> report (**36,519 → 43,034**, grown by its own §13 "Revision 4") and that row's size
+> cell. A real ElevenLabs key turned up in `.env.local`, but **under a voice-id variable
+> name**, and it authenticates while being **unscoped** for every endpoint the utility
+> uses (`401 missing_permissions … models_read / voices_read`) — so the run stays blocked
+> on an owner action, not on code. That live data exposed and fixed three defects:
+> `key-permissions` is now classified separately from a rejected key (naming the missing
+> scope instead of advising a pointless re-copy), a synthesis-only least-privilege key is
+> no longer hard-failed by the model/voice listing checks, and a stale 6-character
+> `ELEVEN_LABS_API_KEY` can no longer silently shadow a complete key in `.env.local`
+> (the resolver reports what it ignored). Also established: the `GEMINI_API_KEY` value is
+> an `sk-` key, not an AI Studio key, which explains every earlier `API_KEY_INVALID`.
+> **Still no ElevenLabs clip exists**; still 1/28 assets on disk; nothing VERIFIED as
+> audio, nothing ACCEPTED; Bangla on `eleven_multilingual_v2` remains unclaimed.
+> **Superseded 2026-11-21 by Revision 41:** 28 recordings are now on disk and 27 of
+> them are standardised and technically validated — read the standardisation report
+> below before trusting the "1/28" in this row.
+
+> **Revision 41 — 2026-11-21**, task `AMSDP-QUE-006-AUDIO-FORMAT-STANDARDISATION` —
+> **one document registered**: `implementation/QUE-006_AUDIO_FORMAT_STANDARDISATION_REPORT.md`
+> (**42,041 bytes**), so registered rows go **92 → 93** and the on-disk snapshot
+> **95 → 96**. No document was moved, renamed or deleted, and no existing document's
+> content was rewritten; **open item O-4** (the index tally understating the mechanical
+> document count) is unchanged and unchanged in cause.
+>
+> The task converted, validated and manifested the audio set under
+> `frontend/public/audio/`: **27 WAV masters** (PCM 44.1 kHz/16-bit/mono) and **27 MP3
+> playback files** (44.1 kHz/mono/128 kbps CBR), with all **28 originals preserved
+> byte-for-byte** in `frontend/.audio-originals-backup/` and hashed in
+> `ORIGINALS.json`. The manifest was rebuilt as schema
+> `AMSDP-QUE-006-audio-assets/2.0` with 54 verified checksums.
+>
+> Two contradictions were found by inspecting the filesystem rather than the manifest,
+> and both changed what could honestly be delivered. First, `bn/phrase/room-suffix.wav`
+> is **byte-identical to the English silence placeholder**
+> (`sha256 651d0bac16d2…`, 300 ms, `mean_volume −91.0 dB`), so
+> **`bn.phrase.room-locative` (`-এ আসুন।`) has no recording anywhere** — the instructed
+> rename to `room-locative.wav` was therefore **not** performed, because it would have
+> made a missing Bangla clip indistinguishable from a present one. Second,
+> `ffmpeg`/`ffprobe` **9.1 are installed but not on `PATH`**, which the utility now
+> resolves explicitly instead of concluding the tools are absent.
+>
+> **Status: PARTIALLY COMPLETE — 27/28 technically validated, 1 asset missing.** No
+> `humanReviewStatus` was set above `pending` and nothing is pronunciation-approved;
+> `playable.integratedWithApplication` remains `false` in the manifest and in fact —
+> `frontend/lib/announcements/speech-synthesis.js` is untouched and no component reads
+> `audio/manifest.json`. Prerecorded-audio playback remains **unimplemented**, and this
+> revision makes no claim that any recording has been listened to.
+>
+> **Superseded 2026-11-21 by Revision 42:** the Bangla locative recording was supplied
+> and converted, so the set is **28/28** and the "no recording anywhere" statement above
+> no longer describes the tree. The refusal to rename the English silence placeholder
+> into the Bangla slot still stands — that decision was correct, and the real recording
+> arrived separately rather than being manufactured from a placeholder.
+
+> **Revision 42 — 2026-11-21**, task `AMSDP-QUE-006-BANGLA-LOCATIVE-CONVERSION` —
+> **no document added, moved, renamed or deleted**; one existing document **updated in
+> place**: `implementation/QUE-006_AUDIO_FORMAT_STANDARDISATION_REPORT.md`
+> (**42,041 → 59,816 bytes**, V1.0 → V1.1 with a new §17). Registered rows stay **93**
+> and the on-disk snapshot stays **96**. No migration manifest entry was required,
+> because nothing was relocated and no content was rewritten — V1.0's §0–§16 are intact
+> and the correction is stated in §0.1 and §17, so the earlier "missing recording"
+> finding remains on record instead of being erased.
+>
+> The task converted the recording the owner supplied at
+> `frontend/public/audio/bn/phrase/room-locative.mpeg` into the delivery contract.
+> **The extension is wrong**: `ffprobe` reports container `mp3`, codec `mp3`, **48 kHz**
+> mono, 1.819979 s, 44,973 bytes, `sha256 7c2c58bc…ee3cbd`, `mean_volume −22.1 dB`,
+> `max_volume −4.5 dB` — real speech, and a rate that genuinely required resampling.
+> Outputs: **master** `bn/phrase/room-locative.wav` (PCM 44.1 kHz/16-bit/mono,
+> 160,602 B, `sha256 bc01c501…b98c`) and **playback** `bn/phrase/room-locative.mp3`
+> (44.1 kHz/mono/128 kbps CBR, 30,137 B, `sha256 b15c1b16…99f4`), the MP3 encoded
+> **from the validated master**, never from the source.
+>
+> The original is preserved unchanged in both places: the in-tree `.mpeg` still hashes
+> to `7c2c58bc…ee3cbd` and its verified copy is at
+> `frontend/.audio-originals-backup/bn/phrase/room-locative.mpeg` (`copied-verified`),
+> taking the backup record to **29** entries. `manifest.json` was rebuilt as schema
+> `AMSDP-QUE-006-audio-assets/2.0` with the entry `bn.phrase.room-locative`,
+> `spokenText: "-এ আসুন।"`, `technicalValidationStatus: pass`,
+> `humanReviewStatus: pending`, `playbackDerivation: encoded-from-master`, and summary
+> `complete: true` (28 masters, 28 playback, 0 missing, 0 failing, **0 human-approved**).
+>
+> Validation ran **strict** in all three scripts, with `--allow-missing` deliberately
+> not used: `validate-audio-assets.mjs` exit 0 (`28/28 pass`, `56` checksums verified,
+> `29` preserved originals re-verified, CBR frame spread `0.3 kbps`),
+> `validate.mjs` exit 0 (`28/28`), `rebuild-audio-manifest.mjs --check` exit 0
+> ("manifest is current"). A before/after SHA-256 baseline of all 70 tree files proves
+> the blast radius: **2 files added, none removed, none other modified** except
+> `manifest.json`.
+>
+> Disclosed tool change: `lib/audio-standard.mjs` no longer declares
+> `bn.phrase.room-locative` as `missing-content`, and gained an explicit
+> `ORIGINAL_SOURCE_BY_ID` override (with `originalCandidatesFor()`) so the master is
+> derived from the `.mpeg` rather than from our own 128 kbps playback;
+> `standardise-audio.mjs` now shares that candidate list instead of duplicating it.
+> **Still unimplemented and unclaimed:** prerecorded-audio playback in the frontend
+> (`speech-synthesis.js` untouched, `integratedWithApplication: false`, no component
+> reads the manifest), human listening review for all 28 clips (O-3), trailing-silence
+> trimming (O-2, now covering this 1.15 s of silence that is **in the supplied
+> recording**), and the extra `.m4a` / placeholder files in the served tree (O-7).
+> O-1 (record the Bangla locative clip) is **closed**.
+
+> **Revision 43 — 2026-11-21**, task `AMSDP-QUE-006-HUMAN-VERIFICATION-PREP` —
+> **one document registered**: `implementation/QUE-006_COMPOSED_ANNOUNCEMENT_HUMAN_VERIFICATION_PREPARATION_REPORT.md`
+> (**27,650 bytes**), so registered rows go **93 → 94** and the on-disk snapshot
+> **96 → 97** (mechanical count `Get-ChildItem docs -Recurse -Filter '*.md'` = 97,
+> re-run in this session). No document was moved, renamed, overwritten or deleted;
+> **open item O-4** (the index tally understating the mechanical document count by
+> two, one of them the owner-controlled hackathon concept note) is unchanged and
+> unchanged in cause.
+>
+> The task built **human-review preparation tooling only**, entirely inside
+> `scripts/que-006-audio/preview/`: **20 composed WAV samples** (5 cases × 4
+> announcement patterns) that are byte-for-byte concatenations of the 28 delivered
+> clips — no ffmpeg, no re-encode, no trimming; a loopback-only static server; a
+> reviewer page that imports the product's own `content.js` so no wording is
+> hard-coded; a CSV/Markdown review record; and a headless-Chrome harness
+> (`check-page.mjs`, 12 checks over the DevTools protocol, **no new dependency**)
+> that **passed 12/12, exit 0, on the current files**. Composition was proven, not
+> assumed: 120/120 copied PCM ranges identical to source, 20/20 decode-verified,
+> 20/20 captions equal to `buildAnnouncement()`, and `catalogueUnchanged: true`
+> across 72 hashed catalogue files (`manifestSha256 f4a10872…a328c`).
+>
+> **Nothing is approved.** All 28 assets remain `humanReviewStatus: pending`, no
+> clip was modified, no product file was touched by this task, and no commit or
+> push was made. The report records the measurements that the owner has to judge —
+> **Bangla clips carry 0.874–1.388 s of trailing silence each (mean 1.260 s, all 14
+> of them) against 0.014–0.331 s for English**, which is why Bangla samples run
+> about twice as long — and the open items that block a verdict: the room-number
+> range is still an unapproved "1–999" recommendation, the junction pause is 0 ms
+> by measurement rather than by decision, the `en.phrase.no-room` override is
+> undecided, and no reviewer is named. Human listening (O-3 of the standardisation
+> report) remains the missing evidence.
+> **Revision 44 — 2026-11-21**, task `AMSDP-QUE-006-VOICE-ROADMAP` —
+> **one document registered**: `implementation/QUE-006_VOICE_ANNOUNCEMENT_FUTURE_REFACTORING_AND_IMPLEMENTATION_ROADMAP.md`
+> (**93,147 bytes**), so registered rows go **94 → 95** and the on-disk snapshot
+> **97 → 98** (mechanical count `Get-ChildItem docs -Recurse -Filter '*.md'` = 98,
+> re-run in this session). No document was moved, renamed, overwritten or deleted.
+> The header snapshot line, which still read **95 on disk / 94 registered** and
+> therefore understated the on-disk count by two after Revision 43, is corrected in
+> this revision to **98 / 95** with the composition **11** at the `docs/` root,
+> **83** across the subject folders and the **4** `docs/chatgpt/` documents
+> (11 + 83 + 4 = 98). The registered tally moved by one, not by three: the two
+> documents the old line failed to count were already on disk, so the remaining
+> **98 − 95 = 3** difference is the pre-existing registration gap already recorded
+> as Revision 32's **O-3** and Revision 43's **O-4**, unchanged in cause and in
+> size by this revision.
+>
+> The task was **documentation and inspection only**. It records the Product
+> Owner's decision that the current English and Bangla announcement output is an
+> **approved DRAFT** — recordings and composition retained, no re-recording, no
+> refactoring, and explicitly **not** audio-quality, pronunciation or production
+> acceptance (§2) — and it classifies every QUE-006 feature with one evidence-based
+> status from the seven permitted values: **two** independently verified (the audio
+> catalogue's technical integrity; the isolated preview harness), **six** awaiting
+> an owner decision, **nine** not implemented at all, the rest IMPLEMENTED BUT NOT
+> VERIFIED. The material findings, all from this session's inspection:
+> **no facility announcement configuration exists** (`organizations.config` has
+> `queue_config`, `appointment_config` and `registration_policy` only), and the
+> audited `appointment_config.py` route template is gated on `org.manage`, which
+> **`branch_admin` does not hold** — so the approved configuration boundary cannot
+> be reached without an owner decision (**POD-5**); **no room exists on a queue
+> entry** (`QueueEntry`, `models.py:854-882`), so the with-room templates are
+> unreachable (**POD-2**); the queue `call` action still **has no user interface**
+> (QOP-001), so nothing can trigger an announcement; the speech adapter reports
+> **`start`, not completion**; the **remote local-agent installation architecture has
+> zero artefacts** in code or docs; and `frontend/public/audio/` holds **72 files
+> against 56 manifest references**, leaving **15 unreferenced** (13 `.m4a`, one
+> `.mpeg`, one mislabelled `room-suffix.wav`) for O-7.
+>
+> **Tests run in this task:** the four announcement suites — **53 tests, 52 pass,
+> 1 skipped, 0 fail** (the skip is the JSX compile check; `next/dist/build/swc` is
+> unavailable in this install). **Nothing is approved, nothing is implemented, no
+> production code, asset, manifest, schema or permission was changed, and no commit
+> or push was made.** Twelve Product Owner decisions (POD-1…POD-12) and the human
+> listening review (O-3) remain open; the recommended next task is the isolated
+> prerecorded playback engine, and it must not start without authorisation.
+>
+> **Revision 45 — 2026-11-21**, task `AMSDP-QUE-006-MASTER-IMPLEMENTATION` —
+> **eight documents registered**, all in `implementation/`: the master plan
+> (19,772 B), the W1 prerecorded-playback report (9,364 B), the W2 queue-integration
+> report (9,159 B), the W3 voice-configuration report (7,519 B), the W4 room-support
+> report (4,949 B), the W5 remote-installation report (7,268 B), the W6 asset
+> dependency report (5,500 B) and the final implementation/verification report
+> (19,529 B). Registered rows go **95 → 103** and the on-disk snapshot
+> **98 → 106** (mechanical count re-run in this session:
+> `Get-ChildItem docs -Recurse -Filter '*.md'` = 106), composition **11** at the
+> `docs/` root, **91** across the subject folders and the **4** `docs/chatgpt/`
+> documents (11 + 91 + 4 = 106). No document was moved, renamed, overwritten or
+> deleted, so no manifest entry is owed; the remaining **106 − 103 = 3** difference
+> is the same pre-existing registration gap recorded as Revision 32's **O-3** and
+> Revision 43's **O-4**, unchanged in cause by this revision. Verified mechanically in
+> this session: 103 rows whose first cell is a backticked `.md` path, resolving to 103
+> distinct files, none duplicated; the three documents on disk with no row are
+> `implementation/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md`,
+> `implementation/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` and
+> `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md`.
+> **Two pre-existing byte figures were also corrected** to match the tree, because the
+> index must not disagree with disk: `QUE-006_AUDIO_GENERATION_CATALOGUE.md`
+> (15,234 → 17,144 B) and
+> `QUE-006_Doctor_Name_Removal_and_Audio_Catalogue_Implementation_Report.md`
+> (18,432 → 11,809 B). Only the numbers changed — both prose descriptions were
+> checked against the documents and left exactly as their authors wrote them.
+>
+> The task implemented part of the QUE-006 programme and, just as importantly,
+> **refused to implement the rest**. Landed: a pack-driven prerecorded playback
+> engine (`segments.js`, `prerecorded-audio.js`), a controller transport switch with
+> browser speech demoted to an explicitly configured alternative, a `waiting → called`
+> transition rule plus a fire-and-forget page seam, a configuration-precedence
+> resolver with organisation isolation, and a facility-side installer agent
+> (`scripts/que-006-agent/`) with checksum verification, atomic install, rollback,
+> crash recovery and offline use. Verified by **108 tests: 107 pass, 0 fail,
+> 1 skipped**. Not landed, and stated as such in every report: the server-side
+> voice-pack domain and its migration (this host has no `pytest`/`fastapi`/
+> `sqlalchemy`, so a migration could not be run or its routes denied-tested), the
+> room data (POD-2), the distribution API, any asset deletion (POD-7) and any
+> browser, device or disconnected-network verification. No audio file, manifest,
+> approved wording, schema or permission was changed; nothing was committed,
+> pushed or deployed. **QUE-006 is explicitly not implementation complete.**
+>
+> **Revision 46 — 2026-11-21**, task `AMSDP-QUE-006-W1-W2-REPORT-RECOVERY` —
+> **two documents registered**, both in `implementation/`:
+> `QUE-006_W1_PRERECORDED_PLAYBACK_ENGINE_IMPLEMENTATION_REPORT.md` (19,448 B) and
+> `QUE-006_W2_QUEUE_ANNOUNCEMENT_INTEGRATION_IMPLEMENTATION_REPORT.md` (19,623 B). Registered rows go
+> **103 → 105** and the on-disk snapshot **106 → 108** (mechanical count re-run in this session:
+> `Get-ChildItem docs -Recurse -Filter '*.md'` = 108), composition **11** at the `docs/` root, **93**
+> across the subject folders and the **4** `docs/chatgpt/` documents (11 + 93 + 4 = 108). No document
+> was moved, renamed, overwritten or deleted, so no manifest entry is owed; the remaining
+> **108 − 105 = 3** difference is the same pre-existing registration gap recorded as Revision 32's
+> **O-3** and Revision 43's **O-4**, unchanged in cause by this revision. Verified mechanically:
+> 103 rows before this revision (counting the index's own self-reference row at the `governance/`
+> table, which is why the figure is 103 and not 102) resolving to 103 distinct files, none duplicated;
+> the three documents on disk with no row are
+> `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md`,
+> `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` and
+> `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md`.
+>
+> **Why two new rows rather than a rename.** The Product Owner reported the W1/W2 reports missing
+> after a power loss, under filenames ending `_IMPLEMENTATION_REPORT.md`; the earlier session had used
+> the master plan's own convention, `QUE-006_W<n>_<NAME>_REPORT.md`. Both files existed and were
+> intact, so neither was renamed: the two earlier reports stay byte-unchanged as history and the two
+> new documents supersede them for naming and are self-describing about the relationship. The
+> assignment's filename requirement and the master plan's §5 step 6 convention conflict; the conflict
+> is recorded in both new documents and raised to the owner rather than resolved unilaterally.
+>
+> **A byte-size convention was discovered and applied.** Auditing all 101 size figures that resolve to
+> a file showed **78 "mismatches" that are not stale at all**: the table's convention is the
+> **LF-normalised UTF-8 byte count**, while this Windows worktree stores CRLF, so those rows differ
+> from raw disk size by exactly the file's line count (proven on `product/AMSDP_Business_Rules_V1.0.md`:
+> index 42,812 = LF size exactly, raw CRLF 43,924 = 42,812 + 1,112 lines). Those 78 figures were
+> therefore **left alone**; "correcting" them to CRLF would have made the index wrong on the platform
+> the `.clinerules` paths target. Eight figures were genuinely stale and were corrected, numbers only,
+> prose untouched: `AMSDP_M2_Security_Implementation_Report.md` 6,374 → 6,390,
+> `AMSDP_M4_Appointment_Implementation_Report.md` 4,374 → 6,169,
+> `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` 25,336 → 26,974,
+> `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` 58,648 → 95,368,
+> `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` 17,583 → 19,186,
+> `AMSDP_Demo_Credentials_V1.0.md` 2,422 → 3,106, `AMSDP_Hackathon_Demo_Runbook.md` 11,331 → 11,794
+> and `AMSDP_Limitations_Report_V1.0.md` 4,379 → 5,119. **Fourteen** figures were expressed as **raw CRLF bytes** instead of the LF basis, every one of them a
+> QUE-006 document registered while working on Windows (Revisions 43-45), and each was converted,
+> numbers only, prose untouched: `QUE-006_AUDIO_GENERATION_CATALOGUE.md` 17,144 → 16,877,
+> `QUE-006_Doctor_Name_Removal_and_Audio_Catalogue_Implementation_Report.md` 11,809 → 11,595,
+> `QUE-006_Gemini_Audio_Generation_Implementation_Report.md` 43,034 → 42,439,
+> `QUE-006_COMPOSED_ANNOUNCEMENT_HUMAN_VERIFICATION_PREPARATION_REPORT.md` 27,650 → 27,204,
+> `QUE-006_VOICE_ANNOUNCEMENT_FUTURE_REFACTORING_AND_IMPLEMENTATION_ROADMAP.md` 93,147 → 92,002,
+> `QUE-006_AUDIO_FORMAT_STANDARDISATION_REPORT.md` 59,816 → 58,904,
+> `QUE-006_MASTER_IMPLEMENTATION_PLAN.md` 19,772 → 19,523,
+> `QUE-006_W1_PRERECORDED_PLAYBACK_ENGINE_REPORT.md` 9,364 → 9,247,
+> `QUE-006_W2_QUEUE_INTEGRATION_REPORT.md` 9,159 → 9,049,
+> `QUE-006_W3_VOICE_CONFIGURATION_REPORT.md` 7,519 → 7,415,
+> `QUE-006_W4_ROOM_SUPPORT_REPORT.md` 4,949 → 4,875,
+> `QUE-006_W5_REMOTE_INSTALLATION_REPORT.md` 7,268 → 7,162,
+> `QUE-006_W6_ASSET_DEPENDENCY_REPORT.md` 5,500 → 5,406 and
+> `QUE-006_FINAL_IMPLEMENTATION_AND_VERIFICATION_REPORT.md` 19,529 → 19,257. After those changes the
+> same audit reports **0 stale figures out of 103 checked**. One
+> filing defect is **recorded, not fixed**: the row for
+> `AMSDP_Phase_0_MVP_Scope_and_Phase_1_Operational_RBAC_Implementation_Report_V1.0.md` sits in the
+> `audit/` table although the document lives in `implementation/`; moving rows is a structural change
+> beyond this task, so it is raised as an open item.
+>
+> **The task recovered and re-verified rather than implemented.** Every claim in the two new reports
+> was re-derived from code and a fresh test run: W1 **22/22** own tests, the four pre-existing
+> announcement suites **53 tests, 52 pass, 1 skipped**, all eight announcement suites **98 tests, 97
+> pass, 1 skipped**, the agent suite **10/10**, and the whole `frontend/tests` population **270 tests,
+> 266 pass, 2 fail, 2 skipped** — the two failures pre-existing and unrelated
+> (`banglanamesense-dataset` pinned checksum, `calendar-render` Windows `E:` ESM URL). W1 is recorded
+> as IMPLEMENTED AND TESTED at unit level and **not browser-verified**; W2 as **PARTIALLY
+> IMPLEMENTED** because no UI control issues a queue `call` (POD-12), there is no polling on the queue
+> page, event identity is per-client (`entry:<id>:call:0`), and no announcement audit record exists
+> (POD-4). No production code, asset, manifest, schema or permission was changed; nothing was
+> **Revision 47 — 2026-11-21**, task `AMSDP-QUE-006-POD-12-QOP-001` —
+> **one document registered**, in `implementation/`:
+> `QUE-006_POD-12_QUEUE_CALL_CONTROL_IMPLEMENTATION_REPORT.md` (30,225 B, the LF-normalised basis
+> established in Revision 46; raw CRLF on this worktree = 30,672 B = 30,225 + 447 line terminators).
+> Registered rows go **105 → 106** and the on-disk snapshot **108 → 109**; composition **11** at the
+> `docs/` root, **94** across the subject folders (`implementation/` gained this document: 38 → 39) and
+> the **4** `docs/chatgpt/` documents (11 + 94 + 4 = 109, re-counted mechanically in this session).
+> No document was moved, renamed, overwritten or deleted, so no manifest entry is owed; the remaining
+> **109 − 106 = 3** difference is the same pre-existing registration gap recorded as Revision 32's
+> **O-3** and Revision 43's **O-4** — `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md`,
+> `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` and
+> `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md` — unchanged in
+> cause by this revision, and the three are again the only unregistered basenames on disk. Before this
+> revision the table held 105 rows resolving to 105 distinct basenames (no duplicates); after it, 106
+> rows resolving to 106 distinct basenames. The pre-existing filing defect of Revision 46 (the
+> `AMSDP_Phase_0_…_Report_V1.0.md` row sitting in the `audit/` table while the file lives in
+> `implementation/`) is **still recorded, not fixed**, for the same reason: moving rows is a structural
+> change beyond this task.
+>
+> **The document records an implementation, and is explicit about what the implementation does not
+> prove.** POD-12 (approved) added the queue **Call** control that finally issues the server
+> `PATCH /api/v1/queue/{id} {action:"call"}` (gap **QOP-001**), so the W2 announcement seam at last has
+> a trigger: `frontend/lib/queue/queue-call.js` (new), the page handler plus button, three bilingual
+> captions, one new frontend test file (**18 tests**) and two new backend tests. Production backend
+> code, the permission matrix, the manifest and every audio asset are byte-unchanged; **no permission
+> was granted and no schema changed**, which is why `branch_admin` gains nothing — it already held
+> `queue.manage` through its pre-existing `queue.*` wildcard.
+>
+> **Evidence re-derived, not repeated.** `node --test tests/queue-call-control.test.mjs` **18/18**;
+> `tests/queue-*.test.mjs` **116 tests, 115 pass, 0 fail, 1 skipped**; the whole `frontend/tests`
+> population **288 tests, 284 pass, 2 fail, 2 skipped** — 270 + 18 = 288, the two failures being the
+> pre-existing unrelated `banglanamesense-dataset` checksum and `calendar-render` Windows `E:` ESM URL.
+> `frontend/node_modules` was absent, so dependencies were installed with the lockfile-preserving
+> `npm ci --no-audit --no-fund` (**125 packages**, `package-lock.json` unchanged), and
+> **`npm run build` now exits 0** — `✓ Compiled successfully`, `/queue` 13.4 kB — which also
+> **supersedes the W2 row's "not compiler-verified" note** for `pages/queue.js`. The two JSX compile
+> checks still report "swc unavailable" although the binary is installed: both import a bare `E:/…`
+> specifier instead of `pathToFileURL()`, the same defect that makes `calendar-render` fail. That is
+> recorded as **DEV-3** in the new report and deliberately not fixed here; a direct SWC transform of
+> `pages/queue.js` (42,963 chars, containing `callEntry`) supplies the compiler evidence instead.
+>
+> **One required test could not be satisfied, and was not faked.** POD-12 permits calls by doctors
+> "where their existing permissions grant `queue.manage`"; no doctor role holds it and it is absent
+> from `DELEGABLE_CAPABILITIES`, so no grant can create it. The suite therefore asserts the truthful
+> boundary in both matrices and the backend test asserts **403**; required test #2 is reported as
+> **not satisfiable without a separate owner decision** (**DEV-1**), alongside **DEV-4** (the frontend
+> `can()` mirror cannot see delegated grants). Backend execution, browser verification, cross-terminal
+> dedupe (POD-8), announcement audit (POD-4), the room clause (POD-2/W4) and pronunciation (O-3) all
+> remain **NOT VERIFIED**, and **W2 stays PARTIALLY IMPLEMENTED** — implementing POD-12 does not
+> complete W2. Nothing was staged, committed, pushed or deployed; HEAD remains `37cf3d1`.
+
+
+> **Revision 48 — 2026-11-21**, task `AMSDP-QUE-006-W2-RELIABILITY` —
+> **one document registered**, in `implementation/`:
+> `QUE-006_W2_RELIABILITY_COMPLETION_REPORT.md` (25,558 B on the LF-normalised
+> basis established in Revision 46; raw CRLF on this worktree = 25,934 B = 25,558
+> + 376 line terminators). Registered rows go **106 → 107** and the on-disk
+> snapshot **109 → 110**; composition **11** at the `docs/` root, **95** across
+> the subject folders (`implementation/` gained this document: 39 → 40) and the
+> **4** `docs/chatgpt/` documents (11 + 95 + 4 = 110, re-counted mechanically in
+> this session). No document was moved, renamed, overwritten or deleted, so no
+> manifest entry is owed; the remaining **110 − 107 = 3** difference is the same
+> pre-existing registration gap recorded as Revision 32's **O-3**, Revision 43's
+> **O-4** and Revision 47 — `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md`,
+> `governance/AMSDP_RBAC_Discovery_and_Current_State_Audit_V1.0.md` and
+> `implementation/AMSDP_QUE-006_Queue_Voice_Announcements_Catalogue_Addition_V1.0.md`
+> — unchanged in cause by this revision. Revision 47's recorded filing defect (the
+> `AMSDP_Phase_0_…_Report_V1.0.md` row sitting in the `audit/` table while the file
+> lives in `implementation/`) is **still recorded, not fixed**, for the same reason.
+>
+> **The document closes five named defects and refuses to claim the sixth thing.**
+> It supersedes the "dedupe is per browser tab", "identity is invented by the
+> client", "no announcement audit record", "no polling" and "an entry already
+> `called` is never announced" findings of
+> `QUE-006_W2_QUEUE_ANNOUNCEMENT_INTEGRATION_IMPLEMENTATION_REPORT.md`: identity is
+> now `qce:<entry_id>:<history index>` derived on the server from the append-only
+> `status_history`, dedupe is a `UNIQUE(call_event_id)` row claimed with
+> `ON CONFLICT DO NOTHING`, the announcement is audited as three separate facts
+> (`queue.call` ≠ `requested` ≠ `completed`), and the queue page refreshes on a
+> 20 s visible-tab timer with focus/visibility/online triggers. **No queue state
+> machine, permission matrix, template or audio asset changed**; the only i18n
+> addition is one bilingual key (`announceElsewhere`).
+>
+> **Evidence re-derived in this session, and the gap stated as loudly as the
+> passes.** `tests/queue-announcement-delivery.test.mjs` **18/18**,
+> `tests/queue-refresh-safety.test.mjs` **8/8**,
+> `tests/queue-announcement-w2-integration.test.mjs` **19/19** (15 pre-existing +
+> 4 new), `tests/queue-call-control.test.mjs` **18/18**; `tests/queue-*.test.mjs`
+> **146 tests, 145 pass, 0 fail, 1 skipped** (was **116**: +18 +8 +4 = 30); the
+> whole `frontend/tests` population **318 tests, 314 pass, 2 fail, 2 skipped**
+> (was **288**), the two failures being the pre-existing unrelated
+> `banglanamesense-dataset` checksum and `calendar-render` Windows `E:` ESM URL;
+> **`npm run build` exit 0** — `✓ Compiled successfully`, `/queue` 15.3 kB (was
+> 13.4 kB), which is the compiler evidence the skipped JSX check cannot give.
+> `python scripts/que-006-w2-reliability/check_call_event_identity.py` executes the
+> **13** pure identity tests **13/13** on this host; `py_compile` on the three
+> touched backend modules exits 0. **The 18 new backend tests in
+> `backend/queuing/tests/test_queue.py` were NOT run**: this host has no
+> `fastapi`, no `pytest`, no `sqlalchemy`, no `psycopg2` and no PostgreSQL — the
+> imports were attempted and all four failed. No browser, no audio device and no
+> second terminal existed either, so **cross-terminal dedupe (POD-8), the persisted
+> announcement audit (POD-4) and the migration are NOT VERIFIED** and **W2 remains
+> PARTIALLY IMPLEMENTED**. Nothing was staged, committed, pushed or deployed.
+
+
+
+
 ## How to use this index
+
 
 1. **Read this page first.** It is deliberately short so it costs almost nothing
    even on a small-context profile.
@@ -827,7 +1284,7 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 
 | File | Size | Read when | Owner |
 |---|---:|---|---|
-| `AMSDP_M2_Security_Implementation_Report.md` | 6,374 | Any auth/RBAC/tenancy change; any security claim in a report | — |
+| `AMSDP_M2_Security_Implementation_Report.md` | 6,390 | Any auth/RBAC/tenancy change; any security claim in a report | — |
 
 ---
 
@@ -846,13 +1303,13 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_SEQ_02_COMPLETION_REPORT.md` | 21,344 | Touching patient queue visibility (DQDS) | — |
 | `AMSDP_SEQ_03_COMPLETION_REPORT.md` | 30,485 | Touching missed-turn recovery, scheduling or the notification outbox | — |
 | `AMSDP_SEQ_03_IMPLEMENTATION_ASSESSMENT.md` | 15,329 | Judging whether SEQ-03 claims hold up | — |
-| `AMSDP_M4_Appointment_Implementation_Report.md` | 4,374 | Appointment features | — |
+| `AMSDP_M4_Appointment_Implementation_Report.md` | 6,169 | Appointment features | — |
 | `AMSDP_M5_Queue_Implementation_Report.md` | 5,570 | Queue management features | — |
 | `AMSDP_M6_Implementation_Plan.md` | 6,785 | Planning work that builds on M6 | — |
 | `AMSDP_M6_Implementation_Report.md` | 6,753 | M6 audit/observability behaviour | — |
 | `AMSDP_UI_UX_and_Reusable_Components_Assessment.md` | 6,305 | Frontend work; what shared components exist and what is missing | — |
 | `AMSDP_Frontend_Visual_Quality_Investigation.md` | 3,442 | Frontend visual regressions or styling standards | — |
-| `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` | 25,336 | Patient-name entry, the BanglaNameSense dataset/matcher/component, or any reuse in doctor/staff forms | — |
+| `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` | 26,974 | Patient-name entry, the BanglaNameSense dataset/matcher/component, or any reuse in doctor/staff forms | — |
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
 | `AMSDP_Owner_Decisions_Implementation_Report_V1.0.md` | 22,388 | The platform-administration capability boundary, denial auditing, the CI pipeline, or how Q-1…Q-6 were verified (and what was not) | — |
 | `AMSDP_CI_First_Run_Failure_Investigation_V1.0.md` | 25,424 | Diagnosing why the CI pipeline fails, `alembic`/`python -m` invocation questions, or the frontend test failures in `banglanamesense-integration.test.mjs` | — |
@@ -863,6 +1320,29 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md` | 28,589 | **Before changing an appointment/scheduling write path, a slot or capacity rule, or the booking dialog's messages** — what each of F-01…F-19 was fixed by (with the function and test that prove it), the two partial closures (F-01's database constraint, F-18's *unscheduled* marking) — **§10** records how the owner decisions Q1–Q5 then closed both, with a pointer to the Q1–Q5 report — and the original evidence: 12 pre-existing failures accounted for, 269/269 on the affected backend subset, 179/179 frontend, `next build` compiled | — |
 | `AMSDP_Owner_Decisions_Q1_Q5_Appointment_Reliability_Implementation_Report_V1.0.md` | 25,642 | **Before changing appointment types, walk-ins, `slot_allocations`, `appointment.check_in`, `appointment.create_unscheduled`, staff capability grants or cross-branch booking** — what Q1–Q5 actually produced (code, endpoint, migration `a9c4e1f7b2d8`, test), the evidence standard reached for each claim, the backfill caveat for pre-existing slot overruns, and the open owner items O-1…O-7 (Business Rules vocabulary, no formal decision record, grants being API-only, no historic repair) | — |
 | `AMSDP_QUE-006_OD-1_Browser_Speech_Synthesis_Implementation_Report_V1.0.md` | 28,119 | **Before changing queue announcements, `lib/announcements/`, the `/queue` announcement panel, or the OD-3 wording** — the Web Speech API adapter and its "silence is not success" rule, the voice-selection rules that never substitute a language, the token-serial pronunciation rule and the PII boundary, the duplicate/overlap policy, the room clause no queue payload can supply (**O-1**), the absent facility configuration (**O-2**), the absent server-side event/audit (**O-3**), and the fact that **no browser or device playback run was performed** — nothing is VERIFIED | — |
+| `implementation/QUE-006_AUDIO_GENERATION_CATALOGUE.md` | 16,877 | Complete audio generation catalogue for QUE-006: 28 recording assets (8 fixed phrases + 20 digit recordings across English and Bangla), number coverage and composition rules, recording instructions, proposed folder structure, manifest schema, demo workflow. Doctor names and honourifics excluded. | — |
+| `implementation/QUE-006_Doctor_Name_Removal_and_Audio_Catalogue_Implementation_Report.md` | 11,595 | Doctor-name removal from QUE-006 announcements: the four approved sentences (English and Bangla, with and without room), code changes, test results (48/48 pass), catalogue creation, remaining limitations (local prerecorded audio not implemented, no browser verification). | — |
+| `implementation/QUE-006_Gemini_Audio_Generation_Implementation_Report.md` | 42,439 | **Before running, trusting or extending `scripts/que-006-audio/`** — the standalone audio utility that generates, validates and manifests the 28 catalogue clips through **either Gemini or ElevenLabs** (`--provider`, default gemini): module map, both API contracts as implemented, the command runs actually executed with observed exit codes, honest asset state (**1/28 on disk**, 27 blocked because the stored `GEMINI_API_KEY` is an `sk-` key, not a Google AI Studio key — `API_KEY_INVALID`, 35 characters instead of 39; the ElevenLabs path has now been exercised against the live API with a real but unscoped key — see §13), container-plus-codec validation (ffprobe 9.1 + ffmpeg 9.1 installed and now used on every clip, with negative controls recorded), the ElevenLabs facts that shaped the code (`wav_24000` default because 44.1 kHz PCM/WAV is Pro-tier; `pcm_*` refused rather than assumed 16-bit; `language_code` unsupported on multilingual_v2; request logging on by default; **no claim that Bangla works**), the declared `en.phrase.no-room` comma override awaiting an owner decision, the absent playback engine, and the human listening review (Bangla in particular) that no script can replace. Nothing in it is VERIFIED or ACCEPTED. | — |
+| `implementation/QUE-006_COMPOSED_ANNOUNCEMENT_HUMAN_VERIFICATION_PREPARATION_REPORT.md` | 27,204 | **Before listening to, extending or trusting `scripts/que-006-audio/preview/`** — the isolated human-review preparation tooling for QUE-006: 20 composed WAV samples built as byte-for-byte concatenations of the 28 delivered clips (no ffmpeg, no re-encode, no trimming; 120/120 copied PCM ranges identical, 20/20 decode-verified, 20/20 captions equal to the product's own `buildAnnouncement()`), the loopback-only static server and its 16 probed route/refusal responses including four traversal attempts and a NUL byte, the reviewer page (no wording hard-coded — it imports `frontend/lib/announcements/content.js`), the CSV/Markdown review record with its 23 columns and blank verdict fields, and the headless-Chrome harness (`check-page.mjs`, 12 checks over the DevTools protocol, no new dependency) that passed **12/12, exit 0**. Also records what the measurement found: **Bangla clips end with 0.874–1.388 s of near-silence each (mean 1.260 s, all 14)** versus 0.014–0.331 s for English, `en.phrase.room-suffix` is punctuation-only and correctly silent, and the room-number range is still an unapproved recommendation. Nothing approved, nothing accepted, all 28 assets still `humanReviewStatus: pending`. | — |
+| `implementation/QUE-006_VOICE_ANNOUNCEMENT_FUTURE_REFACTORING_AND_IMPLEMENTATION_ROADMAP.md` | 92,002 | **Before planning, estimating or authorising any further QUE-006 work** — the planning layer over the five QUE-006 evidence documents: the Product Owner's **approved-DRAFT** decision and what it does and does not mean; the current architecture (speech-synthesis path, seams, and the four things it cannot do — no `call` trigger, no room, no facility configuration, no completion signal); the audio catalogue's real state (72 files on disk, 56 manifest references, **15 unreferenced**, 0 human-approved); a **35-row status table** where every feature carries exactly one of the seven permitted statuses and an evidence anchor; the future **voice-refactoring plan** (recording, timing, engine, catalogue/versioning, the sanctioned generation workflow with `GEMINI_API_KEY` never leaving the environment, risks and phases P0–P4); the **six remaining workstreams** with acceptance criteria (playback engine, facility configuration + permission enforcement, non-blocking queue integration, remote local-agent installation, asset cleanup, operational verification); the corrected **implementation sequence** and its four evidence-based amendments (split the engine from its wiring; insert the missing queue `call` UI; pull a browser smoke test forward; clean up only after remote installation exists); a **21-row verification matrix**; risks and rollback; and **twelve open Product Owner decisions (POD-1…POD-12)**. Records the findings that decide the plan — no facility announcement config exists, `branch_admin` cannot reach the `org.manage`-gated config precedent, `QueueEntry` carries no room, the speech adapter reports `start` not completion, and the approved remote-installation architecture has **zero artefacts** — plus the test evidence gathered (**53 announcement tests: 52 pass, 1 skipped, 0 fail**) and the recommended next task, which is not started. | — |
+| `implementation/QUE-006_AUDIO_FORMAT_STANDARDISATION_REPORT.md` | 58,904 | **Before converting, re-encoding, trimming or serving any `frontend/public/audio/` file** — the format-standardisation pass that turns the catalogue clips into a 44.1 kHz/16-bit/mono PCM WAV master plus a 44.1 kHz/mono/128 kbps CBR MP3 playback file, with every original preserved byte-for-byte in `frontend/.audio-originals-backup/` (`ORIGINALS.json` holds sizes, SHA-256 and format facts). Records the as-found inventory (28 files: 13 English MP3, 13 Bangla M4A, 2 silence placeholders), the two contradictions found outright — `bn/phrase/room-suffix.wav` is **byte-identical to the English placeholder**, so `bn.phrase.room-locative` (`-এ আসুন।`) has **no recording anywhere**, and ffmpeg/ffprobe 9.1 are **not on `PATH`** — the conversion settings, the twelve-check validator (`validate-audio-assets.mjs`, modes `all`/`missing`/`checksums`), the v2 manifest schema and its 54 verified checksums, the eight defects found by running the tool (in-place ffmpeg refusal, dry-run false failure, backup record absorbing its own outputs, lost `playbackDerivation`, over-strict path check, `validate.mjs` 24 kHz assumptions, a PowerShell cp1252 round-trip that corrupted a source file), and the English room-suffix assessment (300 ms of −91 dB silence, retained as an intentional pause). **V1.1 (2026-11-21): the missing Bangla recording `bn/phrase/room-locative.mpeg` was supplied by the owner and converted — that asset now passes in both formats, so the set is 28/28 complete (strict validator exit 0, 56 checksums, 29 preserved originals); §17 records the source's real container (an MP3 stream, 48 kHz, despite the `.mpeg` name), the conversion settings, the blast-radius hash diff, and why the English silence placeholder was still not renamed into the slot.** Every `humanReviewStatus` is `pending`; nothing is pronunciation-approved, and prerecorded-audio playback in the frontend remains **unimplemented** (`speech-synthesis.js` untouched). | — |
+| `implementation/QUE-006_MASTER_IMPLEMENTATION_PLAN.md` | 19,523 | **Before implementing any QUE-006 workstream** — the programme plan over the roadmap: the inspected baseline (HEAD `37cf3d1`, announcement modules and line counts, the 72-file audio tree, the 28-asset manifest, the queue `call` gap), the **decision register** (DR-1…DR-10 approved, POD-1…POD-12 open, TF-1…TF-7 technical findings), the configurable **voice-library architecture** (pack descriptor, `voice_packs` table contract, precedence, API surface, permission mapping onto the existing `org.manage`/`platform.admin` capabilities — POD-5 closed here in favour of organisation scope because `branch_admin` holds neither capability), the seven workstreams with files/dependencies/exit gates, the ordering consequence (W1 → W3 → W2) and the phase-gate protocol. | — |
+| `implementation/QUE-006_W1_PRERECORDED_PLAYBACK_ENGINE_REPORT.md` | 9,247 | **Before changing the playback engine or its wording contract** — W1: `segments.js` (pack-driven asset resolution, refusals) and `prerecorded-audio.js` (sequential clips, completion only from the final `ended`, no fetch, no speech fallback), with roadmap §8.1 **AC-1…AC-8** preserved verbatim and each mapped to the test that proves it (AC-1 over an **80-combination** matrix comparing the resolved clips with `buildAnnouncement()`). Records the design decisions (pack boundary, the silent clip as a 300 ms gap, refusal before sound), the two normalisation notes (clip-boundary whitespace; English digit words vs Bangla glyphs) and what is **not** verified: no browser, no real decode, offline proven only as "no fetch issued". | — |
+| `implementation/QUE-006_W2_QUEUE_INTEGRATION_REPORT.md` | 9,049 | **Before wiring announcements into the queue page** — W2: the controller gains a `player` and an explicit `strategy` (prerecorded by default; `strategy: 'prerecorded'` without a player throws rather than downgrading), `playPrerecorded()` maps `completed` → `spoken` and everything else to a failure with its reason, `activate()` unlocks by playing the catalogue's own silence, and `queue-transitions.js` announces a `waiting → called` change exactly once through a fire-and-forget seam (15 tests). States plainly that the automatic trigger is **unreachable in the UI** until a `call` control exists (QOP-001 / POD-12), and that automatic announcements need an operator gesture to unlock audio. | — |
+| `implementation/QUE-006_W3_VOICE_CONFIGURATION_REPORT.md` | 7,415 | **Before implementing voice-pack storage, upload, approval or the configuration API** — W3's verified half (`voice-packs.js`: precedence organisation → platform → built-in → none, organisation isolation, only `published` selectable, five refusal codes) and its **unimplemented** half with the reason (no `pytest`/`fastapi`/`sqlalchemy` on the host, so no migration and no denied-API test could run). Carries the ready-to-implement contract: `voice_packs` columns, `organizations.config["announcement"]` (no migration needed), the nine routes, the `org.manage`/`platform.admin` mapping and the audit requirement. Do not read it as a delivered feature. | — |
+| `implementation/QUE-006_W4_ROOM_SUPPORT_REPORT.md` | 4,875 | **Before adding any room column, payload field or migration** — W4 is **BLOCKED by POD-2**, and this report is why it stayed blocked: `queue_entries` has no room, but `appointments.room_name` is snapshotted at booking, `doctor_branches.room_id` is the doctor's chamber and `schedule_sessions.room_id` assigns one per session — the open question is *which source is authoritative*, not whether data exists. Names the three candidates and their consequences, the two decisions that gate the work (POD-1, POD-2) and the exact change set once decided. No schema change was made. | — |
+| `implementation/QUE-006_W5_REMOTE_INSTALLATION_REPORT.md` | 7,162 | **Before running, deploying or trusting `scripts/que-006-agent/`** — W5: the facility agent (outbound-only, no listener) with SHA-256 verification of the received bytes, path-traversal refusal, staging plus rename-based atomic swap, previous-version retention, rollback, crash recovery and offline `activeRoot()`; 10 tests against a real HTTP stub server and a temporary install root. Records the security properties actually enforced, the token handling (environment only, never printed), and the gaps: **no server-side distribution API**, no server-side entitlement check (so organisation isolation is unimplemented), no facility PC, no service wrapper, no compatibility refusal. | — |
+| `implementation/QUE-006_W6_ASSET_DEPENDENCY_REPORT.md` | 5,406 | **Before deleting, moving or renaming anything under `frontend/public/audio/`** — the dependency report the assignment asks for when rollback is not established: the recount (71 non-manifest files, 56 referenced, **15 unreferenced**, 493,073 bytes; 28 assets, all `humanReviewStatus: pending`), the classification of every class of file (playback, WAV master, retained original, mislabelled placeholder, backup), the minimum asset set per announcement variant, and why nothing was removed (POD-7 open; the unreferenced files are provenance and one is defect evidence). Ends with the safe-cleanup procedure for the owner's decision. | — |
+| `implementation/QUE-006_FINAL_IMPLEMENTATION_AND_VERIFICATION_REPORT.md` | 19,257 | **Before claiming QUE-006 is complete, or planning what comes next** — the consolidated W7 assessment: what changed and what deliberately did not, DR-1…DR-8 mapped to where each is implemented, the final architecture, the seven-workstream status table, integrated evidence (**108 tests: 107 pass, 0 fail, 1 skipped**), the announcement-behaviour matrix, a table of claims **not** made (no browser, no device, no disconnected network, no pronunciation), ten known limitations, the open decisions (POD-1/2/3/4/7/8/9/12, O-2, O-3), files added/modified, rollback instructions, and the explicit finding that **QUE-006 is not implementation complete** — technical completion separated from Product Owner acceptance. | — |
+| `implementation/QUE-006_W1_PRERECORDED_PLAYBACK_ENGINE_IMPLEMENTATION_REPORT.md` | 19,448 | **Before changing the playback engine, or before quoting W1 as done** — the recovery and re-verification record: the provenance after the power loss (the earlier `..._REPORT.md` was intact; only the requested filename was missing), the pack-driven resolver and sequential player cited by file:line, AC-1…AC-8 each classified, the exact commands and counts (**22/22** own tests, 53/52/1 pre-existing, 98/97/1 across all eight suites, 270/266/2 for the whole tree with two pre-existing unrelated failures), the asset check (28 assets, 0 missing on disk), and the honest boundary — no browser, no device, no real decode, offline proven only as "no fetch issued", AC-1 proves agreement with the wording contract rather than with the recorded clips, and the English no-room draft carries no comma. | — |
+| `implementation/QUE-006_W2_QUEUE_ANNOUNCEMENT_INTEGRATION_IMPLEMENTATION_REPORT.md` | 19,623 | **Before wiring or claiming an automatic queue-call announcement** — the four-link trigger chain with the missing link named: the server `call` exists and is audited (`queue.manage`), **no UI control issues it** (POD-12), the client observes the `waiting → called` transition and announces fire-and-forget, and audio needs an operator gesture. Also records what the earlier report did not: the queue page has **no polling**, an entry that arrives already `called` is never announced, dedupe is per browser tab (two terminals both speak), event identity is `entry:<id>:call:0`, **no announcement audit record exists** (POD-4), and the JSX edits are not compiler-verified because `frontend/node_modules` is absent. | — |
+| `implementation/QUE-006_POD-12_QUEUE_CALL_CONTROL_IMPLEMENTATION_REPORT.md` | 30,225 | **Before touching the queue Call control, or before quoting POD-12 as verified** — the control that finally issues the server `call` (gap QOP-001): `lib/queue/queue-call.js` (`isCallable`, ref-held synchronous `createCallGate`, `performCall` payload), the page wiring, the announcement still driven by the existing `waiting → called` tracker, and the role table for both matrices. States plainly what is **not** proven: doctor workflow blocked by the permission matrix (**DEV-1** — no doctor holds `queue.manage` and it is not delegable), backend tests written but unexecuted (no `pytest`/PostgreSQL/Docker), **no browser verification**, and the JSX compile checks skipping because of a Windows ESM-path defect rather than a missing SWC binary (**DEV-3**). Build: `npm run build` exit 0. W2 remains PARTIALLY IMPLEMENTED. | — |
+| `implementation/QUE-006_W3_VOICE_CONFIGURATION_IMPLEMENTATION_AND_VERIFICATION_REPORT.md` | 60,991 | **Before changing `voice_pack_policy.py`, `voice_packs.py`, `announcement_config.py`, the voice-pack tables, or before quoting W3 as delivered** — the W3 build that follows `QUE-006_W3_VOICE_CONFIGURATION_REPORT.md`: the stdlib-only decision layer (role gate, scope resolution, selectability, precedence, lifecycle, versioning/rollback, metadata checks, upload validation, W1-compatible descriptors), the versioned pack registry and its authenticated API (upload, validate/submit/approve/reject/publish/retire/availability, manifest, preview, asset streaming), platform defaults in their own table plus organisation override on the existing `organizations.config["announcement"]` JSON, and the forward-only migration. Permission claims are enforced three times over server-side (capability matrix, role allow-list, token-derived scope with non-disclosing 404), self-approval is structurally impossible, and nothing is written until 14 ordered upload checks pass. Evidence: **49/49 policy tests executed**, 146/145/1 pre-existing frontend suite, `py_compile` on 9 files, migration-graph check; the **18 API tests, the migration and any browser run are NOT executed** (no `fastapi`/`pytest`/`sqlalchemy`/`alembic`/PostgreSQL on the host), W2's migration declares the wrong parent (double head, fix unapplied), the docs index registration is owed, and the configuration is **not yet wired to the terminals** — it is real but not audible. | — |
+| `implementation/QUE-006_W2_RELIABILITY_COMPLETION_REPORT.md` | 25,558 | **Before quoting W2 as reliable, cross-terminal-safe or audited, and before running the W2 backend tests** — the reliability pass on `QUE-006_W2_QUEUE_ANNOUNCEMENT_INTEGRATION_IMPLEMENTATION_REPORT.md`'s five open defects: server-owned event identity `qce:<entry_id>:<index>` derived from append-only `status_history`, `queue_announcement_deliveries` with `UNIQUE(call_event_id)` + `ON CONFLICT DO NOTHING` claim, the two endpoints (`/queue/{id}/announcement`, `/queue/announcements/{id}/outcome`) with 404/409/422 semantics, three separated facts (`queue.call`, `requested`, `completed`), the claim→play→report announcer, the muted cross-terminal panel note, and the 20 s visible-tab refresher with its trade-offs. Evidence: **146 queue tests (145 pass, 1 pre-existing skip)**, **318 whole-tree (314 pass, 2 pre-existing unrelated failures)**, `npm run build` exit 0, identity suite **13/13** run without pytest. States plainly that the backend endpoints and migration were **not executed** (no `fastapi`/`pytest`/`sqlalchemy`/`psycopg2`/PostgreSQL), no browser and no two-terminal observation, so **W2 stays PARTIALLY IMPLEMENTED**. | — |
+
+
+
+
 
 
 
@@ -881,8 +1361,8 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_PreCommit_Push_Readiness_Report_V1.0.md` | 47,940 | Before staging, committing or pushing anything: change classification by owner, exclusion lists, commit grouping, GO/NO-GO | — |
 | `AMSDP_PreCommit_Remediation_Report_V1.0.md` | 27,298 | Remediating blockers B-1…B-7: how each credential is supplied now, the ignore rules, the image rename, the new findings B-8…B-10 and the owner decisions still open | — |
 | `AMSDP_Final_PrePush_Readiness_Report_V1.0.md` | 40,986 | Immediately before the first push: rotation evidence (D-1, closed), the two mixed-ownership files (D-2), the tracked AI-Factory artefacts (D-3), the twelve image assets, the six-commit plan and gates G-1…G-5 | — |
-| `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 58,648 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
-| `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 17,583 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
+| `AMSDP_Final_PrePush_Decisions_and_Closeout_Report_V1.0.md` | 95,368 | The last check before executing any commit: fresh verification of every earlier claim, the credential-scan result, the corrected owner-document set (five, not one), the published demo password finding (B-12), and the re-issued path-level plan C-1…C-7 with gates G-1…G-8 | — |
+| `AMSDP_Tree_Commit_and_Push_Execution_Record_V1.0.md` | 19,186 | After the first push: the seven executed commits with hashes and per-commit counts, how each gate was checked, the defects found in the verification tooling, the §18.8.10 assertions, post-push verification and the R-1…R-7 register | — |
 | `AMSDP_Project_Context_Report_V1.0.md` | 60,177 | **Briefing an external collaborator, or needing an evidence-graded picture of what the tree actually contains** — per-capability status with `path:line` citations, the architecture reality check AR-1…AR-6, the defect register F-1/F-2, the risk register P1-1…P3-4, the document-vs-tree conflicts C-1…C-6, a ranked reading list, and the re-verification protocol. Read this before quoting any readiness claim | — |
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.0_DRAFT.md` | 82,914 | **History only — superseded by the V1.1 proposal below.** V1.0's §3 misdescribes D-01/D-02/D-03 and is not to be used for the decision records; read it only to see what changed between versions | — |
 | `AMSDP_V25_Reconciliation_and_Decision_Register_Proposal_V1.1_DRAFT.md` | 115,496 | **Before applying any Business Rules V1.1 / MVP Scope V1.1 / Master Feature List V2.5 / PQV / `.clinerules` / decision-register correction** — the corrected D-01…D-03 records (two permitted payment answers; `.clinerules` §1/§10 authority references; authorisation to prepare this material), the restated decisions R-1…R-4, the evidence-checked capability status table, the C-01…C-09 matrix with exact replacement wording, the six verified patches and the combined patch in Appendix A, the near-misses checked and left alone, and the open items U-1…U-7 (U-1/U-2 closed). Proposal only: nothing in it is applied and no capability in it is implemented | — |
@@ -908,9 +1388,9 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 
 | File | Size | Read when | Owner |
 |---|---:|---|---|
-| `AMSDP_Demo_Credentials_V1.0.md` | 2,422 | Running or describing a demo login. Contains credentials — cite the file, never paste secrets into reports or logs | R |
-| `AMSDP_Hackathon_Demo_Runbook.md` | 11,331 | Walking through the demo flow end to end | — |
-| `AMSDP_Limitations_Report_V1.0.md` | 4,379 | Stating honestly what does not work — the canonical source for limitation claims | R |
+| `AMSDP_Demo_Credentials_V1.0.md` | 3,106 | Running or describing a demo login. Contains credentials — cite the file, never paste secrets into reports or logs | R |
+| `AMSDP_Hackathon_Demo_Runbook.md` | 11,794 | Walking through the demo flow end to end | — |
+| `AMSDP_Limitations_Report_V1.0.md` | 5,119 | Stating honestly what does not work — the canonical source for limitation claims | R |
 | `AMSDP_API_Integration_Report_V1.0.md` | 4,807 | Frontend↔backend integration status | — |
 
 ---
