@@ -24,8 +24,8 @@ availability of the new tables (the live database is still behind — §7).
 | Push result | `2fc007a..ea9c2a0  hackathon-mvp -> hackathon-mvp`, exit 0 |
 | Force used | **No.** `git merge-base --is-ancestor 2fc007a ea9c2a0` is true, so the push was a true fast-forward; no `+`, no `--force`, no `--force-with-lease` |
 | Server-side confirmation | `git ls-remote origin refs/heads/hackathon-mvp` → `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` at publication time, and `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` once this report was pushed |
-| Docs commit carrying this report | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3`, pushed as `ea9c2a0..4e7250d  hackathon-mvp -> hackathon-mvp` — also a fast-forward, also verified by `ls-remote` |
-| Remote tip at the time of writing | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` on `hackathon-mvp` |
+| Docs commit carrying this report | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` (first issue), pushed as `ea9c2a0..4e7250d  hackathon-mvp -> hackathon-mvp` — also a fast-forward, also verified by `ls-remote`. The report was amended afterwards to record the tip, so the commit that carries these lines is later than `4e7250d` |
+| Remote tip | whatever `git ls-remote origin refs/heads/hackathon-mvp` reports — a hash written into a document cannot be the last word on a branch that keeps moving, so the authoritative check is the command, and it reported `ea9c2a0` for the merge and `4e7250d` for the docs commit |
 | Local confirmation | `git rev-parse origin/hackathon-mvp` and `git rev-parse HEAD` both `ea9c2a0…` after `git fetch --prune` |
 | Published tree | `dbc6abb817026633e110a711c88843566516baca` |
 | Remote advanced between fetch and push | No — `git fetch origin --prune` immediately before the push returned nothing |
@@ -315,5 +315,7 @@ claims no revision number — that is D‑5, and it stays open.
 5. Close B‑8, D‑7, O‑2 and RBAC‑R3 with the evidence named in §7, not with a green suite.
 
 **Published merge commit: `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` on `hackathon-mvp`;
-remote tip including this report: `4e7250d3c1f279b8765eec33bdd6c658d362fdc3`.**
+the docs commit that first carried this report: `4e7250d3c1f279b8765eec33bdd6c658d362fdc3`.
+For the current tip, run `git ls-remote origin refs/heads/hackathon-mvp` — this document
+will not pretend to be newer than the branch.**
 
