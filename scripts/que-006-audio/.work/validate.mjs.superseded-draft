@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+/**
+ * QUE-006 Audio Validation Utility
+ *
+ * Validates generated audio files against the catalogue and manifest.
+ * Checks: existence, non-zero size, decodable format, checksum match.
+ *
+ * Usage:
+ *   node scripts/que-006-audio/validate.mjs
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+const REPO_ROOT = path.resolve(process.cwd());
+const AUDIO_ROOT = path.join(REPO_ROOT, 'frontend', 'public', 'audio');
+const MANIFEST_PATH = path.join(AUDIO_ROOT, 'manifest.json');
+const CATALOGUE_ASSET_COUNT = 28;
+
+function detectFormat(buffer) {
+  if (buffer.length < 12) return 'unknown';
+  const riff = buffer.toString('ascii', 0, 4);
+  const wave = buffer.toString('ascii', 8, 12);
+  if (riff === 'RIFF' && wave === 'WAVE') return 'wav';
+  if (buffer[0] === 0xff && (buffer[1] & 0xf0) === 0xf0) return 'mp3';
+  if (buffer.toString('ascii', 0, 3) === 'ID3') return 'mp3';
+  return 'unknown';
+}
+
+function isDecodable(buffer) {
+  if (buffer.length < 44) return false;
+  const format = detectFormat(buffer);
+  if (format === 'wav') {
+    // Minimal WAV: RIFF + WAVE + fmt + data chunks present
+    return buffer.length >= 44 && buffer.readUInt32LE(4) === buffer.length - 8;
+  }
+  if (format === 'mp3') return buffer.length > 100;
+  return false;
+}
+
+function fileExistsAndNonZero(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.isFile() && stat.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function sha256File(filePath) {
+  const crypto = await import('node:crypto');
+  const data = fs.readFileSync(filePath);
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+async function main() {
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+  } catch (err) {
+    console.error(`FATAL: Cannot read manifest at ${MANIFEST_PATH}: ${err.message}`);
+    process.exit(1);
+  }
+
+  const assets = manifest.assets || [];
+  const results = [];
+  let missing = 0;
+  let invalid = 0;
+  let valid = 0;
+  let checksumMismatches = 0;
+
+  console.log(`Validating ${assets.length} assets from manifest...\n`);
+
+  for (const entry of assets) {
+    const filePath = path.join(AUDIO_ROOT, entry.filename);
+    const result = {
+      id: entry.id,
+      language: entry.language,
+      filename: entry.filename,
+      exists: false,
+      nonZero: false,
+      decodable: false,
+      format: null,
+      size: 0,
+      checksumMatch: null,
+      status: 'missing',
+    };
+
+    if (!fileExistsAndNonZero(filePath)) {
+      missing++;
+      result.status = 'missing';
+      console.log(`[MISSING] ${entry.id} -> ${entry.filename}`);
+      results.push(result);
+      continue;
+    }
+
+    result.exists = true;
+    result.nonZero = true;
+    const buf = fs.readFileSync(filePath);
+    result.size = buf.length;
+    result.format = detectFormat(buf);
+    result.decodable = isDecodable(buf);
+
+    if (!result.decodable) {
+      invalid++;
+      result.status = 'invalid';
+      console.log(`[INVALID] ${entry.id} -> ${entry.filename} (format: ${result.format}, size: ${result.size})`);
+      results.push(result);
+      continue;
+    }
+
+    if (entry.checksum) {
+      const actual = await sha256File(filePath);
+      result.checksumMatch = actual === entry.checksum;
+      if (!result.checksumMatch) {
+        checksumMismatches++;
+        result.status = 'checksum-mismatch';
+        console.log(`[CHECKSUM-MISMATCH] ${entry.id} -> ${entry.filename}`);
+        results.push(result);
+        continue;
+      }
+    }
+
+    valid++;
+    result.status = 'valid';
+    console.log(`[VALID] ${entry.id} -> ${entry.filename} (format: ${result.format}, size: ${result.size})`);
+    results.push(result);
+  }
+
+  // Summary
+  console.log('\n--- Validation Summary ---');
+  console.log(`Total assets in manifest: ${assets.length}`);
+  console.log(`Valid: ${valid}`);
+  console.log(`Missing: ${missing}`);
+  console.log(`Invalid: ${invalid}`);
+  console.log(`Checksum mismatches: ${checksumMismatches}`);
+
+  // Cross-check against catalogue
+  if (assets.length < CATALOGUE_ASSET_COUNT) {
+    console.log(`\nWARNING: Manifest has ${assets.length} assets, but catalogue requires ${CATALOGUE_ASSET_COUNT}.`);
+    console.log('Run generation to create missing assets.');
+  }
+
+  const allReady = valid === assets.length && missing === 0 && invalid === 0 && checksumMismatches === 0;
+  console.log(`\nOverall: ${allReady ? 'ALL ASSETS READY' : 'CATALOGUE INCOMPLETE — not all required recordings are valid'}`);
+  process.exit(allReady ? 0 : 1);
+}
+
+main().catch((err) => {
+  console.error('FATAL:', err.message);
+  process.exit(1);
+});

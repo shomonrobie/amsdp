@@ -40,8 +40,23 @@ const nextConfig = {
       { source: '/api/v1/dashboard/:path*', destination: 'http://appointment:8005/api/v1/dashboard/:path*' },
       // Queue
       { source: '/api/v1/queue/:path*', destination: 'http://queuing:8006/api/v1/queue/:path*' },
+      // Organization — the W3 voice-pack registry (QUE-006). Its own prefix, so
+      // the `/orgs` rule above could never have covered it; without this rule
+      // the browser origin answered Next's own 404 page (INT-4).
+      { source: '/api/v1/voice-packs/:path*', destination: 'http://organization:8001/api/v1/voice-packs/:path*' },
+      // Organization — platform-wide announcement defaults (QUE-006 / W3).
+      // `/api/v1/platform/announcement-config` is served by the organization
+      // service alongside the per-organization override, which is already
+      // covered by the `/orgs` rule (INT-4).
+      { source: '/api/v1/platform/:path*', destination: 'http://organization:8001/api/v1/platform/:path*' },
       // PQT (tracking) — public, no auth
       { source: '/track/:path*', destination: 'http://appointment:8005/api/v1/track/:path*' },
+      // PQT (tracking) — the path the tracking page itself requests
+      // (`pages/track/[token].js` fetches `/api/v1/track/<token>`). Without this
+      // rule that fetch answered Next's own 404 page, so the public tracking
+      // screen could not read the token it was showing (found by the
+      // `next-config-rewrites` scan while verifying INT-4).
+      { source: '/api/v1/track/:path*', destination: 'http://appointment:8005/api/v1/track/:path*' },
       // Audit
       { source: '/api/v1/audit/:path*', destination: 'http://audit:8007/api/v1/audit/:path*' },
     ];

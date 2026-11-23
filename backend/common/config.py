@@ -111,3 +111,88 @@ def get_registration_policy(org_config=None) -> dict:
         if isinstance(value, bool):
             policy[key] = value
     return policy
+
+
+# ---------------------------------------------------------------------------
+# Doctor queue-calling (QUE-006 / DEV-1, owner decision D)
+# ---------------------------------------------------------------------------
+#
+# Calling a patient forward is front-desk work in the role matrix: ``call``
+# requires ``queue.manage``, which the ``doctor`` role does not hold and which is
+# not delegable.  A doctor-only facility has no front desk, so the product rule
+# is that *the doctor calls their own patients* — but only where the
+# organisation says so, because in a hospital a doctor calling the queue behind
+# the front desk's back would be an operational defect, not a feature.
+#
+# The setting therefore lives in the organization config JSON:
+#
+#     {
+#       "queue_calling_config": {
+#         "doctor_queue_calling_enabled": true,
+#         "updated_at": "...", "updated_by": "..."
+#       }
+#     }
+#
+# and the *default* depends on whether the organisation is a doctor-only
+# facility.  ``organizations.facility_type`` is the only facility
+# classification the platform has, so it is what the default is derived from —
+# a value the product owner registers below gets the approved default, and
+# everything else keeps the safe one (disabled).
+#
+# A value that is not a boolean is ignored rather than coerced: a malformed
+# configuration block must never switch a privilege on.
+#
+# **Open product requirement (owner decision D).** No doctor-only facility type
+# exists in the data today: the column's default is ``"hospital"`` and the only
+# other value anywhere in the tree is ``"clinic"`` (tests, seeds).  Neither means
+# "one doctor, no front desk" — a clinic can have several doctors and a
+# receptionist.  Rather than invent a classifier (counting doctors, testing for
+# a receptionist row), the approved set below is empty, so every organisation
+# defaults to **disabled** until the product owner names the facility type.  The
+# approved default then takes effect by adding one value here; no other code
+# changes.
+
+#: Facility types that are doctor-only facilities, and therefore get the
+#: approved "doctor queue-calling enabled" default.  Empty pending the product
+#: owner's facility-type decision — see the block comment above.
+DOCTOR_ONLY_FACILITY_TYPES: tuple[str, ...] = ()
+
+#: The default for every organisation that is not a doctor-only facility.
+DOCTOR_QUEUE_CALLING_DEFAULT = False
+
+
+def doctor_queue_calling_default(facility_type=None) -> bool:
+    """The approved default for an organisation of *facility_type*."""
+    value = facility_type if isinstance(facility_type, str) else ""
+    if value.strip().lower() in DOCTOR_ONLY_FACILITY_TYPES:
+        return True
+    return DOCTOR_QUEUE_CALLING_DEFAULT
+
+
+def get_queue_calling_config(org_config=None, facility_type=None) -> dict:
+    """Read the effective doctor queue-calling policy for one organisation.
+
+    ``doctor_queue_calling_enabled`` is the value enforcement uses: the stored
+    override when it is a boolean, otherwise the facility-type default.
+    ``default_doctor_queue_calling_enabled`` is returned alongside it so an
+    administrator can see *why* the current value is what it is.
+    """
+    cfg = (org_config or {}).get("queue_calling_config") or {}
+    default = doctor_queue_calling_default(facility_type)
+    stored = cfg.get("doctor_queue_calling_enabled")
+    enabled = stored if isinstance(stored, bool) else default
+    return {
+        "doctor_queue_calling_enabled": enabled,
+        "default_doctor_queue_calling_enabled": default,
+        "facility_type": (facility_type or "") if isinstance(facility_type, str)
+        else "",
+    }
+
+
+def merge_queue_calling_config(org_config, updates: dict) -> dict:
+    """Return a copy of *org_config* with the queue-calling block updated."""
+    merged = dict(org_config or {})
+    block = dict(merged.get("queue_calling_config") or {})
+    block.update({k: v for k, v in (updates or {}).items() if v is not None})
+    merged["queue_calling_config"] = block
+    return merged

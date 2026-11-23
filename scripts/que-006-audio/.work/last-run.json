@@ -1,0 +1,85 @@
+{
+  "startedAt": "2026-11-21T02:56:40.287Z",
+  "finishedAt": "2026-11-21T02:56:41.172Z",
+  "command": "generate.mjs --provider elevenlabs --preflight-only --no-probe",
+  "outcome": "blocked-preflight",
+  "config": {
+    "provider": "elevenlabs",
+    "model": "eleven_multilingual_v2",
+    "voices": {
+      "en": null,
+      "bn": null
+    },
+    "apiBase": "https://api.elevenlabs.io/v1",
+    "outputFormat": "wav_24000"
+  },
+  "selection": [
+    "en.phrase.token-number",
+    "en.phrase.proceed-to-room",
+    "en.phrase.room-suffix",
+    "en.phrase.no-room",
+    "en.digit.0",
+    "en.digit.1",
+    "en.digit.2",
+    "en.digit.3",
+    "en.digit.4",
+    "en.digit.5",
+    "en.digit.6",
+    "en.digit.7",
+    "en.digit.8",
+    "en.digit.9",
+    "bn.digit.0",
+    "bn.digit.1",
+    "bn.digit.2",
+    "bn.digit.3",
+    "bn.digit.4",
+    "bn.digit.5",
+    "bn.digit.6",
+    "bn.digit.7",
+    "bn.digit.8",
+    "bn.digit.9",
+    "bn.phrase.token-number",
+    "bn.phrase.room-prefix",
+    "bn.phrase.room-locative",
+    "bn.phrase.no-room"
+  ],
+  "results": [],
+  "preflight": {
+    "ok": false,
+    "checks": [
+      {
+        "name": "api-key",
+        "status": "pass",
+        "detail": "ELEVEN_LABS_API_KEY resolved — 51-character key, standard ElevenLabs shape"
+      },
+      {
+        "name": "model-visible",
+        "status": "warn",
+        "detail": "key-permissions: key lacks permission (401): missing_permissions: The API key you used is missing the permission models_read to execute this operation."
+      },
+      {
+        "name": "voice-configured",
+        "status": "fail",
+        "detail": "no voice id configured"
+      },
+      {
+        "name": "voice-list",
+        "status": "warn",
+        "detail": "key-permissions: key lacks permission (401): missing_permissions: The API key you used is missing the permission voices_read to execute this operation."
+      },
+      {
+        "name": "synthesis-probe",
+        "status": "skipped",
+        "detail": "skipped by --no-probe"
+      }
+    ],
+    "failures": [
+      "No ElevenLabs voice id is configured. Run --list-voices to see the ids this account can use, then set ELEVENLABS_VOICE_ID_EN and ELEVENLABS_VOICE_ID_BN (or a single ELEVENLABS_VOICE_ID for both languages)."
+    ],
+    "warnings": [
+      "The key cannot list models, so the configured model \"eleven_multilingual_v2\" is used unverified. That is acceptable for a synthesis-only key: the probe below is the real test.",
+      "GET /voices is unavailable for this key; voice ids are validated by the probes instead.",
+      "Synthesis probes skipped: model and voice listing alone does not prove that speech generation works."
+    ]
+  }
+}

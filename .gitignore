@@ -54,6 +54,10 @@ nohup.out
 /tree.py
 /verify_llm_routing.py
 
+# QUE-006 audio originals preserved byte-for-byte before format standardisation.
+# Binary copies of the recordings: kept on disk as evidence, never committed.
+/frontend/.audio-originals-backup/
+
 # IDE and OS
 .vscode/
 .idea/

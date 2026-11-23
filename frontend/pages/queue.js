@@ -7,6 +7,10 @@ import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import StatusBadge from '../components/ui/StatusBadge';
 import QueueAnnouncements, { useQueueAnnouncements } from '../components/queue/QueueAnnouncements';
+import { trackCalledTransitions } from '../lib/announcements/queue-transitions';
+import { createCallAnnouncer } from '../lib/announcements/call-announcer';
+import { createQueueRefresher } from '../lib/queue/queue-refresh';
+import { createCallGate, isCallable, performCall } from '../lib/queue/queue-call';
 import { getUser, apiFetch, can, getActiveBranch } from '../lib/auth';
 import { t } from '../lib/i18n';
 
@@ -42,11 +46,26 @@ export default function Queue(){
   const [recoverReason, setRecoverReason] = React.useState('');
   const [busy, setBusy] = React.useState('');
   const [notice, setNotice] = React.useState('');
+  // QUE-006 / POD-12 — the entry whose `call` request is in flight, if any.
+  const [calling, setCalling] = React.useState('');
+  // QUE-006 / W2 — the last delivery-claim result, shown as a quiet note (it is
+  // never rendered as an error: losing a claim is normal on a second terminal).
+  const [delivery, setDelivery] = React.useState(null);
+  // QUE-006 / DEV-1 (owner decision D) — whether *this* organization lets its
+  // doctors call their own patients. Read from the server; the UI only mirrors
+  // it, because the backend enforces the same policy on the `call` action.
+  const [doctorCallingEnabled, setDoctorCallingEnabled] = React.useState(false);
+  const callGate = React.useRef(createCallGate());
 
   const canManage = can('queue.manage');
   const canConsult = can('queue.consult');
   const canRecover = can('queue.recover');
   const canReposition = can('queue.reposition');
+
+  // The Call control: `queue.manage` holders always have it; a doctor (or any
+  // caller holding queue.consult without queue.manage) has it only where the
+  // organization enabled doctor queue-calling.
+  const canCall = canManage || (canConsult && doctorCallingEnabled);
 
   // QUE-006 / OD-1: the audible announcement is a client-side mechanism. It is
   // offered to the roles the catalogue names as triggers (front desk and doctor)
@@ -59,24 +78,79 @@ export default function Queue(){
       {
         queueEntryId: entry.id,
         action: 'announce',
+        // The server identity, when the backend provides one. An operator repeat
+        // is deliberate (`source: 'operator'`), so it is neither claimed nor
+        // suppressed: one call event has one delivery record, and a repeat is
+        // not a second delivery.
+        eventId: entry.call_event_id,
         token: entry.token,
-        doctorName: entry.doctor_name,
-        // QUE-006 / F4: the room is the appointment's *booking snapshot*, which
-        // the queue payload now carries as `room_name`. A walk-in has no
-        // snapshot, so this is empty and the announcement falls back to the
-        // approved room-less sentence rather than guessing a chamber.
+        // Doctor name removed from announcements (QUE-006 doctor-name removal).
+        // TRIAL MERGE (F4 retained): the queue payload carries the appointment's
+        // *booking snapshot* as `room_name` (backend `_entry_to_dict`), not the
+        // `entry.room` placeholder neither lineage's backend ever sent. Reading
+        // `room_name` is F4's intent and what the boundary test pins. D-4 is
+        // decided (product owner, 2026-11-22): a configured room *is* announced,
+        // and an entry without one uses the approved room-less sentence. The
+        // automatic path (`call-announcer.js`) reads the same field.
         room: entry.room_name,
       },
       { source: 'operator', userGesture: true }
     );
   };
 
-  const loadQueue = () => {
-    if (!docId || !date) { setEntries([]); return; }
-    setLoading(true); setError('');
-    apiFetch(`/api/v1/queue?doctor_id=${encodeURIComponent(docId)}&date=${encodeURIComponent(date)}`)
-      .then((d) => { setEntries(d.entries || []); setLoading(false); })
-      .catch((e) => { setError('Queue load failed: ' + (e.message || e)); setLoading(false); });
+  // QUE-006 / W2 — the delivery claim (V-12) and the persisted outcome (POD-4).
+  //
+  // This is the only place in the page that writes an announcement record, and
+  // it writes it *outside* the queue transaction: the call has already committed
+  // by the time a transition is observed, so a claim or a lost outcome report can
+  // never reverse it.
+  //
+  // The controller state is read through a ref: `useQueueAnnouncements` returns a
+  // fresh object on every render, and the voice pack arrives after mount. A
+  // captured copy would claim with an empty pack id for the rest of the session.
+  const announcementsRef = React.useRef(announcements);
+  React.useEffect(() => { announcementsRef.current = announcements; });
+  const callAnnouncer = React.useMemo(() => createCallAnnouncer({
+    announce: (payload, opts) => announcementsRef.current.announce(payload, opts),
+    describe: () => {
+      const state = announcementsRef.current.state || {};
+      return {
+        enabled: state.enabled,
+        language: state.language,
+        voicePackId: state.packId,
+        voicePackVersion: state.packVersion,
+        transport: state.transport,
+      };
+    },
+    post: (path, body) => apiFetch(path, { method: 'POST', body: JSON.stringify(body) }),
+  }), []);
+
+  // QUE-006 / W2 — the queue-call trigger.
+  //
+  // A `call` (waiting → called) makes the entry audible. The announcement is
+  // fired and *forgotten*: the queue transaction has already committed on the
+  // server and this page never awaits audio, so a playback failure cannot
+  // reverse a successful call. The announcer first claims the server-generated
+  // call event, so exactly one terminal speaks, and then reports the outcome.
+  //
+  // There is now a `call` control (QUE-006 / POD-12, below). It does not speak:
+  // it PATCHes the entry and lets the refetch produce the transition this seam
+  // observes. Audio therefore stays optional — a failed request never refreshes
+  // the list, so it never announces.
+  const announceOnCall = (entry) => {
+    callAnnouncer.announceCall(entry, { source: 'event' }).then(setDelivery);
+  };
+
+  // QUE-006 / W2 — a background refresh must not flash a spinner over a list the
+  // operator is reading, and a failed refresh must not empty it: the previous
+  // entries stay, and only the error surface changes.
+  const loadQueue = (opts = {}) => {
+    const quiet = opts.quiet === true;
+    if (!docId || !date) { setEntries([]); return Promise.resolve(); }
+    if (!quiet) { setLoading(true); setError(''); }
+    return apiFetch(`/api/v1/queue?doctor_id=${encodeURIComponent(docId)}&date=${encodeURIComponent(date)}`)
+      .then((d) => { setEntries(d.entries || []); if (!quiet) setLoading(false); })
+      .catch((e) => { setError('Queue load failed: ' + (e.message || e)); if (!quiet) setLoading(false); });
   };
 
   const loadRefs = () => {
@@ -87,6 +161,89 @@ export default function Queue(){
 
   React.useEffect(() => { loadRefs(); }, [date]);
   React.useEffect(() => { loadQueue(); }, [docId, date]);
+
+  // QUE-006 / DEV-1 (owner decision D) — read the organization's doctor
+  // queue-calling policy once, and only when it can change this page's
+  // behaviour (`queue.manage` holders have the control regardless). A failed
+  // read leaves the control hidden, which is the safe direction: with the
+  // policy off the server refuses the call anyway.
+  React.useEffect(() => {
+    if (canManage || !user.organization_id) return undefined;
+    let live = true;
+    apiFetch('/api/v1/orgs/' + encodeURIComponent(user.organization_id)
+      + '/queue-calling-config')
+      .then((cfg) => {
+        if (live) setDoctorCallingEnabled(cfg.doctor_queue_calling_enabled === true);
+      })
+      .catch(() => { if (live) setDoctorCallingEnabled(false); });
+    return () => { live = false; };
+  }, [canManage, user.organization_id]);
+
+  // QUE-006 / W2 — cross-terminal delivery and safe refresh.
+  //
+  // The queuing service publishes no events, so a second terminal only sees a
+  // call by re-reading the queue. The refresher re-reads while the tab is
+  // visible (interval, focus, back-online, tab shown) and never while it is
+  // hidden; the announcer then decides — from the server's `call_event_id` and
+  // its freshness — whether anything found there may still be spoken. The
+  // latest `loadQueue` is read through a ref so a direction or date change is
+  // picked up without tearing the listeners down.
+  const loadQueueRef = React.useRef(loadQueue);
+  React.useEffect(() => { loadQueueRef.current = loadQueue; });
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const refresher = createQueueRefresher({
+      refresh: () => loadQueueRef.current({ quiet: true }),
+      document: typeof document === 'undefined' ? null : document,
+      window,
+      onError: (e) => setError('Queue refresh failed: ' + ((e && e.message) || e)),
+    });
+    refresher.start();
+    return () => refresher.stop();
+  }, []);
+
+  // QUE-006 / W2: announce the transition into `called`, once. The tracker is
+  // seeded on first observation, so entries already called when the page loads
+  // stay silent; the controller's event key suppresses a repeat of the same
+  // entry. The call is not awaited — the queue operation has already committed.
+  const calledTracker = React.useRef(new Map());
+  React.useEffect(() => {
+    const { next, transitioned } = trackCalledTransitions(calledTracker.current, entries);
+    calledTracker.current = next;
+    transitioned.forEach((entry) => announceOnCall(entry));
+  }, [entries]);
+
+  // QUE-006 / POD-12 — the approved queue Call action (gap QOP-001).
+  //
+  // `call` is the existing server transition: PATCH /api/v1/queue/{id} with
+  // action "call". It is authorised by `queue.manage` — or, where the
+  // organization enables doctor queue-calling (owner decision D), by the doctor
+  // for their own patients; the server decides and this gate only mirrors it so
+  // the control is not offered where the request would be refused. The gate also
+  // stops a second click from sending a second request while the first is
+  // pending, and the list is refreshed *only* when the server answered
+  // successfully, so a failed call cannot produce a `called` row (and therefore
+  // cannot be announced). The announcement itself is the refetch's job.
+  const callEntry = async (entry) => {
+    if (!canCall || !isCallable(entry)) return;     // UI mirror; the server decides
+    if (callGate.current.current()) return;         // one call at a time
+    setCalling(entry.id); setError(''); setNotice('');
+    const result = await performCall({
+      entry,
+      authorised: canCall,
+      gate: callGate.current,
+      request: (id, payload) => apiFetch('/api/v1/queue/' + id,
+        { method: 'PATCH', body: JSON.stringify(payload) }),
+    });
+    setCalling('');
+    if (result.status === 'called') {
+      setNotice(t('calledNotice'));
+      loadQueue();
+    } else if (result.status === 'failed') {
+      setError(t('callFailed') + ': ' + ((result.error && result.error.message) || result.error));
+    }
+  };
 
   const doAction = async (id, action, reason) => {
     try {
@@ -182,7 +339,7 @@ return (
         </div>
         {error && <ErrorAlert>{error}</ErrorAlert>}
         {notice && <SuccessAlert>{notice}</SuccessAlert>}
-        <QueueAnnouncements controller={announcements} canAnnounce={canAnnounce} />
+        <QueueAnnouncements controller={announcements} canAnnounce={canAnnounce} delivery={delivery} />
         {loading ? <LoadingState /> : entries.length === 0 ? <EmptyState msg={t('empty')} /> : (
           <div className="table-wrap">
             <DataTable rowKey="id" rows={entries}
@@ -197,6 +354,12 @@ return (
                   <div className="flex flex-wrap">
                     {canManage && <><button className="btn btn-sm btn-outline" onClick={() => move(i, -1)}>↑</button>
                       <button className="btn btn-sm btn-outline" onClick={() => move(i, 1)}>↓</button></>}
+                    {canCall && isCallable(r) && (
+                      <button className="btn btn-sm" disabled={!!busy || !!calling}
+                        onClick={() => callEntry(r)}>
+                        {calling === r.id ? t('pleaseWait') : t('call')}
+                      </button>
+                    )}
                     {canConsult && r.status === 'waiting' && <button className="btn btn-sm" onClick={() => doAction(r.id, 'start_consultation')}>{t('start')}</button>}
                     {canConsult && r.status === 'in_consultation' && <button className="btn btn-sm" style={{ background: '#2e7d32' }} onClick={() => doAction(r.id, 'complete_consultation')}>{t('complete')}</button>}
                     {canManage && r.status === 'waiting' && <button className="btn btn-sm btn-danger" onClick={() => setCancelTarget(r.id)}>{t('cancel')}</button>}

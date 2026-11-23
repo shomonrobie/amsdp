@@ -12,9 +12,12 @@ from datetime import date as date_type, datetime, timezone
 import logging
 
 from common.database import SessionFactory
-from common.models import QueueEntry, QueueSequence, Appointment, Patient, Doctor, Branch
+from common.models import (QueueEntry, QueueSequence, Appointment, Patient,
+                           Doctor, Branch, Organization)
 from common.auth import AuthContext, get_current_user, require_permission, branch_accessible
+from common.config import get_queue_calling_config
 from common.permissions import check as permission_check
+from common.permissions import check_granted
 from common.audit import record_audit
 from common.locations import room_payload
 from common.queue_tokens import allocate_daily_token, token_for
@@ -41,6 +44,18 @@ try:
 except ImportError:
     from recovery import router as recovery_router
 app.include_router(recovery_router)
+
+# QUE-006 / W2 — server-generated identity for a queue `call` event, and the
+# announcement delivery claim that stops two terminals announcing one call.
+try:
+    from .events import current_call_event
+except ImportError:
+    from events import current_call_event
+try:
+    from .announcements import router as announcements_router
+except ImportError:
+    from announcements import router as announcements_router
+app.include_router(announcements_router)
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +108,18 @@ def _entry_to_dict(e, room=None):
     is ``'appointment_snapshot'`` only when the snapshot carries an announceable
     room name; walk-ins (no appointment, no capture yet) report ``''`` and the
     announcement correctly degrades to the approved room-less sentence.
+
+    TRIAL MERGE NOTE (QUE-006 integration trial): this function carries **both**
+    lineages' additions. The room snapshot (F4, option R1) and the call-event
+    identity (W2) are independent and additive — neither reads the other's
+    fields, so a caller may pass a room, a call event, or both.
     """
     room = room or {}
+    # QUE-006 / W2: the latest `call` event, derived from the persisted status
+    # history (queuing/events.py). Published so a browser can deduplicate an
+    # announcement on a server-generated identity instead of a local counter,
+    # and so the claim endpoint can validate what the client claims.
+    event = current_call_event(e.id, e.status_history)
     return {"id": e.id, "queue_entry_id": e.id,
         "organization_id": e.organization_id, "branch_id": e.branch_id,
         "doctor_id": e.doctor_id, "date": str(e.date),
@@ -103,6 +128,10 @@ def _entry_to_dict(e, room=None):
         "entry_source": e.entry_source, "status": e.status,
         "status_history": e.status_history or [],
         "position_history": e.position_history or [],
+        # Empty for an entry that has never been called.
+        "call_event_id": (event or {}).get("call_event_id", ""),
+        "call_event_at": (event or {}).get("call_event_at", ""),
+        "call_count": (event or {}).get("call_count", 0),
         "notes": e.notes or "", "added_by": e.added_by or "",
         "room_id": room.get("room_id") or "",
         "room_name": room.get("room_name") or "",
@@ -138,7 +167,6 @@ def _room_for_entry(session, entry):
         Appointment.organization_id == entry.organization_id,
     ).first()
     return room_payload(appt) if appt else None
-
 
 
 def _next_sequence(session, doctor_id: str, day):
@@ -443,14 +471,57 @@ _NEXT_STATUS = {
     "mark_no_show": "no_show", "reinsert": "waiting",
 }
 
+
+def _granted_capabilities(auth: AuthContext) -> list[str]:
+    """Staff-level grants held by the caller (owner decisions Q1/Q4)."""
+    return [row["capability"] for row in (auth.capability_grants or [])]
+
+
+def _doctor_may_call(auth: AuthContext) -> bool:
+    """May this caller use the queue ``call`` action as a doctor?
+
+    QUE-006 / DEV-1, owner decision D. ``call`` normally requires
+    ``queue.manage``, which the doctor role does not hold. An organization whose
+    policy enables ``doctor_queue_calling_enabled`` may let its doctors call
+    their **own** patients forward; the own-patient rule is enforced after this
+    gate by ``can_access_doctor`` (a foreign entry is a non-disclosing 404), so
+    this function only answers the organization-policy half of the question.
+
+    Only the ``doctor`` role is considered: an assistant is deliberately not
+    covered, because the decision names doctors. A missing organization row
+    fails closed.
+    """
+    if auth.role != "doctor":
+        return False
+    session = SessionFactory()
+    try:
+        org = session.query(Organization).filter(
+            Organization.id == auth.organization_id).first()
+        if org is None:
+            return False
+        policy = get_queue_calling_config(org.config, org.facility_type)
+        return policy["doctor_queue_calling_enabled"] is True
+    finally:
+        session.close()
+
+
 @app.patch("/api/v1/queue/{entry_id}")
 def queue_action(entry_id: str, data: QueueAction,
                  auth: AuthContext = Depends(get_current_user)):
     # Consultation actions require the queue.consult permission (doctor+)
     if data.action in ("start_consultation", "complete_consultation"):
         require_permission("queue.consult")(auth)
-    elif data.action in ("call", "cancel", "mark_no_show", "reinsert"):
+    elif data.action in ("cancel", "mark_no_show", "reinsert"):
         require_permission("queue.manage")(auth)
+    elif data.action == "call":
+        # DEV-1 (owner decision D): `queue.manage` remains the rule — it is what
+        # the front desk and every administrative role holds — and an
+        # organization that enables doctor queue-calling adds its own doctors
+        # for their own patients. Nothing else gains the action.
+        if not check_granted("queue.manage", auth.role,
+                             _granted_capabilities(auth)):
+            if not _doctor_may_call(auth):
+                raise HTTPException(403, "insufficient permissions")
     else:
         raise HTTPException(422, f"unknown action: {data.action}")
 

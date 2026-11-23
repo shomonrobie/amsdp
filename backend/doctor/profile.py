@@ -125,8 +125,19 @@ def doctor_dict(d: Doctor) -> dict:
     it; ``branches`` adds the chamber/fee/primary detail that the redesigned
     doctor screen needs.  The photograph itself is never inlined here — a list
     of 50 doctors would otherwise carry 50 images — only ``has_photo``.
+
+    **Only active assignments are part of this contract** (owner decision C,
+    2026-11-23).  A retired or legacy ``doctor_branches`` row is *preserved* in
+    the database — the row carries the chamber an appointment was booked into,
+    so deleting it would orphan that history — but it is not something the
+    doctor currently works in, and serialising it made ``PATCH`` with
+    ``branch_ids: []`` answer with a branch the caller had just removed.  The
+    rows are still there for history and for re-adding a branch (which
+    reactivates the existing row); they simply do not appear in the payload.
     """
-    assignments = list(d.branch_assignments or [])
+    all_assignments = list(d.branch_assignments or [])
+    assignments = [a for a in all_assignments
+                   if (a.status or "active") == "active"]
     assignments.sort(key=lambda a: (not a.is_primary,
                                     a.branch.name if a.branch else ""))
     links = list(d.specialty_links or [])
@@ -317,6 +328,8 @@ def replace_branch_assignments(session, doctor: Doctor, branch_ids,
     if target is None and active and not any(a.is_primary for a in active):
         target = active[0].branch_id   # deterministic: one primary per doctor
     if target is None:
+        # See the reload note at the end of the function.
+        session.expire(doctor, ["branch_assignments"])
         return
     # Demote first and flush, or the partial unique index would see two
     # primaries in a single UPDATE batch.
@@ -327,6 +340,12 @@ def replace_branch_assignments(session, doctor: Doctor, branch_ids,
     for row in active:
         row.is_primary = (row.branch_id == target)
     session.flush()
+    # The assignments are written through the session, not through the
+    # relationship, and this application's session factory does not expire
+    # attributes on commit.  A caller that already serialised the doctor (the
+    # ``before`` half of the audit record does) would otherwise keep reading
+    # the pre-mutation collection — omitting a branch that was just added.
+    session.expire(doctor, ["branch_assignments"])
 
 
 def set_specialties(session, doctor: Doctor, specialty_ids,

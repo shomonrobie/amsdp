@@ -155,15 +155,15 @@ test('start is progress, not completion: only `end` resolves completed', async (
 test('Bangla without a Bangla voice refuses instead of using English', async () => {
   const { adapter, synth } = build([EN_VOICE]);
   const result = await adapter.speak('টোকেন নম্বর ৪', { language: 'bn' });
-  assert.equal(result.status, OUTCOME.NO_VOICE);
+  assert.equal(result.status, OUTCOME.UNAVAILABLE);
   assert.equal(synth.calls.speak.length, 0, 'nothing may be spoken in the wrong language');
   adapter.dispose();
 });
 
-test('an empty voice list is reported as pending, and nothing is spoken', async () => {
+test('an empty voice list is unavailable, and nothing is spoken', async () => {
   const { adapter, synth } = build([]);
   const result = await adapter.speak('hello', { language: 'en' });
-  assert.equal(result.status, OUTCOME.PENDING);
+  assert.equal(result.status, OUTCOME.UNAVAILABLE);
   assert.equal(synth.calls.speak.length, 0);
   adapter.dispose();
 });
@@ -191,7 +191,7 @@ test('an autoplay refusal reported by the engine is blocked', async () => {
   adapter.dispose();
 });
 
-test('a cancelled utterance is reported as interrupted, not as spoken', async () => {
+test('a cancelled utterance is reported as interrupted, not as completed', async () => {
   const { adapter } = build([EN_VOICE], {
     onSpeak: (u) => u.onerror({ error: 'canceled' }),
   });
@@ -210,17 +210,17 @@ test('one utterance at a time: a second call is busy, replace cancels the first'
   });
 
   const replacement = adapter.speak('replacement', { language: 'en', replace: true });
-  assert.equal((await first).status, OUTCOME.CANCELLED, 'the superseded utterance is cancelled');
+  assert.equal((await first).status, OUTCOME.INTERRUPTED, 'the superseded utterance is stopped');
   // This engine never reports `start`, so the replacement times out as blocked.
   timers.runAll();
   assert.equal((await replacement).status, OUTCOME.BLOCKED);
   adapter.dispose();
 });
 
-test('a throwing engine becomes an error result, never a rejection', async () => {
+test('a throwing engine becomes a failed result, never a rejection', async () => {
   const { adapter } = build([EN_VOICE], { speakThrows: true });
   const result = await adapter.speak('hello', { language: 'en' });
-  assert.equal(result.status, OUTCOME.ERROR);
+  assert.equal(result.status, OUTCOME.FAILED);
   assert.equal(result.reason, 'speak_threw');
   assert.equal(adapter.isSpeaking(), false);
   adapter.dispose();
@@ -229,14 +229,14 @@ test('a throwing engine becomes an error result, never a rejection', async () =>
 test('a throwing getVoices() is treated as "no voices", not as a crash', async () => {
   const { adapter } = build([EN_VOICE], { getVoicesThrows: true });
   assert.equal(adapter.capability('en').status, CAPABILITY.PENDING);
-  assert.equal((await adapter.speak('hello', { language: 'en' })).status, OUTCOME.PENDING);
+  assert.equal((await adapter.speak('hello', { language: 'en' })).status, OUTCOME.UNAVAILABLE);
   adapter.dispose();
 });
 
 test('empty text is refused before the engine is touched', async () => {
   const { adapter, synth } = build([EN_VOICE]);
   const result = await adapter.speak('', { language: 'en' });
-  assert.equal(result.status, OUTCOME.ERROR);
+  assert.equal(result.status, OUTCOME.FAILED);
   assert.equal(result.reason, 'empty_text');
   assert.equal(synth.calls.speak.length, 0);
   adapter.dispose();
@@ -245,7 +245,7 @@ test('empty text is refused before the engine is touched', async () => {
 test('the priming utterance is silent and needs no voice', async () => {
   const { adapter, synth } = build([]);
   const result = await adapter.speak(' ', { language: 'bn', prime: true, volume: 0 });
-  assert.equal(result.status, OUTCOME.SPOKEN);
+  assert.equal(result.status, OUTCOME.COMPLETED);
   assert.equal(synth.calls.speak[0].volume, 0);
   adapter.dispose();
 });
@@ -267,7 +267,7 @@ test('dispose stops speech and refuses further playback', async () => {
   const { adapter, synth } = build([EN_VOICE], { fireStart: false });
   const pending = adapter.speak('hello', { language: 'en' });
   adapter.dispose();
-  assert.equal((await pending).status, OUTCOME.CANCELLED);
+  assert.equal((await pending).status, OUTCOME.INTERRUPTED);
   assert.equal(synth.calls.cancel, 1);
-  assert.equal((await adapter.speak('again', { language: 'en' })).status, OUTCOME.UNSUPPORTED);
+  assert.equal((await adapter.speak('again', { language: 'en' })).status, OUTCOME.UNAVAILABLE);
 });

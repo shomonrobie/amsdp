@@ -203,9 +203,15 @@ class TestGridSearchAndFilters:
         assert _ids(_grid(client, q="0002", date_from=DAY, date_to=DAY)) == [shila]
 
     def test_search_matches_the_token_and_the_appointment_id(self, client):
-        row = _insert(start="12:00", token="A-42")
-        _insert(start="12:30", token="B-43")
-        assert _ids(_grid(client, q="A-42", date_from=DAY, date_to=DAY)) == [row]
+        # The token deliberately contains a letter outside hex (`Z`): search also
+        # matches the appointment id as a substring, and this test failed once
+        # because an unrelated UUID happened to contain "a-42".  That is a real
+        # observation about the search semantics (recorded as an open item in the
+        # acceptance-readiness report); the token here must simply not be able to
+        # collide with a hexadecimal id, so the assertion is about the token.
+        row = _insert(start="12:00", token="TZ-42")
+        _insert(start="12:30", token="TZ-43")
+        assert _ids(_grid(client, q="TZ-42", date_from=DAY, date_to=DAY)) == [row]
         assert _ids(_grid(client, q=row, date_from=DAY, date_to=DAY)) == [row]
 
     def test_status_filter_applies_to_the_grid(self, client):

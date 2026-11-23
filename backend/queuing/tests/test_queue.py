@@ -8,7 +8,8 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (Organization, Branch, StaffUser, Doctor,
-                           DoctorBranch, Patient, QueueEntry, Appointment)
+                           DoctorBranch, Patient, QueueEntry, Appointment,
+                           QueueAnnouncementDelivery)
 from identity.models import _SECRET, _ALGO
 
 
@@ -94,6 +95,10 @@ def _mk_appointment(session, patient_id, status="CONFIRMED"):
 @pytest.fixture(autouse=True)
 def clean_queue():
     session = SessionFactory()
+    # QUE-006 / W2: announcement deliveries reference queue entries, so they are
+    # cleared first. Both tables are test-scoped state, never audit history —
+    # ``audit_events`` is deliberately *not* touched (append-only).
+    session.query(QueueAnnouncementDelivery).delete()
     session.query(QueueEntry).delete()
     session.commit(); session.close()
     yield
@@ -241,6 +246,46 @@ class TestAuthorization:
                          json={"action": "start_consultation"})
         assert r.status_code == 200
 
+    def test_receptionist_can_call_a_waiting_entry(self, receptionist):
+        """POD-12 / QOP-001: the queue Call control uses this existing endpoint."""
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        e = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in"}).json()
+        r = client.patch(f"/api/v1/queue/{e['id']}", headers=_auth(_token(receptionist)),
+                         json={"action": "call"})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "called"
+
+    def test_doctor_cannot_call_without_queue_manage(self, doctor_user, receptionist):
+        """The organization's default: calling is front-desk work.
+
+        A doctor holds queue.consult / queue.recover / queue.reposition but not
+        queue.manage (common/permissions.py:104-122), and an organization that
+        has not enabled doctor queue-calling gets exactly that behaviour: 403,
+        and the denial leaves the entry untouched — a refused call is not a
+        transition.  Owner decision D adds the *opt-in* (see
+        ``TestDoctorQueueCalling``); it does not change the default.
+        """
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        e = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
+            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in"}).json()
+        r = client.patch(f"/api/v1/queue/{e['id']}", headers=_auth(_token(doctor_user)),
+                         json={"action": "call"})
+        assert r.status_code == 403, r.text
+        s = SessionFactory()
+        try:
+            row = s.query(QueueEntry).filter(QueueEntry.id == e["id"]).first()
+            assert row.status == "waiting"
+            # The enqueue itself writes the creation record (``"" -> waiting``), so an
+            # empty history is not the right test for "nothing happened".  What the
+            # refusal must leave untouched is the *transition*: no call record, and
+            # no status other than the creation row.
+            history = row.status_history or []
+            assert [h.get("to") for h in history] == ["waiting"], history
+            assert [h for h in history if h.get("action") == "call"] == [], history
+        finally:
+            s.close()
+
     def test_receptionist_cannot_start_consultation(self, receptionist):
         session = SessionFactory(); p = _mk_patient(session); session.close()
         e = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
@@ -294,6 +339,160 @@ class TestAuthorization:
         assert evt.actor_role == "receptionist"
         s2.close()
 client = TestClient(app)
+
+
+# ---------------------------------------------------------------------------
+# QUE-006 / DEV-1 (owner decision D) — organization-scoped doctor queue-calling
+# ---------------------------------------------------------------------------
+
+def _set_doctor_queue_calling(enabled, org_id="m5-org"):
+    """Store the organization's doctor queue-calling policy."""
+    from common.config import merge_queue_calling_config
+    session = SessionFactory()
+    try:
+        org = session.query(Organization).filter(Organization.id == org_id).first()
+        if org is None:
+            org = Organization(id=org_id, name=org_id, code=org_id.upper())
+            session.add(org)
+        org.config = merge_queue_calling_config(
+            org.config, {"doctor_queue_calling_enabled": enabled})
+        session.commit()
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def doctor_calling_enabled():
+    """Enable the policy for one test and always restore the disabled default."""
+    _set_doctor_queue_calling(True)
+    yield
+    _set_doctor_queue_calling(False)
+
+
+@pytest.fixture(scope="module")
+def second_doctor_user():
+    """A second doctor in the same organization, with their own assignment."""
+    session = SessionFactory()
+    try:
+        if not session.query(Doctor).filter(Doctor.id == "m5-doc-2").first():
+            session.add(Doctor(id="m5-doc-2", organization_id="m5-org",
+                               name="Dr Two", mobile="01700000002"))
+            session.commit()
+        return _mk_user(session, "m5_docu2", "doctor", doctor_id="m5-doc-2")
+    finally:
+        session.close()
+
+
+class TestDoctorQueueCalling:
+    """Owner decision D: a doctor calls only where the organization allows it.
+
+    The setting is per organization, is enforced **server-side** on the queue
+    ``call`` action (the UI is not the boundary), and never widens the action to
+    anybody else: ``queue.manage`` holders keep it, a doctor gains it only for
+    their own patients, and an assistant gains nothing.
+    """
+
+    def _enqueue(self, receptionist, doctor_id="m5-doc"):
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        r = client.post("/api/v1/queue/enqueue",
+                        headers=_auth(_token(receptionist)),
+                        json={"doctor_id": doctor_id, "patient_id": p.id,
+                              "entry_source": "walk_in"})
+        assert r.status_code in (200, 201), r.text
+        return r.json()
+
+    def _state(self, entry_id):
+        session = SessionFactory()
+        try:
+            row = session.query(QueueEntry).filter(
+                QueueEntry.id == entry_id).first()
+            return row.status, list(row.status_history or [])
+        finally:
+            session.close()
+
+    def test_doctor_calls_their_own_patient_when_enabled(
+            self, doctor_user, receptionist, doctor_calling_enabled):
+        entry = self._enqueue(receptionist)
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(_token(doctor_user)),
+                         json={"action": "call"})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "called"
+        assert r.json()["call_event_id"], "the call event drives the announcement"
+        status, history = self._state(entry["id"])
+        assert status == "called"
+        assert [h.get("action") for h in history if h.get("action")] == ["call"]
+
+    def test_the_call_is_audited_with_the_doctor_as_actor(
+            self, doctor_user, receptionist, doctor_calling_enabled):
+        from common.models import AuditEvent
+        entry = self._enqueue(receptionist)
+        client.patch(f"/api/v1/queue/{entry['id']}",
+                     headers=_auth(_token(doctor_user)),
+                     json={"action": "call"})
+        session = SessionFactory()
+        try:
+            evt = session.query(AuditEvent).filter(
+                AuditEvent.target_id == entry["id"],
+                AuditEvent.action == "queue.call").first()
+            assert evt is not None, "a doctor-issued call must be recorded"
+            assert evt.actor_id == doctor_user.id
+            assert evt.actor_role == "doctor"
+        finally:
+            session.close()
+
+    def test_disabled_organization_refuses_the_doctor(
+            self, doctor_user, receptionist):
+        """The default: enabling doctors is a policy an organization must grant."""
+        entry = self._enqueue(receptionist)
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(_token(doctor_user)),
+                         json={"action": "call"})
+        assert r.status_code == 403, r.text
+        status, history = self._state(entry["id"])
+        assert status == "waiting"
+        assert [h for h in history if h.get("action") == "call"] == []
+
+    def test_another_doctors_patient_is_still_a_404(
+            self, doctor_user, receptionist, second_doctor_user,
+            doctor_calling_enabled):
+        """Enabling the policy does not widen *which* patients a doctor may call."""
+        entry = self._enqueue(receptionist, doctor_id="m5-doc-2")
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(_token(doctor_user)),
+                         json={"action": "call"})
+        assert r.status_code == 404, r.text
+        status, history = self._state(entry["id"])
+        assert status == "waiting"
+        assert [h for h in history if h.get("action") == "call"] == []
+
+    def test_assistant_gains_nothing(self, receptionist, doctor_calling_enabled):
+        session = SessionFactory()
+        try:
+            assistant = _mk_user(session, "m5_assist", "assistant")
+            token = _token(assistant)
+        finally:
+            session.close()
+        entry = self._enqueue(receptionist)
+        r = client.patch(f"/api/v1/queue/{entry['id']}",
+                         headers=_auth(token), json={"action": "call"})
+        assert r.status_code == 403, r.text
+        assert self._state(entry["id"])[0] == "waiting"
+
+    def test_the_setting_is_per_organization(self, doctor_user, receptionist):
+        """Enabling it elsewhere must not enable it here."""
+        _set_doctor_queue_calling(True, org_id="m5-other-org")
+        try:
+            entry = self._enqueue(receptionist)
+            # A token for the other organization cannot reach this entry at all.
+            r = client.patch(f"/api/v1/queue/{entry['id']}",
+                             headers=_auth(_token(doctor_user,
+                                                  org="m5-other-org")),
+                             json={"action": "call"})
+            assert r.status_code in (403, 404), r.text
+            assert self._state(entry["id"])[0] == "waiting"
+        finally:
+            _set_doctor_queue_calling(False, org_id="m5-other-org")
 
 
 class TestQueueBranchAuthorization:
@@ -1274,3 +1473,318 @@ class TestQueueMultiDoctorAssignments:
                        f"&date={date.today().isoformat()}",
             headers=_auth(tok))
         assert r.status_code == 404, r.text
+
+
+# ===========================================================================
+# QUE-006 / W2 — call event identity, delivery claim and announcement audit
+# (POD-4 announcement audit, V-12 cross-client duplicate suppression)
+# ===========================================================================
+
+class _AnnouncementFixture:
+    """Helpers shared by the W2 announcement tests.
+
+    ``m5-doc``'s queue is the only doctor queue used, and the autouse
+    ``clean_queue`` fixture clears entries and deliveries before every test.
+    """
+
+    def _enqueue(self, receptionist):
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
+                        json={"doctor_id": "m5-doc", "patient_id": p.id,
+                              "entry_source": "walk_in"})
+        assert r.status_code in (200, 201), r.text
+        return r.json()
+
+    def _call(self, receptionist, entry_id):
+        r = client.patch(f"/api/v1/queue/{entry_id}",
+                         headers=_auth(_token(receptionist)), json={"action": "call"})
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def _called_entry(self, receptionist):
+        return self._call(receptionist, self._enqueue(receptionist)["id"])
+
+    def _read_entry(self, receptionist, entry_id):
+        r = client.get(f"/api/v1/queue?doctor_id=m5-doc"
+                       f"&date={date.today().isoformat()}",
+                       headers=_auth(_token(receptionist)))
+        assert r.status_code == 200, r.text
+        return next(x for x in r.json()["entries"] if x["id"] == entry_id)
+
+    def _claim(self, token, entry_id, event_id, **extra):
+        body = {"event_id": event_id, "language": "bn",
+                "voice_pack_id": "platform.bn.draft.v1", "voice_pack_version": 1,
+                "transport": "prerecorded"}
+        body.update(extra)
+        return client.post(f"/api/v1/queue/{entry_id}/announcement",
+                           headers=_auth(token), json=body)
+
+    def _report(self, token, delivery_id, outcome, reason=""):
+        return client.post(f"/api/v1/queue/announcements/{delivery_id}/outcome",
+                           headers=_auth(token),
+                           json={"outcome": outcome, "reason": reason})
+
+    def _deliveries(self, event_id):
+        s = SessionFactory()
+        try:
+            rows = s.query(QueueAnnouncementDelivery).filter(
+                QueueAnnouncementDelivery.call_event_id == event_id).all()
+            return [{"id": r.id, "status": r.status, "entry_id": r.queue_entry_id,
+                     "org": r.organization_id, "branch": r.branch_id,
+                     "language": r.language, "pack": r.voice_pack_id,
+                     "version": r.voice_pack_version, "transport": r.transport,
+                     "reason": r.outcome_reason, "outcome_at": r.outcome_at,
+                     "requested_by": r.requested_by} for r in rows]
+        finally:
+            s.close()
+
+    def _audit_actions(self, event_id):
+        from common.models import AuditEvent
+        s = SessionFactory()
+        try:
+            return [e.action for e in s.query(AuditEvent).filter(
+                AuditEvent.target_id == event_id).all()]
+        finally:
+            s.close()
+
+
+
+
+class TestQueueCallEventIdentity(_AnnouncementFixture):
+    """The server, not the browser, owns the identity of a call event."""
+
+    def test_successful_call_publishes_a_server_event_id(self, receptionist):
+        e = self._called_entry(receptionist)
+        assert e["status"] == "called"
+        # `events.py` derives the identity from the call record's **append position**
+        # in `status_history`.  Enqueue writes the creation record at index 0
+        # (`main.py`: ``{"from": "", "to": "waiting"}``), so the first call lands at
+        # index 1; the old expectation of ``:0`` predates that creation row.
+        history = e["status_history"]
+        call_indexes = [i for i, h in enumerate(history)
+                        if h.get("action") == "call" and h.get("to") == "called"]
+        assert call_indexes == [1], history
+        assert e["call_event_id"] == f"qce:{e['id']}:{call_indexes[0]}", e
+        assert e["call_event_at"], "the event must carry the server timestamp"
+        assert e["call_count"] == 1
+        # Same value from a later read: identity is derived, not issued once.
+        assert self._read_entry(receptionist, e["id"])["call_event_id"] == e["call_event_id"]
+
+    def test_recall_gets_a_new_event_id(self, receptionist):
+        first = self._called_entry(receptionist)
+        eid = first["id"]
+        # called -> skipped -> waiting, then call again: the product's recall
+        # path (there is no `recall` action; a missed turn plus recovery keeps
+        # the same entry, token and appointment).
+        assert client.post(f"/api/v1/queue/{eid}/missed-turn",
+                           headers=_auth(_token(receptionist)),
+                           json={"reason": "no response"}).status_code == 200
+        assert client.post(f"/api/v1/queue/{eid}/recover",
+                           headers=_auth(_token(receptionist)),
+                           json={"reason": "returned"}).status_code == 200
+        second = self._call(receptionist, eid)
+        assert second["call_event_id"] != first["call_event_id"]
+        assert second["call_count"] == 2
+        assert (int(second["call_event_id"].rsplit(":", 1)[1])
+                > int(first["call_event_id"].rsplit(":", 1)[1]))
+
+    def test_duplicate_call_request_creates_no_second_event(self, receptionist):
+        e = self._called_entry(receptionist)
+        again = client.patch(f"/api/v1/queue/{e['id']}",
+                             headers=_auth(_token(receptionist)),
+                             json={"action": "call"})
+        assert again.status_code == 422, again.text
+        after = self._read_entry(receptionist, e["id"])
+        assert after["call_event_id"] == e["call_event_id"]
+        assert after["call_count"] == 1
+
+    def test_failed_call_does_not_publish_an_event(self, receptionist, doctor_user):
+        e = self._enqueue(receptionist)
+        refused = client.patch(f"/api/v1/queue/{e['id']}",
+                               headers=_auth(_token(doctor_user)),
+                               json={"action": "call"})
+        assert refused.status_code == 403
+        after = self._read_entry(receptionist, e["id"])
+        assert after["status"] == "waiting"
+        assert after["call_event_id"] == ""
+
+
+class TestAnnouncementDeliveryClaim(_AnnouncementFixture):
+    """V-12: two terminals, one call, one announcement."""
+
+    def test_first_claim_wins_and_the_second_terminal_is_refused(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        first = self._claim(token, e["id"], e["call_event_id"])
+        assert first.status_code == 201, first.text
+        assert first.json()["claimed"] is True
+        delivery_id = first.json()["delivery_id"]
+        # A second terminal (same user, another browser) must not announce.
+        second = self._claim(token, e["id"], e["call_event_id"])
+        assert second.status_code == 200, second.text
+        assert second.json()["claimed"] is False
+        assert second.json()["reason"] == "duplicate_event"
+        assert second.json()["delivery_id"] == delivery_id
+        rows = self._deliveries(e["call_event_id"])
+        assert len(rows) == 1, rows
+        assert rows[0]["status"] == "requested"
+
+    def test_claim_records_scope_and_voice_selection(self, receptionist):
+        e = self._called_entry(receptionist)
+        r = self._claim(_token(receptionist), e["id"], e["call_event_id"])
+        assert r.status_code == 201, r.text
+        row = self._deliveries(e["call_event_id"])[0]
+        # Scope comes from the stored entry, never from the request body.
+        assert row["org"] == e["organization_id"]
+        assert row["branch"] == e["branch_id"]
+        assert row["entry_id"] == e["id"]
+        # The selected language and voice pack are part of the record (POD-4).
+        assert row["language"] == "bn"
+        assert row["pack"] == "platform.bn.draft.v1"
+        assert row["version"] == 1
+        assert row["transport"] == "prerecorded"
+        assert row["requested_by"]
+
+    def test_claim_requires_the_current_event(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        assert self._claim(token, e["id"], f"qce:{e['id']}:9").status_code == 409
+        assert self._claim(token, e["id"], "recall-1").status_code == 409
+        assert self._claim(token, e["id"], "").status_code == 422
+        assert self._deliveries(f"qce:{e['id']}:9") == []
+
+    def test_claim_refused_when_the_entry_is_not_called(self, receptionist):
+        e = self._enqueue(receptionist)
+        r = self._claim(_token(receptionist), e["id"], f"qce:{e['id']}:0")
+        assert r.status_code == 409, r.text
+        assert self._deliveries(f"qce:{e['id']}:0") == []
+
+    def test_claim_is_tenant_scoped(self, receptionist):
+        e = self._called_entry(receptionist)
+        foreign = self._claim(_token(receptionist, org="other-org"),
+                              e["id"], e["call_event_id"])
+        assert foreign.status_code == 404, foreign.text
+        assert self._deliveries(e["call_event_id"]) == []
+        # The legitimate terminal can still claim afterwards.
+        assert self._claim(_token(receptionist), e["id"],
+                           e["call_event_id"]).status_code == 201
+
+    def test_claim_requires_no_new_permission(self, receptionist, doctor_user):
+        """queue.consult may announce; queue.manage is still what `call` needs."""
+        e = self._called_entry(receptionist)
+        doctor_token = _token(doctor_user)
+        r = self._claim(doctor_token, e["id"], e["call_event_id"])
+        assert r.status_code == 201, r.text
+        still_refused = client.patch(f"/api/v1/queue/{e['id']}",
+                                     headers=_auth(doctor_token),
+                                     json={"action": "call"})
+        assert still_refused.status_code == 403
+        assert self._read_entry(receptionist, e["id"])["status"] == "called"
+
+    def test_claim_is_refused_without_a_token(self, receptionist):
+        e = self._called_entry(receptionist)
+        r = client.post(f"/api/v1/queue/{e['id']}/announcement",
+                        json={"event_id": e["call_event_id"]})
+        assert r.status_code == 401
+
+
+
+class TestAnnouncementAudit(_AnnouncementFixture):
+    """POD-4: a call success is not an announcement, and `requested` is not
+    `completed`."""
+
+    def test_completion_recorded_only_after_final_playback_report(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        claim = self._claim(token, e["id"], e["call_event_id"]).json()
+        # Claimed, not announced: the row must not claim any sound yet.
+        row = self._deliveries(e["call_event_id"])[0]
+        assert row["status"] == "requested"
+        assert row["outcome_at"] is None
+        assert "queue.announcement.completed" not in self._audit_actions(e["call_event_id"])
+
+        done = self._report(token, claim["delivery_id"], "completed")
+        assert done.status_code == 200, done.text
+        assert done.json()["status"] == "completed"
+        row = self._deliveries(e["call_event_id"])[0]
+        assert row["status"] == "completed"
+        assert row["outcome_at"] is not None
+        actions = self._audit_actions(e["call_event_id"])
+        assert "queue.announcement.requested" in actions
+        assert "queue.announcement.completed" in actions
+        # The queue call itself is a separate record on a separate target.
+        assert "queue.call" in self._audit_actions(e["id"])
+
+    def test_each_playback_outcome_is_distinguished(self, receptionist):
+        token = _token(receptionist)
+        for outcome in ("failed", "blocked", "interrupted", "skipped_busy",
+                        "skipped_duplicate"):
+            e = self._called_entry(receptionist)
+            claim = self._claim(token, e["id"], e["call_event_id"]).json()
+            r = self._report(token, claim["delivery_id"], outcome, reason=outcome)
+            assert r.status_code == 200, (outcome, r.text)
+            row = self._deliveries(e["call_event_id"])[0]
+            assert row["status"] == outcome, row
+            assert row["reason"] == outcome
+            assert f"queue.announcement.{outcome}" in self._audit_actions(e["call_event_id"])
+            # No outcome ever changes the queue entry: playback is not a
+            # queue operation.
+            assert self._read_entry(receptionist, e["id"])["status"] == "called"
+
+    def test_unknown_outcome_is_rejected_and_left_requested(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        claim = self._claim(token, e["id"], e["call_event_id"]).json()
+        assert self._report(token, claim["delivery_id"], "played").status_code == 422
+        assert self._deliveries(e["call_event_id"])[0]["status"] == "requested"
+
+    def test_settled_outcome_is_not_rewritten(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        claim = self._claim(token, e["id"], e["call_event_id"]).json()
+        assert self._report(token, claim["delivery_id"], "completed").status_code == 200
+        clash = self._report(token, claim["delivery_id"], "failed")
+        assert clash.status_code == 409, clash.text
+        row = self._deliveries(e["call_event_id"])[0]
+        assert row["status"] == "completed"
+        assert self._read_entry(receptionist, e["id"])["status"] == "called"
+
+    def test_repeated_report_is_idempotent(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        claim = self._claim(token, e["id"], e["call_event_id"]).json()
+        assert self._report(token, claim["delivery_id"], "completed").status_code == 200
+        again = self._report(token, claim["delivery_id"], "completed")
+        assert again.status_code == 200, again.text
+        assert again.json()["duplicate"] is True
+        actions = self._audit_actions(e["call_event_id"])
+        assert actions.count("queue.announcement.completed") == 1, actions
+
+    def test_outcome_is_tenant_scoped(self, receptionist):
+        e = self._called_entry(receptionist)
+        token = _token(receptionist)
+        claim = self._claim(token, e["id"], e["call_event_id"]).json()
+        foreign = self._report(_token(receptionist, org="other-org"),
+                               claim["delivery_id"], "completed")
+        assert foreign.status_code == 404, foreign.text
+        assert self._deliveries(e["call_event_id"])[0]["status"] == "requested"
+
+    def test_announcement_failure_cannot_block_the_queue(self, receptionist,
+                                                         doctor_user):
+        """V-11: a refused claim leaves the queue fully usable."""
+        e = self._called_entry(receptionist)
+        assert self._claim(_token(receptionist), e["id"], "nonsense").status_code == 409
+        started = client.patch(f"/api/v1/queue/{e['id']}",
+                               headers=_auth(_token(doctor_user)),
+                               json={"action": "start_consultation"})
+        assert started.status_code == 200, started.text
+        assert started.json()["status"] == "in_consultation"
+
+        # A refused claim must neither consume nor invent a call event: the entry's
+        # identity is still exactly the one its successful call issued.  (This
+        # replaces a stray `after` reference copied from a neighbouring test, which
+        # raised NameError instead of asserting anything.)
+        after = self._read_entry(receptionist, e["id"])
+        assert after["call_event_id"] == e["call_event_id"]
+        assert after["call_count"] == 1
+        assert after["status"] == "in_consultation"

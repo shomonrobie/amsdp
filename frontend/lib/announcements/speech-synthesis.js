@@ -46,16 +46,12 @@ export const OUTCOME = Object.freeze({
   BLOCKED: 'blocked',           // refused before it began: autoplay policy / no start
   BUSY: 'busy',                 // another utterance is in progress
   UNAVAILABLE: 'unavailable',   // the engine cannot serve this language/voice
-
-  // Names kept for callers written before the shared vocabulary landed. They map
-  // onto the six terminal words above, so old and new code agree on every value.
-  SPOKEN: 'completed',
-  CANCELLED: 'interrupted',
-  NO_VOICE: 'unavailable',
-  UNSUPPORTED: 'unavailable',
-  PENDING: 'unavailable',
-  ERROR: 'failed',
 });
+// D-6 (product owner, 2026-11-22): this is the *only* playback vocabulary.
+// `completed` and `interrupted` are the approved words for a finished and a
+// stopped sentence; the pre-merge spellings `spoken`/`cancelled`/`error`/
+// `unsupported` were removed rather than aliased, so no engine, controller or
+// persisted record can carry two names for one outcome.
 
 /** BCP-47 tag used for each supported announcement language (OD-3). */
 export const LANGUAGE_TAGS = Object.freeze({ bn: 'bn-BD', en: 'en-GB' });
