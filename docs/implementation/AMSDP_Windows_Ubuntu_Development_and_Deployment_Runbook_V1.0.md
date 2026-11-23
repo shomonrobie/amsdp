@@ -28,7 +28,7 @@ observed in this session; every Windows-side step is **NOT VERIFIED** (§1.2).
 | Claim | How it was verified |
 |---|---|
 | Repository root is `/home/shomonrobie/amsdp`; compose project is `amsdp` | `docker ps` (containers named `amsdp-*`), compose file read |
-| Nine services run: `db`, `identity`, `organization`, `patient`, `doctor`, `scheduling`, `appointment`, `queuing`, `audit`, `frontend` | `docker ps` container list |
+| Ten containers run: `db`, `identity`, `organization`, `patient`, `doctor`, `scheduling`, `appointment`, `queuing`, `audit`, `frontend` | `docker ps` container list |
 | Published host ports: `3100` frontend, `5433` db, `8110`–`8117` backends | `ss -ltn`, `docker-compose.yml` (`ports:` entries) |
 | `amsdp-autostart.service` (systemd **user** unit) is `active` and `enabled` | `systemctl --user list-unit-files 'amsdp*'`, `is-active`, `is-enabled` |
 | Migration graph has exactly one head and applies from an empty database | `alembic heads` → `c4d8e2a91f60 (head)`; `alembic upgrade head` against a throwaway `postgres:16-alpine` container on `127.0.0.1:55460` exited **0** |

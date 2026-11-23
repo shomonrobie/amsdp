@@ -26,7 +26,7 @@ availability of the new tables (the live database is still behind — §7).
 | Server-side confirmation | `git ls-remote origin refs/heads/hackathon-mvp` → `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` at publication time, and `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` once this report was pushed |
 | Docs commit carrying this report | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` (first issue), pushed as `ea9c2a0..4e7250d  hackathon-mvp -> hackathon-mvp` — also a fast-forward, also verified by `ls-remote`. The report was amended afterwards to record the tip, so the commit that carries these lines is later than `4e7250d` |
 | Remote tip | whatever `git ls-remote origin refs/heads/hackathon-mvp` reports — a hash written into a document cannot be the last word on a branch that keeps moving, so the authoritative check is the command, and it reported `ea9c2a0` for the merge and `4e7250d` for the docs commit |
-| Local confirmation | `git rev-parse origin/hackathon-mvp` and `git rev-parse HEAD` both `ea9c2a0…` after `git fetch --prune` |
+| Local confirmation | at the moment of the merge push, `git rev-parse origin/hackathon-mvp` and `git rev-parse HEAD` both returned `ea9c2a0…` after `git fetch --prune` |
 | Published tree | `dbc6abb817026633e110a711c88843566516baca` |
 | Remote advanced between fetch and push | No — `git fetch origin --prune` immediately before the push returned nothing |
 
@@ -269,9 +269,12 @@ claimed as done.
 | Backend endpoints, RBAC | `saas-application-security.md` and `saas-auth-and-authorisation.md` (adapted), Business Rules §7–8 |
 | Documentation placement and registration | `.clinerules` §11–§12, `docs/governance/AMSDP_Docs_Index_V1.0.md` |
 
-**Skills:** none installed in this workspace (`.clinerules` §5 — verified: no
-`.clinerules/skills/`, no `.claude/skills/`, no repo `skills/`). No skill was used, and
-none is claimed.
+**Skills:** none installed in this workspace (`.clinerules` §5). Re-checked in this
+session: `.clinerules` is a file, not a directory, and `.claude/skills` and `skills/` do
+not exist. The `ai_factory/docs/agent-rules/` library does exist and the rules applied
+above (`saas-cicd-workflow.md`, `saas-multitenant-data.md`, `saas-application-security.md`,
+`saas-auth-and-authorisation.md`) were read from it, as adapted by the governance
+assessment §3. No skill was used, and none is claimed.
 
 **Non-negotiables honoured (`§3`):**
 
