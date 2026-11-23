@@ -636,7 +636,7 @@ are ephemeral; the durable record is this section plus
 | Container layout | `pytest organization/tests/test_container_layout_import.py` | passed |
 | Proxy table | `node --test tests/next-config-rewrites.test.mjs` | passed (inside the frontend suite) |
 | Announcement dedupe | `node --test tests/queue-announcement-dedupe.test.mjs` | passed (inside the frontend suite) |
-| Containers | `docker ps` | 11 `amsdp-*` containers |
+| Containers | `docker ps` | 10 `amsdp-*` containers (11 while the throwaway verification database was still up; it has since been removed) |
 | Listening ports | `ss -ltn` | 3100, 5433, 8110–8117; **no :22** |
 | Boot unit | `systemctl --user is-enabled/is-active amsdp-autostart.service` | `enabled`, `active` |
 | Toolchain | python `--version`, node `--version`, `npm --version`, `docker --version`, `docker compose version` | 3.14.4 / v24.21.0 / 11.19.0 / 29.1.3 / 2.40.3 |
