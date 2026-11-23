@@ -23,7 +23,9 @@ availability of the new tables (the live database is still behind — §7).
 | Previous remote tip | `2fc007a3f7a96639c3df36341c6081cee4d24a48` |
 | Push result | `2fc007a..ea9c2a0  hackathon-mvp -> hackathon-mvp`, exit 0 |
 | Force used | **No.** `git merge-base --is-ancestor 2fc007a ea9c2a0` is true, so the push was a true fast-forward; no `+`, no `--force`, no `--force-with-lease` |
-| Server-side confirmation | `git ls-remote origin refs/heads/hackathon-mvp` → `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` |
+| Server-side confirmation | `git ls-remote origin refs/heads/hackathon-mvp` → `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` at publication time, and `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` once this report was pushed |
+| Docs commit carrying this report | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3`, pushed as `ea9c2a0..4e7250d  hackathon-mvp -> hackathon-mvp` — also a fast-forward, also verified by `ls-remote` |
+| Remote tip at the time of writing | `4e7250d3c1f279b8765eec33bdd6c658d362fdc3` on `hackathon-mvp` |
 | Local confirmation | `git rev-parse origin/hackathon-mvp` and `git rev-parse HEAD` both `ea9c2a0…` after `git fetch --prune` |
 | Published tree | `dbc6abb817026633e110a711c88843566516baca` |
 | Remote advanced between fetch and push | No — `git fetch origin --prune` immediately before the push returned nothing |
@@ -312,5 +314,6 @@ claims no revision number — that is D‑5, and it stays open.
 4. Owner decisions on the three `OPEN — owner decision` rows.
 5. Close B‑8, D‑7, O‑2 and RBAC‑R3 with the evidence named in §7, not with a green suite.
 
-**Published commit: `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` on `hackathon-mvp`.**
+**Published merge commit: `ea9c2a01603b95ded744adc9e7f8629ec8477b9f` on `hackathon-mvp`;
+remote tip including this report: `4e7250d3c1f279b8765eec33bdd6c658d362fdc3`.**
 
