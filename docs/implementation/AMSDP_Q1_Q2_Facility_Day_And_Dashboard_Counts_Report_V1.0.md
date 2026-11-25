@@ -274,6 +274,38 @@ observed — so `git log` alone does not have to be read alongside a document to
 Authorised scope, honoured literally: **`origin/hackathon-mvp` only**. No force, no tag, no other
 branch, no PR, no CI trigger beyond what a push causes by itself.
 
+**Observed result — not a claim, a transcript:**
+
+```
+$ git push origin hackathon-mvp
+To https://github.com/shomonrobie/amsdp/
+   a4ddc2c..6fa7e6f  hackathon-mvp -> hackathon-mvp
+
+$ git fetch origin; git rev-parse HEAD; git rev-parse origin/hackathon-mvp
+local  6fa7e6fc2490bf8f0e49728d941fd742b575591a
+remote 6fa7e6fc2490bf8f0e49728d941fd742b575591a
+
+$ git rev-list --left-right --count origin/hackathon-mvp...HEAD
+0       0
+```
+
+* **The remote tip is `6fa7e6fc2490bf8f0e49728d941fd742b575591a`** — the docs commit carrying this
+  report. Local and remote are identical (0 ahead, 0 behind) — the G-4 claim in Amendment A-4 that the
+  push happened is `VERIFIED`, unlike the *product behaviour* it describes, which is not.
+* **22 commits went up** in this push, all inspected by `--oneline` and by `diff --stat`
+  (**114 files, 19,688 insertions, 650 deletions** across the whole ahead-set) before the push. They
+  are the 19 that had accumulated from the MP-05…MP-33 work plus the 3 from this window.
+* **The pushed range was scanned for secret material** before it left the machine
+  (`BEGIN … PRIVATE KEY`, `ghp_…`, `sk-…`, `AKIA…` patterns): **0 matches**. No credential is in the
+  history that was pushed.
+* The only modified tracked file still in the working tree is **`.clinerules`** (the owner's
+  `docs/plan/` ratification note, §7.2) — deliberately not committed, and visible in
+  `git status --branch` as the sole entry.
+* This verification paragraph was written **after** the push and therefore lands in a follow-up docs
+  commit; the queue-relevant fact it records is the tip above, which is what `origin/hackathon-mvp`
+  held at verification time.
+
+
 <!--PUSH-VERIFY-->
 
 ---

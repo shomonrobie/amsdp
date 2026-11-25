@@ -468,6 +468,17 @@ against the deployment happened in this window (**B-2**), the midnight rollover 
 (**B-3**), and the demo-data authorisation was **not exercised** — the existing development data was
 sufficient, and recording that is better than manufacturing rows to justify an authority.
 
+**The push, verified.** The three path-grouped commits `e23a2ce` (backend, 4 files), `516e46b`
+(frontend, 3 files) and `6fa7e6f` (docs) were pushed to **`origin/hackathon-mvp`** and nothing else:
+`a4ddc2c..6fa7e6f  hackathon-mvp -> hackathon-mvp`. After a `git fetch`, local `HEAD` and
+`origin/hackathon-mvp` were both **`6fa7e6fc2490bf8f0e49728d941fd742b575591a`** with
+`git rev-list --left-right --count` reporting **`0  0`**. 22 commits went up in that push (the 19 that
+had accumulated from the MP-05…MP-33 work plus these 3); the range was scanned for key/token patterns
+before it left the machine and matched nothing. **`.clinerules` remains uncommitted** — its change is
+the owner's own `docs/plan/` ratification note, not an agent edit — and it is now the only modified
+tracked file in the tree.
+
 <!-- §10 added 2026-11-25 under decision record Addendum A-1; §4 rows left as written (append-only). -->
+
 
 
