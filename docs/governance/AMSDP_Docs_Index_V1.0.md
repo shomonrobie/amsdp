@@ -1567,3 +1567,452 @@ files under `docs/`; a full recount against the registered rows, and the numberi
 reconciliation that depends on it, remain the owner's D-5 task. This annex registers
 exactly the two files named above and makes no claim about the others.
 
+
+### Implementation-state investigation (Windows checkout, 2026-11-23) — one registration
+
+| File | Bytes | What it records |
+|---|---:|---|
+| `implementation/AMSDP_Implementation_State_and_Next_Task_Report_V1.0.md` | 23,831 | A **read-only** investigation of the stopping point, requested before any further work was authorised. Section A pins the repository state by command: branch `hackathon-mvp`, HEAD `a4ddc2c` (2026-11-23 20:21:43 +0600), upstream `origin/hackathon-mvp` **0/0**, remote tip identical per `git ls-remote`, working tree **clean (0 entries)**, **no** `MERGE_HEAD`, one local branch, no tags, no stashes, 64 commits; merge parentage `ea9c2a0` = `41ac51a` + `2fc007a`. Section B separates the last **implementation** task (D-4/D-6 closure) from the last task overall (merge publication + runbook correction). Section C ranks the five newest reports and flags that their state headers (`trial/…` branch, `41ac51a`, open `MERGE_HEAD`) are now stale. Section D gives the W1–W7 matrix: W1/W2/W7 complete, W3 API-only with **no admin UI**, W4 resolved by D-4 with the plan row still showing the blocker, W5 **partially** implemented (no server-side distribution API), W6 analysis only, and the **live database two revisions behind** as a reported, unverified runtime fact. Section E orders the remaining work (migration first). Section F names the next planned task — publication report §10 step 1, backup → `alembic upgrade head` → rebuild, then the whole-tree suite — and states it was **not started**. Section G lists the open owner decisions (D-3, D-5, D-7, O-2, POD-2 formally, POD-3/POD-5/POD-6, POD-7, POD-1/POD-8/POD-9/POD-10/POD-11, infrastructure). Section H recommends accepting the state and authorising only the migration. Eight conflicts are surfaced rather than resolved, including the stale report headers, inconsistent lineage labels, the `queue_calling_config.py` citation for announcement configuration, the stale POD-12/POD-2 plan rows, the W3 plan-versus-delivered scope gap, the differing test counts across reports, the `queue_announcement_deliveries` naming, and the absence of any facility announcement enable flag (the substance of O-2/POD-6). It records what was **not** executed and why (`pytest`, `alembic`, containers and live calls are unavailable from a Windows checkout that has no `backend/.venv`), and warns that every `docs/*.md` mtime is `2026-11-23 15:16:53`, so chronology must come from commit history |
+
+**Open item — D-5 still applies.** This registration claims no revision number: the index
+head is still unconfirmed, so the document is registered here without advancing the numbering.
+With it the tree holds **126** `.md` files under `docs/` (measured with
+`Get-ChildItem -Recurse -Filter '*.md'`), one more than the 125 recorded in the registration
+above; the recount against the registered rows and the numbering reconciliation that depends
+on it remain the owner's D-5 task. This annex registers exactly the one file named above and
+makes no claim about the others.
+
+### Requirements reconciliation and master plan (Windows checkout, 2026-11-24) — two registrations
+
+| File | Bytes | What it records |
+|---|---:|---|
+| `audit/AMSDP_Requirements_Reconciliation_and_Implementation_Gap_Audit_V1.0.md` | 71,649 | A **read-only** reconciliation of the nine requirement documents against the `hackathon-mvp` tree. Pins the repository state by command (branch `hackathon-mvp`, HEAD `a4ddc2c`, upstream 0/0, migration head `c4d8e2a91f60`, live database reported two revisions behind). Registers the nine sources with declared status and authority tiers T1–T4, and explains that V2.5's approval covers only the §C module catalogue. Records **seven unresolved conflicts C-1…C-7** — DQDS and SMS phase labels against MVP §16, the unratified symptoms feature, Phases 4–6 never written down, "approved" meaning two things, the unapproved analytics specification, and the unphased subscription rules. Gives a **66-key feature matrix F-01…F-66** (21 implemented-and-tested, 13 implemented, 11 partial, 1 API-only, 1 unverified, 17 not implemented, 1 unratified, 1 CI-never-green), a **business-rule compliance matrix for §3–§56 plus §27A** (25 compliant, 13 partial, 14 not compliant, 1 conflicted, 53 rule sections assessed), a **Blueprint-to-frontend screen matrix** (9 of 23 screens implemented, 9 partial, 5 absent), a **27-item gap register GAP-01…GAP-27** with severity S1–S4, hackathon readiness against MVP §12 (7 of 11 steps ready in code, 3 not, 1 partial), full product readiness (about 60 per cent), and an assessment of the seven plan-shaped artefacts that exist — concluding that **no comprehensive plan exists** and that the unpersisted T-1…T-12 roadmap was never executed. Retracts one earlier negative finding (denial auditing **does** exist). Ends with twelve owner decision requests PO-01…PO-12 and eight explicit evidence limitations |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.0.md` | 35,864 | The master implementation plan the audit found missing, marked **PROPOSED — awaiting Product Owner authorisation**. Nine work packages **WP-A…WP-I** and 34 dependency-ordered tasks **MP-01…MP-34**, each with current state, priority P0–P3, dependencies, deliverables, a failable acceptance criterion and an engineer-day estimate; the critical path (MP-01 runtime restoration and live-database migration first, then the whole-tree baseline, then the demo-blocking bundle MP-05/06/07, then end-to-end acceptance and two rehearsals) with a minimum demo path of about 5.75 engineer-days; eight milestones M-1…M-8; the **PO-01…PO-12 decision gates** with what each blocks; definition of ready, a nine-gate definition of done and the evidence vocabulary; seven sequencing rules; ten risks; deferred and rejected work with reasons; a GAP-to-task traceability table with a coverage check; and command recipes for MP-01, MP-02 and MP-03. It supersedes the unpersisted T-1…T-12 roadmap and records where each item went |
+
+**Open item — D-5 still applies, and `plan/` is new.** Neither registration claims a revision
+number: the index head is still unconfirmed, so both documents are registered here without
+advancing the numbering. With them the tree holds **128** `.md` files under `docs/` (measured
+with `Get-ChildItem -Recurse -Filter '*.md'`), two more than the 126 recorded in the registration
+above; the recount against the registered rows and the numbering reconciliation that depends on
+it remain the owner's D-5 task. Both documents record a **placement deviation**: `docs/plan/` was
+created because the Product Owner's authorising instruction named a plan folder, and §11's
+sanctioned subfolder list does not include it — the deviation is stated in plan §12 and flagged
+for either ratification of the folder or migration of the file to `docs/implementation/` with a
+manifest entry. No existing document was moved, renamed or overwritten by either registration.
+
+### Multi-display DQDS scope change (Windows checkout, 2026-11-24) — three new documents, two amendments
+
+| File | Bytes | What it records |
+|---|---:|---|
+| `architecture/AMSDP_Multi_Display_DQDS_Functional_Specification_V1.0.md` | 50,246 | The missing multi-display DQDS requirement document, **PROPOSED and unauthorised**. Records the current state by evidence (one branch-wide board route in `backend/queuing/display.py`, 24 board tests, 10 s polling, device-local language, **no** display table, **no** display capability, **no** device pairing, **no** SSE/WebSocket) and separates implemented, partially implemented, documented-but-absent and unverified. States the three source conflicts it works inside (BR §33's later-phase sentence vs MVP §16/PQV §B.6; V2.x's deferred "advanced" multi-display; BR §34's administrator ownership of display configuration) and resolves none of them as business fact. Defines the hackathon minimum **MD-01…MD-12**, the twelve deferrals **D-01…D-12**, Phase 3 placement with Phase 6 demonstration, acceptance **AC-01…AC-14**, and the measured limiter arithmetic that forces per-display accounting (30 req/min per client IP against 6 req/min per screen: five screens sit exactly on the ceiling, six are refused). |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` | 49,357 | The plan **amended, not replaced**: V1.0 is preserved as issued. Adds work package **WP-C.2** (Phase 3) with tasks **MP-35** registry and migration, **MP-36** display resolution and server-side doctor scope, **MP-37** department scope and room label, **MP-38** configured language and TV-scale presentation, **MP-39** capability/admin API/page/audit; and **MP-40** (Phase 6) multi-display demonstration including the six-screen load and stale/reconnect evidence. Adds gate **PO-13**, milestones **M-9/M-10**, assumptions **A-6/A-7**, risks **R-11/R-12**, sequencing rules 8–9, GAP-28 traceability and a verification recipe. 40 tasks; ≈ 65.5 engineer-days (≈ 10.5 added). The six-phase sequence, every other task, gate and estimate are unchanged; the V1.1 deferral table replaces the V1.0 row that had marked multi-display as deferred. |
+| `implementation/AMSDP_Multi_Display_DQDS_Documentation_Update_Report_V1.0.md` | 14,098 | The task report: current multi-display capability by evidence (one branch-wide route, 24 board tests, polling only, no display table, no capability, no device pairing), the classification of all six capability areas, the gap list, the hackathon scope now included, every document changed or created and why the owner-controlled ones were not, the Phase 3/Phase 6 confirmation, the nine outstanding implementation items with their blocking gate, the validation actually performed, and the Governance and Skill Compliance section. States plainly that no application code, schema, deployment or infrastructure was changed. |
+
+**Two existing documents were amended in place, append-only, with the original text preserved:**
+
+- `audit/AMSDP_Requirements_Reconciliation_and_Implementation_Gap_Audit_V1.0.md` → **§14 Amendment A-1** (71,649 → 80,953 bytes): reclassifies **F-53** from *later phase* to *Hackathon Phase 3* by owner instruction 2026-11-24 and PQV §B.6 while leaving its **NOT IMPLEMENTED** status untouched; adds **GAP-28** (S2), making the register 28 gaps (S1 5 · S2 14 · S3 6 · S4 3); adds decision request **PO-13**; corrects four transcription errors in §4.6 (route and line counts for `display.py`, the `test_dqds.py` length, the location of the tracking routes, and a test file name that does not exist); and lists the documents reconciled. No finding was withdrawn and no severity lowered.
+- `audit/AMSDP_Phase_3_Queue_DQDS_QUE-006_Gap_Analysis_V1.0.md` → **Appendix D Amendment A-1** (149,752 → 155,457 bytes): records that **OD-4** is answered for the hackathon, maps the effect onto each of **DQD-001…DQD-014**, and keeps DQD-002 (room on the queue entry), DQD-005 (estimate/countdown), DQD-008 (next tokens) and durable rate limiting deferred.
+
+**Read, never modified (owner-controlled):** `product/AMSDP_Business_Rules_V1.0.md`, `AMSDP_Business_Rules_V1.1.md`, `product/AMSDP_MVP_SCOPE_V1.0.md`, `AMSDP_MVP_SCOPE_V1.1.md`, `product/AMSDP_PQV_Patient_Queue_Visibility_Decision_V1.0.md`, `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md`, and the master feature lists V2.0–V2.5. Their DQDS wording still says what it says; the conflict is recorded in the specification §2 and the audit §14, and referred to the Product Owner as **PO-02**/**PO-13**.
+
+**Open item — D-5 still applies, and the count moves again.** None of the three new files claims a revision number. With them the tree holds **131** `.md` files under `docs/` (`Get-ChildItem -Recurse -Filter '*.md'`), three more than the 128 recorded above; the recount against the registered rows and the numbering reconciliation remain the owner's **D-5** task. The `docs/plan/` placement deviation recorded above now covers two files, not one. No existing document was moved, renamed or deleted.
+
+### Product Owner decisions PO-13 / PO-02 / MP-06 applied (2026-11-24) — amendments, no new requirement document
+
+Four owner decisions arrived after the annex above was written. They are recorded here because they changed **governance**, **an owner-controlled requirement baseline** and **three working documents**.
+
+| Decision | Disposition |
+|---|---|
+| **PO-13** — Full-featured multi-display DQDS **APPROVED** for Hackathon delivery; management/configuration not deferrable | Requirement set extended **MD-13…MD-19** (estimated waiting time, room scope, refresh-on-change, facility-local operational day, facility-controlled public fields, read-only enforcement, denial accounting) with **AC-15…AC-22** and tasks **MP-41…MP-46**; multi-display is no longer described as optional anywhere |
+| **PO-02** — DQDS requirements alignment **RESOLVED**; no MVP/Hackathon/Later-Releases tier; BR §33 later-phase wording must go | **`product/AMSDP_Business_Rules_V1.0.md` §33 and `AMSDP_Business_Rules_V1.1.md` §33 edited — the only owner-controlled edit in this task, and explicitly instructed by PO-02.** A new §33.1 scope-status block replaces the later-phase paragraph in both copies; the items 1–13 list is untouched |
+| **MP-06** — Facility-local operational day, `Asia/Dhaka` default, applied to queue, dashboards and DQDS | Recorded as **implementation compliance** with BR §0 item 8, which already required it. `organizations.timezone` exists (`models.py:38`), so no migration is needed; **MP-44** is its DQDS proof. GAP-03/GAP-25 remain open and now include the display path (GAP-32) |
+| **`docs/plan/` ratified** as an approved repository location for plans and roadmaps | **Governance changed:** `.clinerules` §11 now lists `plan/` in the sanctioned subfolder list and records the ratification. The earlier "placement deviation" is **closed**; nothing was moved, renamed or migrated, so **no migration-manifest entry is required** |
+
+| File | Bytes before → after | What changed |
+|---|---:|---|
+| `audit/AMSDP_Requirements_Reconciliation_and_Implementation_Gap_Audit_V1.0.md` | 80,953 → **92,574** | **§15 Amendment A-2**: decisions recorded; all thirteen BR §33 items reconciled item-by-item against code; **GAP-29…GAP-34** added (estimated wait, room scope, change signal, server-local day, public-field policy, read-only/denial audit); **GAP-28** restated as a delivery gap over MD-01…MD-19; unresolved items listed |
+| `architecture/AMSDP_Multi_Display_DQDS_Functional_Specification_V1.0.md` | 50,246 → **69,052** | **Appendix E (Amendment A-1)**: approved-scope status, **D-04 withdrawn**, **D-08 split**, MD-13…MD-19, AC-15…AC-22, data-model delta, contract deltas, §6 banner and D-04/D-08 annotations, §9.4 gates marked decided, §11.3 status updated |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` | 49,357 → **62,905** | **Appendix D (Amendment A-1)**: **WP-C.3 MP-41…MP-46** (+7.5 eng-days, 40 → 46 tasks, ≈ 65.5 → ≈ 73.0), gates PO-02/PO-13 closed, sequencing 10–14, risks R-13…R-15, milestone conditions, placement-deviation closure |
+| `product/AMSDP_Business_Rules_V1.0.md` | 42,812 → **47,353** | §33.1 scope-status block; header amendment line |
+| `AMSDP_Business_Rules_V1.1.md` | 47,338 → **51,954** | Identical §33.1 block (byte-identical, 3,433 chars), so no stale DQDS wording survives in either copy |
+| `.clinerules` §11 | — | `plan/` ratified; deviation closed |
+| `implementation/AMSDP_PO13_Multi_Display_DQDS_Reconciliation_Report_V1.0.md` | new | The reconciliation report for this task |
+
+**Read, still unmodified:** `product/AMSDP_MVP_SCOPE_V1.0.md` §16, `AMSDP_MVP_SCOPE_V1.1.md`, `product/AMSDP_PQV_Patient_Queue_Visibility_Decision_V1.0.md`, the master feature lists V2.0–V2.5, `architecture/AMSDP_System_Architecture_V1.0.md`, the ASCII UI/UX Blueprint and the demo documents. **PO-02 settled the DQDS conflict in favour of DQDS itself, so MVP §16 requires no edit**: its §16.1 already places DQDS in Phase 1 and its §16.5 "documented requirements only — not yet implemented" is a status statement, still true.
+
+
+---
+
+## Live deployment baseline correction (Windows checkout, 2026-11-24) — one new registration, five amendments
+
+**Why this annex exists.** Six documents carried the sentence "the live database is two migration
+stages behind". It was a **true measurement taken on 2026-11-23** that the same-day migration
+superseded; no document in this tree recorded the application, so the sentence outlived the fact and
+was inherited as current by the audit and the plan. A read-only reconciliation established the real
+baseline and corrected every operative statement. Superseded sentences are **retained and dated**, not
+deleted — the record shows what was believed and when.
+
+**Verified baseline.** Branch `hackathon-mvp`, HEAD `a4ddc2cf58e019b57dccf59f3a859743e3c48430`; live
+database **`c4d8e2a91f60`** (single head), migrated **2026-11-23** from `a9c4e1f7b2d8`, creating
+`voice_packs`, `queue_announcement_deliveries` and `announcement_platform_config`; rehearsed on a
+disposable restored database with a pre-migration backup; seeded counts preserved (organizations 421,
+patients 2963, doctors 601, appointments 642, queue_entries 11, audit_events 20490).
+
+**Freshly verified on 2026-11-24 (not inherited):** the eight services on `192.168.68.108:8110–8117`
+and the frontend on `:3100` all return HTTP 200; the deployed organization service advertises all
+eleven `/api/v1/voice-packs…` routes plus the platform/org announcement-config routes, and the queuing
+service advertises the W2 delivery routes — code that exists only in the merged tree whose head is
+`c4d8e2a91f60`. **Not verified:** the live schema revision and the three tables (no `alembic`,
+`psql` or `docker` binary and no DB credential on the checking host; an authenticated probe would need
+a writing `POST /api/v1/staff/login`). That gap is carried to **MP-01**.
+
+| File | Bytes before → after | What changed |
+|---|---:|---|
+| `audit/AMSDP_Requirements_Reconciliation_and_Implementation_Gap_Audit_V1.0.md` | 92,572 → **102,386** | **§16 Amendment A-3**: corrected baseline, fresh-vs-historical evidence table, root-cause chain, scope of change, what it does not do. §1.1 verdict, §1.4 recommendation, §2.1 live-DB row, §2.3 two rows, **GAP-01**, §8 step 1, §12 item 3 corrected in place. Severity totals unchanged |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` | 62,905 → **72,842** | **Appendix E (Amendment A-2)**: §3.1 runtime row, §5.2 critical-path label, §5.3 **M-1** → "Runtime proven", **MP-01** redefined as verification (never re-apply), **MP-02** reason clarified, §9 **R-1**, §11 **GAP-01**, Appendix B recipe made conditional, Appendix C next action + change history. **No task, gate or estimate changed** |
+| `implementation/AMSDP_Windows_Ubuntu_Development_and_Deployment_Runbook_V1.0.md` | 36,213 → **38,698** | §1.4 marked **RESOLVED 2026-11-23** with a status banner; closing advice inverted to "verify first"; §4.3 made conditional and its command block now checks before upgrading; §8 sentence qualified; §11 blocker row **CLOSED**; §12 evidence rows annotated as pre-migration |
+| `implementation/AMSDP_Final_Merge_Publication_Report_V1.0.md` | 20,301 → **22,092** | Dated correction note under the header; §4.2 and §4.3 rows marked as written-before-the-migration; §7 blocker row **CLOSED 2026-11-23**; §10 action 1 **DONE**, action 2 restated as a prediction |
+| `implementation/AMSDP_Implementation_State_and_Next_Task_Report_V1.0.md` | ≈23,831 → **25,449** | Correction banner; header verdict, §D runtime row and §E **E-1** corrected ("record the post-migration suite baseline") |
+
+### Registration
+
+| Field | Value |
+|---|---|
+| Document | `implementation/AMSDP_Live_Deployment_Baseline_Reconciliation_Report_V1.0.md` |
+| Size | 27,746 bytes · 13 sections |
+| Read when | Any question about the live database revision, about **MP-01**, or about why two reports disagreed on migration state. It carries the evidence classes (VERIFIED / REPORTED / HISTORICAL / PREDICTED / NOT VERIFIED) for every claim |
+
+**Byte figures in earlier registrations are registration-time, not current.** Where this pass amended a
+document that an earlier annex registered, the figure above is the current one: runbook **36,125 →
+38,698**, merge publication report **19,005 → 22,092**, implementation-state report **23,831 → 25,449**,
+gap audit **80,953 → 92,574 → 102,386** (the 92,574 in the previous annex and the 92,572 measured at the
+start of this pass differ by two bytes, a trailing-newline artefact; neither figure is load-bearing).
+Each amended document now carries a dated correction banner or crossed-out text, so a reader arriving at
+an old registration is told, in the document itself, that the migration statement there is historical.
+
+**Counts and D-5.** The previous annex recorded **132** `.md` files under `docs/`; this pass adds one
+file, so the tree now holds **133**. **D-5 is unchanged:** no revision number is advanced and no
+number is invented. Nothing was moved, renamed or deleted, so no migration-manifest entry is required.
+The `0.0.0.0:5433` PostgreSQL exposure is **not** addressed by this pass and remains an open security
+risk requiring an owner decision.
+
+
+---
+
+## Annex — MP-05 / MP-06 / MP-07 implementation reports (2026-11-24)
+
+Three implementation reports were written in one execution window, together with a work-package register. All
+four are new files; nothing was moved, renamed or deleted.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-05_Demo_Seed_Doctor_Scope_and_Facility_Day_Implementation_Report_V1.0.md` | 15,029 | Any question about the demo **doctor → queue** linkage, about why the seeded `staff_doctor_assignments` rows were missing, or about **RBAC-R3** "demo assignment". Records the seed fix, the three new tests, the `200`/`404` scope evidence and the **§5.1 BLOCKED live re-seed** (forbidden by plan Amendment A-2 §E.5) |
+| `implementation/AMSDP_MP-06_DQDS_Operational_Day_Implementation_Report_V1.0.md` | 12,322 | Any question about the DQDS board showing the **wrong day** after a Dhaka midnight, or about `operational_today` / `organizations.timezone`. Carries the mutation evidence (`2 failed, 24 passed` with the defect restored) and the two `test_dqds.py` tests |
+| `implementation/AMSDP_MP-07_Dashboard_Waiting_Tile_Implementation_Report_V1.0.md` | 11,394 | Any question about the dashboard **Waiting tile** double-counting, about `frontend/pages/dashboard.js` tile bindings, or about the open `in_queue` vs `queue_length` payload decision. Carries the source-contract test and the `duplicate tile binding` mutation failure |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | see its own registration | The **execution state** of the work packages touched in this window: what is TESTED / VERIFIED, what is BLOCKED and why, and the decisions still owed by the Product Owner. Read it before selecting the next task |
+
+**Evidence artefacts (outside `docs/`, therefore not registered here):** `runs/backend-baseline-2026-11-24.log`
+(`791 passed`), `runs/backend-final-2026-11-24.log` (`796 passed, 0 failed, 816.87s`),
+`runs/evidence-mp06-mutation.log`, `runs/evidence-mp06-fixpass.log`, `runs/evidence-mp05-verification.log`,
+`runs/evidence-mp07-mutation.log`, `runs/frontend-baseline-2026-11-24.log`,
+`runs/frontend-suite-2026-11-24-post-fix.log`, and the two restore copies `runs/display.py.orig`,
+`runs/dashboard.js.orig`. These are run logs, not AMSDP documents, and are kept beside the code deliberately.
+
+**Counts and D-5.** The previous annex recorded **133** `.md` files under `docs/`; this pass adds three
+implementation reports and one register, so the tree now holds **137** (133 + 4, measured at write time).
+**D-5 is unchanged:** no revision number is advanced and none is invented. No migration-manifest entry is
+required, because nothing was moved, renamed or deleted — all four files are new.
+
+
+---
+
+## Annex — MP-08 implementation report (2026-11-24)
+
+One implementation report was written in the MP-08 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-08_Announcement_Safe_Recall_Implementation_Report_V1.0.md` | 15,016 | Any question about **queue recall**, about why `call` from `called` still returns **422**, about the `recall` action's transition/permission/audit contract, about `call_events()` counting `call` **and** `recall`, or about the announcement tracker's new `call_event_id` rule. Records the plan/code conflict, the Product Owner's **option (a)** decision, the 22 new tests, the `808 passed` backend run, the `6 failed` mutation and the queue-trio frontend run |
+
+The **execution state** for this work (row MP-08, Q-5 closed, the §9 resolution note) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **137** `.md` files under `docs/`; this pass adds one implementation
+report, so the tree now holds **138** (measured at write time: `Get-ChildItem docs -Recurse -Filter *.md`).
+**D-5 is unchanged:** no revision number is advanced and none is invented.
+
+**One cross-document effect worth knowing.** The evidence status of all three reports is capped at TESTED, and
+MP-05 at VERIFIED **on a scratch database only** — no live environment was touched. `plan/` therefore now
+contains both an authorised plan (V1.1) and an execution register that must be read with it; the register, not
+this index, is where task state is maintained.
+
+---
+
+## Annex — MP-10 implementation report (2026-11-24)
+
+One implementation report was written in the MP-10 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-10_Walk_In_Policy_Configuration_Implementation_Report_V1.0.md` | 23,050 | Any question about **walk-in placement** (BR §25): which of the four policies a facility uses, where that setting lives (`organizations.config["queue_config"]`), how the four behaviours differ at insertion time, why the per-request `walk_in_policy` field was retired, how the reserved pool is computed and filled, why `arrived_at` exists, what `queue.reposition` rows a placement writes, or who may change the policy (`PUT /api/v1/orgs/{id}/walk-in-config`). Also records the **§8 rule 3 deviation** (no Alembic revision, with the reason) and the token-gap limitation |
+
+The **execution state** for this work (row MP-10, frontend run, working-tree additions) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **138** `.md` files under `docs/`; this pass adds one implementation
+report, so the tree now holds **139** (measured at write time: `Get-ChildItem docs -Recurse -Filter *.md`).
+**D-5 is unchanged:** no revision number is advanced and none is invented.
+
+---
+
+## Annex — MP-33 CI truth report (2026-11-24)
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-33_CI_First_Green_Run_Report_V1.0.md` | 7,793 | Any question about the **pipeline's real state**: whether a green run exists (yes — run #5, 2026-11-14), which job is red on the latest run and at which step (frontend, `Run frontend tests`, exit 1), what the two frontend reds actually are (a BanglaNameSense dataset **provenance mismatch** and a test file that does not load), and which local equivalents were executed in this window (`alembic current` = head, 847 backend tests, `npm run build` success, `npm test` 383/379/2/2) |
+
+The **execution state** for this work (row MP-33, Q-3 diagnosis) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **139** `.md` files under `docs/`; this pass adds one report, so the
+tree now holds **140** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 140). **D-5 unchanged.**
+
+---
+
+## Annex — MP-16 blocked-periods report (2026-11-24)
+
+One implementation report was written in the MP-16 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-16_Blocked_Periods_Report_V1.0.md` | 27,859 | Any question about **blocked periods** (BR §15): why the capability was recorded as *absent* rather than broken (GAP-12/F-20), where a block lives (`schedule_blocks`, its columns/indexes/`CHECK`), why it is a table and not `organizations.config`, why enforcement is **doctor-wide** rather than per schedule or per branch, what the three routes are (`POST`/`GET`/`DELETE /api/v1/schedules/{id}/blocks`) and who may call them (`schedule.manage` to write, branch-scoped staff to read), what `available-slots` now publishes (`blocked`, `blocked_periods`, `blocked_slot_count`), how a booking is refused (`blocked_period: …`, 422, in create **reschedule and transfer**), how the authorised exception works (`override_block` + mandatory reason + `appointment.block_override`, gated on `schedule.manage` and **not** delegable), why an unreadable stored window degrades to whole-day instead of 500, and what is deliberately still missing (no UI, walk-in arrivals not covered, blocks are not branch-scoped, no recurring rules). Also the D1–D9 evidence table, the mutation result (`7 failed, 44 passed`) and the whole-suite run (`898 passed`) |
+
+The **execution state** for this work (row MP-16, Q-6 resolution, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **140** `.md` files under `docs/`; this pass adds one report, so the
+tree now holds **141** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 141). **D-5 unchanged:** no revision
+number is advanced and none is invented.
+
+**One cross-document effect worth knowing.** MP-16 adds a schema object (`schedule_blocks`) and a new migration head
+(`b2e5c7d91a04`, replacing `c4d8e2a91f60`). Any document that quotes the head revision — including the MP-33 annex
+above, which correctly recorded `c4d8e2a91f60` at the time it was written — is a **historical** statement, not a
+current one. The current head is the one named in the MP-16 report §4.1.
+
+## Annex — MP-19 staff and permission management report (2026-11-24)
+
+One implementation report was written in the MP-19 window (it covers MP-20 as well, because the doctor-assignment
+editor is a section of the same dialog). It is a new file; nothing was moved, renamed or deleted, so no
+migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-19_Staff_and_Permission_Management_Implementation_Report_V1.0.md` | 28,644 (373 lines) | Any question about the **staff administration screen** (MP-19/MP-20, GAP-17/F-09/F-06): what the screen offers (roster, create, edit, role, branch scope, deactivation, capability grants, doctor assignment), why the rules live in `frontend/lib/staff-policy.js` rather than in the page, why the delegable **set** is read from `GET /api/v1/staff/capabilities` while only its **labels** are client-side, why saving is a diff (no audit row for a no-op), why deactivation is a two-step status change and never a delete, why revoking a branch-scoped grant must name the branch, what the 12 policy tests and the 14 wiring/mirror/i18n tests assert, the mutation result (revoke scope removed → `1 failed, 13 passed`, file restored byte-identically `600BB633…9888`), the frontend suite arithmetic (`383/379/2/2` → `409/405/2/2`, +26 all-pass, the two reds being the pre-existing Q-3 pair — the dataset-hash assertion plus `calendar-render.test.mjs` failing to load on Windows), the build result (`/staff` prerendered, 5.71 kB / 125 kB), and — stated plainly — that the 31 identity tests collect cleanly but were **not run** on this host (`test_identity.py` aborts at import: no PostgreSQL on port 5433), so nothing here is VERIFIED. Also the governance/skill compliance table and open items O-1…O-6 |
+
+The **execution state** for this work (rows MP-19 and MP-20, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **141** `.md` files under `docs/`; this pass adds one report, so
+the tree now holds **142** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 142). **D-5 unchanged:** no
+revision number is advanced and none is invented.
+
+**One thing this annex deliberately does not claim.** MP-19 changes no schema and adds no migration, so the
+migration head is unchanged (`b2e5c7d91a04`, as recorded in the MP-16 annex and report §4.1). The screens changed
+are `frontend/pages/staff.js`, `frontend/lib/staff-policy.js` and `frontend/lib/i18n.js`; the frontend test tree
+gained `tests/staff-page.test.mjs`.
+
+---
+
+## Annex — MP-17 doctor mobile duplicate allowance report (2026-11-24)
+
+One implementation report was written in the MP-17 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-17_Doctor_Mobile_Duplicate_Allowance_Implementation_Report_V1.0.md` | 23,224 (304 lines) | Any question about **doctor mobile-number uniqueness** (MP-17, GAP-13 / F-17, BR §9.6–§9.8): what the rule was before (implemented twice, inline, with no switch), why the allowance is stored in `organizations.config["doctor_mobile_policy"]` rather than in a column, why a missing/non-dict/non-boolean block reads as **unique** instead of permissive, why only a platform administrator may change it and why that is a `403` rather than a hidden route, why withdrawing the allowance is **prospective** and leaves existing duplicates in place, why the duplicate lookup stays organization-scoped so §9.8 holds under either setting, what the 23 policy tests and the 6 enforcement-decision tests assert, the negative control (`doctor_mobile_must_be_unique` → `return False` → `23 failed, 6 passed`, file restored byte-identically `C4A667B7…FDF9`), and — stated plainly — that the 12 API tests **collect** but were **not run** on this host (no PostgreSQL on port 5433), so the `403` gate, the audit `before`/`after` and both cross-tenant cases are unproven and nothing here is VERIFIED. Also the governance/skill compliance table and open items O-1…O-4 |
+
+The **execution state** for this work (row MP-17, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **142** `.md` files under `docs/`; this pass adds one report, so
+the tree now holds **143** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 143). **D-5 unchanged:** no
+revision number is advanced and none is invented.
+
+**One thing this annex deliberately does not claim.** MP-17 changes no schema and adds no migration, so the migration
+head is unchanged (`b2e5c7d91a04`, as recorded in the MP-16 annex and report §4.1). No frontend file was touched, so
+the frontend suite figure stands at the MP-19 record (`409 / 405 / 2 / 2`) and no frontend run was made in that
+window. The backend test tree gained `tests/test_doctor_mobile_policy.py`,
+`tests/test_doctor_mobile_enforcement.py` and `doctor/tests/test_doctor_mobile_duplicates.py`.
+
+---
+
+## Annex — MP-18 schedule-edit audit report (2026-11-24)
+
+One implementation report was written in the MP-18 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-18_Schedule_Edit_Audit_Implementation_Report_V1.0.md` | 20,774 (269 lines) | Any question about **who changed a doctor's published hours or capacity, and what the values were** (MP-18, BR Part X): the write-path inventory that was actually inspected (schedule POST/PATCH, session POST/PATCH/DELETE, block POST/DELETE) and what each already recorded; the **gap the verification found** — `sync_slot_templates` rewrites `schedules.slot_templates` (the projection `available-slots` and the calendar read) on every session write, so the schedule row changed with no `schedule.*` event; how `audit_template_projection` closes it (same `schedule.templates_changed` action, targeted at the schedule, only when the published windows moved); why `windows_map` is local to `sessions.py` (circular-import reason) and how it stays consistent with `main._capacity_map`; the 13 DB-free tests including the **AST guard** over every write route; the negative control (`1 failed, 12 passed`, `sessions.py` restored byte-identically `1541A5C8…1E33`) and why the route-level guard alone stayed green; and — stated plainly — that the 12 PostgreSQL tests in `scheduling/tests/test_schedule_audit.py` (8 pre-existing + 4 new) **collect but were not run** on this host (no database on port 5433), so nothing here is VERIFIED. Also the governance/skill compliance table and open items O-1…O-4 |
+
+The **execution state** for this work (row MP-18, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **143** `.md` files under `docs/`; this pass adds one report, so the
+tree now holds **144** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 144). **D-5 unchanged:** no revision
+number is advanced and none is invented.
+
+**One thing this annex deliberately does not claim.** MP-18 changes no schema and adds no migration, so the migration
+head is unchanged (`b2e5c7d91a04`). No frontend file was touched, so the frontend suite figure stands at the MP-19
+record (`409 / 405 / 2 / 2`). The files that changed are `backend/scheduling/sessions.py`,
+`backend/scheduling/tests/test_schedule_audit.py` and the new
+`backend/tests/test_schedule_audit_coverage.py`.
+
+---
+
+## Annex — MP-22 dashboard completion report (2026-11-24)
+
+One implementation report was written in the MP-22 window. It is a new file; nothing was moved, renamed or deleted,
+so no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-22_Dashboard_Completion_Implementation_Report_V1.0.md` | 20,268 (262 lines) | Any question about the **dashboard** (MP-22, Blueprint §2): what the screen carried before (six figures, no selectors) and why the date selector had to become a server question (`date=YYYY-MM-DD` on `/api/v1/dashboard/today`, 422 on anything else, facility-day default per BR §8, `facility_today` in the response); why the branch selector is filtered in `lib/dashboard.js::selectableBranches` and why a branch-scoped user with no matching branch gets an **empty** list rather than "all"; the quick-action and activity rules (an unknown audit action renders as its own slug); why the six MP-07 tiles were left verbatim; the evidence (28 dashboard tests green, frontend suite `409/405/2/2 → 434/430/2/2`, negative control on the selector-widening defect with the file restored byte-identically `9C20CF10…F335`, `npm run build` exit 0 with `/dashboard` prerendered 6.6 kB / 99.8 kB); the **failed** first build and its cause, disclosed rather than omitted (§4.4); and, plainly, that the six new PostgreSQL cases were **not run** and that **Blueprint §2 was not read line by line** (O-2). Also the governance/skill compliance table and open items O-1…O-5 |
+
+The **execution state** for this work (row MP-22, suite table, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **144** `.md` files under `docs/`; this pass adds one report, so the
+tree now holds **145** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 145). **D-5 unchanged:** no revision
+number is advanced and none is invented.
+
+**One thing this annex deliberately does not claim.** MP-22 changes no schema and adds no migration (the date
+selector is a query parameter, not a column), so the migration head is unchanged (`b2e5c7d91a04`). The frontend suite
+**did** move in this window — `409/405/2/2 → 434/430/2/2` — unlike the MP-17 and MP-18 windows, because the change is
+a screen.
+
+
+---
+
+## Annex — MP-28 and the PostgreSQL evidence window (2026-11-24, later)
+
+Two implementation reports were written in this window. Both are new files; nothing was moved, renamed or deleted, so
+no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-28_Unified_Internationalization_Implementation_Report_V1.0.md` | 17,362 (275 lines) | Any question about **translation** (MP-28, GAP-23 / F-59): which five screens carried their own `{bn,en}` dictionary and how the 173 keys were moved **verbatim** into `frontend/lib/i18n.js` under `home*`/`org*`/`brn*`/`pat*`/`apt*`; why `appointments.js` needs an `aptKey` namespace helper for the nine runtime-built keys (`REFUSAL_KEYS`, `typeLabelKey`, `typeBadgeKey`, the list view, the match banner) and what would silently break without it; what the new `tests/i18n-coverage.test.mjs` proves (parity, no silent fallback, no duplicate declaration, no page-local dictionary, every literal **and** runtime key in both languages) and the mutation that turned it red; why eight older source-contract tests were re-pointed rather than deleted (§6); the suite `434/430/2/2 → 441/437/2/2` and the build; and what is **not** proven — no browser run, the component label defaults left as Bangla-only fallbacks, one English developer note on the login page (§7) |
+| `implementation/AMSDP_PostgreSQL_Verification_and_MP-01_Reconciliation_Report_V1.0.md` | 12,740 (209 lines) | Any question about **the database, the migration head, or why earlier windows said tests could not run**: the read-only MP-01 probes (live `:8110`/`:3100`/`:5433` reachable, `:22` refused, **no DB credential** → live revision unread, **B-4**); the discovery that the local database is on **`127.0.0.1:55432`** rather than 5433 and sits at `b2e5c7d91a04`; the isolated `amsdp_verify_2829` created and migrated from empty to head; and the first execution of the previously unrun suites — dashboard **12 passed** after the D-0 date-padding fix, MP-17 **11/12** (D-2), MP-18 **8/12** (D-1, grade reduced), identity **71 passed / 4 setup errors** (D-3) |
+
+The **execution state** for both (rows MP-28 and MP-01, the superseding-evidence note under §2, suite table, next
+eligible task) lives in `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **145** `.md` files under `docs/`; this pass adds two, so the tree now
+holds **147** (`Get-ChildItem docs -Recurse -Filter *.md` → 147). **D-5 unchanged:** no revision number is advanced
+and none is invented.
+
+**One thing this annex deliberately does not claim.** Neither task changes the schema — MP-28 is frontend strings and
+the D-0 fix is a query-parameter validation — so the migration head is unchanged at `b2e5c7d91a04`. The isolated
+database created for the evidence window is **not** the live deployment and says nothing about it; the live revision
+stays unread under **B-4**, and the discrepancy between the plan's recorded `c4d8e2a91f60` and the tree's
+`b2e5c7d91a04` is recorded as an open question, not resolved by inference.
+
+
+
+
+---
+
+## Annex — MP-29 responsive/touch/accessibility report (2026-11-25)
+
+One implementation report was written in the MP-29 window. It is a new file; nothing was moved, renamed or deleted, so
+no migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-29_Responsive_Touch_and_Accessibility_Implementation_Report_V1.0.md` | 29,962 (379 lines) | Any question about **keyboard, touch or small-screen use of the queue and appointment screens** (MP-29, WP-G): why the reorder arrows never worked for anyone (`DataTable` called `c.render(row)` with no index, so `move(undefined, ±1)` wrote `undefined` into `entry_ids` and the server refused every reorder); the rules in `frontend/lib/a11y.js` (`MIN_TARGET_PX = 44`, `Alt` as the reorder chord, `toPosition` refusing `null`/`''`/`NaN`, `moveWithin` as a no-op rather than a clamp) and why bare arrows deliberately keep scrolling the page; the 17 new tests (8 decision tests + 9 source-contract tests that parse `global.css`); the inherited **MP-02** reds — **D-1** (`"session_id" in template`, key presence not truthiness, in `scheduling/sessions.py`), **D-2** (the two-gate 403 contract asserted with a new `ORGADMIN` fixture) — and the further **D-4** the first full run exposed (`.order_by(AuditEvent.id.desc())` over a **UUID** string returns an arbitrary event, not the newest; two instances fixed to `timestamp.desc()`); the suite figures (backend `979 passed, 0 failed`, frontend `441/437/2/2 → 458/454/2/2`, the two reds still the Q-3 pair); **D-3 does not reproduce** and is not claimed as fixed; and the four acceptance clauses that remain unproven because no browser, viewport, screen reader or auditing tool was used (§7). Also the governance/skill compliance table — including the verification that no skill package is installed — and open items O-1…O-5 |
+
+The **execution state** for this work (row MP-29, suite table, next eligible task) lives in
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` and is not restated here.
+
+**Counts and D-5.** The previous annex recorded **147** `.md` files under `docs/`; this pass adds one report, so the
+tree now holds **148** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 148). **D-5 unchanged:** no revision
+number is advanced and none is invented.
+
+**One thing this annex deliberately does not claim.** MP-29 changes no schema and adds no migration — the queue row's
+accessibility is markup, CSS and a tested pure module — so the migration head is unchanged at `b2e5c7d91a04`. The
+frontend suite **did** move (`441/437/2/2 → 458/454/2/2`) and the backend suite is now green against the isolated
+`amsdp_verify_2829`, which is **not** the live deployment; the live revision stays unread under **B-4**. No file was
+staged, committed, reverted or stashed in this window (report O-3).
+
+---
+
+## Annex — Product Owner Decision Pack (2026-11-25)
+
+One document was written in this window. It is a **new file**; nothing was moved, renamed or deleted, so no
+migration-manifest entry is required.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_Product_Owner_Decision_Pack_V1.0.md` | 99,460 (1,127 lines) | **Before taking any owner decision on the roadmap, or before asking the owner for one.** It is the single consolidated request covering the eleven open plan gates (**PO-01, PO-03 … PO-12**, PO-02/PO-13 explicitly not reopened), the owner-controlled blockers found by execution evidence (**MP-01 / B-4**, **Q-1 … Q-4**, **B-1 … B-3**, **O-3**), and the two technical investigations the owner arbitrates (**Q-3**, **D-3**). One card per item: why it is needed, what the requirements say, what the code actually does, one recommendation with its rationale, two or three alternatives with their task consequences, a copy-paste response line, and the implementation consequences. Also contains the consolidated response sheet (§5) and the decision → task dependency map (§6.2–§6.3). **New evidence recorded there and nowhere else yet:** the Q-3 dataset "hash mismatch" is a **CRLF artefact** (the committed blob is 80,517 bytes and hashes to the recorded `ac037c24…e51e`; `git ls-files --eol` shows `i/lf w/crlf`, `core.autocrlf=true`, no `.gitattributes`), and `calendar-render` is a **Windows ESM path bug in the harness** (all 9 tests pass once the paths go through `pathToFileURL`), so neither is a product defect and no expected value should be reconciled; the *committed* tree's migration head is `c4d8e2a91f60` — the recorded live revision — while the working tree is one revision ahead only because MP-16's `b2e5c7d91a04` is **untracked**; the Feature Catalogue §H.1 "P0 scope defects" are stale in the product's favour (branch scope is enforced at `queuing/main.py:191–203`, `:297–300`, `:422–426`); and the Limitations Report §12 still claims in-memory storage with no PostgreSQL |
+
+The **execution state** it reasons from lives in `plan/AMSDP_Work_Package_Execution_Register_V1.0.md`, and the gates
+themselves in `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` §4. Neither is restated here.
+
+**Counts and D-5.** The previous annex recorded **148** `.md` files under `docs/`; this pass adds one, so the tree now
+holds **149** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → 149). **D-5 unchanged:** no revision number is
+advanced and none is invented — the pack itself recommends the forward-only numbering rule that would end this
+ambiguity (its PO-08 card).
+
+**What this annex deliberately does not claim.** The pack is a **decision request**: it records no decision, closes no
+gate, amends no plan task and changes no code. Every recommendation in it is labelled as a recommendation. Its own
+evidence grades are stated in its §8.4, and the only commands it executed are listed in its §8.5 — two individual
+frontend test files, read-only git and search commands, and two scratch scripts written outside the repository (one
+temporary probe file was created inside `frontend/tests/` and removed in the same window; the dirty-entry count was
+re-measured afterwards). Nothing was staged, committed, reverted or stashed.
+
+---
+
+## Annex — Product Owner decisions applied (2026-11-25) — **Revision 49**
+
+**This annex is numbered, and that is the point of it.** Product Owner decision **PO-08** (25 November
+2026) adopted a forward-only numbering rule — *the next revision is the highest previously recorded
+revision + 1, and each annex names the revision it was issued under* — because the annexes written
+between 21 and 25 November each said "no revision number is advanced", which left them unidentifiable.
+The base index ends at **Revision 48**, so this annex is **Revision 49**. The earlier unnumbered annexes
+are **not** retro-labelled: D-5 is forward-only and retro-labelling would rewrite history rather than
+fix the rule.
+
+Everything below is a **new file** except where stated. One binary asset was deleted outside `docs/`
+(`frontend/public/audio/bn/phrase/room-suffix.wav`, POD-7, listed in its own report); **no document was
+moved, renamed or deleted**, so no migration-manifest entry is required. `docs/plan/` was an untracked
+folder until this window and is now under version control, which changes no path.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` | 19,068 | **Before acting on any decision in the pack.** It is the authoritative record of what the Product Owner approved (PO-01, PO-03…PO-12 as the recommended options, POD-11 = Faria Bushra, Q-4 scope, O-3 scope, Q-3, D-3) **and what was not approved** (B-1…B-3, Q-1, Q-2, B-4 — the owner selected "other"), so nothing can be inferred by adjacency. Also records the two measured corrections to the request: the index's next revision is **49**, not 48, and the unreferenced audio list is **one** file, not fifteen |
+| `product/AMSDP_Phase_Model_V1.1.md` | 5,894 | Any question about **Phases 4, 5, 6** or about what **MP-30** now is (PO-01): the names come from the multi-display specification, each phase has a scope, an exit criterion and the Product Owner as accepting authority, and MP-30 is verification of four named handoff surfaces with **no new clinical feature** |
+| `plan/AMSDP_Feature_Key_Register_V1.0.md` | 6,077 | Any traceability question (PO-12): 26 `F-nn` keys, each mapped to its catalogue ID, Business Rules section, milestone, delivering task and evidence basis. Catalogue IDs are not renamed. One declared gap: **R-1**, the V2.5 family column |
+| `deployment/AMSDP_PostgreSQL_Exposure_and_Host_Access_Plan_V1.0.md` | 5,700 | Before the **PO-10 maintenance window**, and before anyone claims the `:5433` exposure is closed — it is not. Order (SSH, then loopback binding, then verification, then the B-4 read), rollback for each change, and the rule that the read is read-only and stops if the revision already matches the committed head |
+| `implementation/AMSDP_W6_Audio_Asset_Reference_Verification_Report_V1.0.md` | 4,163 | Before deleting or re-encoding any announcement audio (POD-7). Method: every asset path declared in `frontend/public/audio/manifest.json` compared with every file on disk — 71 files, 70 declared, 1 undeclared, 0 missing. The "15 unreferenced" figure is withdrawn |
+| `implementation/AMSDP_PO_Decisions_25_November_2026_Implementation_Report_V1.0.md` | 18,581 | Before building on this window's work: initial and final repository state, the 18 path-grouped commits, the Q-3 repair (25 insertions / 15 deletions, no expected value changed), the annotation set, the D-3 investigation (reproduces only as a module-import collection error with no database), the tests actually run and their exact figures, and the disclosures — including a git race that was corrected and why the backend suite has no figure |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` (**modified**) | 72,842 → +82 lines | The plan now carries **Amendment A-3** (Appendix F), append-only in the shape of A-1 and A-2: the gates closed, MP-30 defined, MP-34 re-graded, and the tasks that stay blocked, deferred or authorised-but-not-started |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` (**modified**) | 67,264 → +§7.1 | The register's new **§7.1** records one row per gate and the task-status delta. §7 itself is left exactly as it stood, as the evidence of what was blocked and why |
+| `demo/AMSDP_Limitations_Report_V1.0.md`, `product/AMSDP_MVP_SCOPE_V1.0.md`, `product/AMSDP_MVP_Feature_Catalogue_and_Acceptance_Checklist_V1.0.md` (**modified, annotation only**) | — | §1, §7, §H and §H.1 respectively. Every change is a dated, additive block; **no original sentence was rewritten or deleted** (PO-03, PO-09) |
+
+**Counts.** The previous annex recorded **149** `.md` files under `docs/`; this window adds six new
+documents (the six rows above marked with a size, excluding the three modified files), so the tree now
+holds **155** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → **155**).
+
+**What this annex deliberately does not claim.** No decision in it is `VERIFIED` or `ACCEPTED` except
+the owner's own written answers. No test figure appears that was not run in this window — in particular
+**the backend suite could not run at all** (no PostgreSQL on this host) and no figure is claimed for it.
+No live change happened: no migration, no reseed, no restart, no host configuration, and the database
+port is still reachable. Nothing was pushed; the remote tip is unchanged, and **`.clinerules` remains
+uncommitted** because Q-4 authorises Business Rules §33 only.
+
+
+
