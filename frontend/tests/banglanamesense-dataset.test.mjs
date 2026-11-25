@@ -57,10 +57,18 @@ test('dataset carries no patient or private application data', () => {
   }
 });
 
+/* The dataset is authored with LF line endings. A checkout can hand us CRLF
+ * instead — this repository sets core.autocrlf=true and carries no
+ * .gitattributes — which changes the bytes without changing the content. Hash
+ * and measure the LF-canonical form so the digest in DATASET_SOURCE stays
+ * authoritative on every platform; a genuine content change still fails,
+ * because it survives normalisation. */
+const canonicalBytes = Buffer.from(rawText.replace(/\r\n/g, '\n'), 'utf8');
+
 test('dataset bytes match the hash recorded in DATASET_SOURCE', () => {
-  const sha256 = createHash('sha256').update(readFileSync(DATASET_URL)).digest('hex');
+  const sha256 = createHash('sha256').update(canonicalBytes).digest('hex');
   assert.equal(sha256, DATASET_SOURCE.sha256);
-  assert.equal(Buffer.byteLength(rawText), DATASET_SOURCE.bytes);
+  assert.equal(canonicalBytes.length, DATASET_SOURCE.bytes);
 });
 
 test('validator rejects malformed datasets instead of accepting them', () => {

@@ -16,21 +16,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FE = path.resolve(HERE, '..');
+const fileUrl = (...parts) => pathToFileURL(path.join(FE, ...parts)).href;
 
+/* Dynamic import() takes a URL, not a path. A bare absolute path only works on
+ * POSIX ("/repo/..."); on Windows ("E:\repo\...") Node rejects it with
+ * ERR_UNSUPPORTED_ESM_URL_SCHEME and the whole file fails before a single test
+ * registers. Converting with pathToFileURL makes the same specifier valid on
+ * both platforms without touching what is imported. */
 let swc = null;
 try {
-  swc = (await import(FE + '/node_modules/next/dist/build/swc/index.js')).default;
+  swc = (await import(pathToFileURL(path.join(FE, 'node_modules/next/dist/build/swc/index.js')).href)).default;
 } catch {
   swc = null;
 }
 
-const React = (await import(FE + '/node_modules/react/index.js')).default;
+const React = (await import(pathToFileURL(path.join(FE, 'node_modules/react/index.js')).href)).default;
 const { renderToStaticMarkup } =
-  (await import(FE + '/node_modules/react-dom/server.node.js')).default;
+  (await import(pathToFileURL(path.join(FE, 'node_modules/react-dom/server.node.js')).href)).default;
 
 /** Compile the shipped component to ESM that a bare `node` process can import. */
 let compiled = null;
@@ -39,10 +45,10 @@ async function loadComponent() {
   const source = fs.readFileSync(path.join(FE, 'components/AppointmentCalendar.js'), 'utf8');
   // Bare specifiers are fine inside Next; here they must resolve from /tmp.
   const scoped = source
-    .replace("from 'react'", `from '${FE}/node_modules/react/index.js'`)
-    .replace("from '../lib/calendar/grid'", `from '${FE}/lib/calendar/grid.js'`)
-    .replace("from '../lib/calendar/highlight'", `from '${FE}/lib/calendar/highlight.js'`)
-    .replace("from '../lib/status'", `from '${FE}/lib/status.js'`);
+    .replace("from 'react'", `from '${fileUrl('node_modules/react/index.js')}'`)
+    .replace("from '../lib/calendar/grid'", `from '${fileUrl('lib/calendar/grid.js')}'`)
+    .replace("from '../lib/calendar/highlight'", `from '${fileUrl('lib/calendar/highlight.js')}'`)
+    .replace("from '../lib/status'", `from '${fileUrl('lib/status.js')}'`);
   const { code } = await swc.transform(scoped, {
     filename: 'AppointmentCalendar.js',
     jsc: {
@@ -55,15 +61,11 @@ async function loadComponent() {
   const file = path.join(dir, 'cal.mjs');
   fs.writeFileSync(file, code);
   try {
-    compiled = (await import(pathToFileUrl(file))).default;
+    compiled = (await import(pathToFileURL(file).href)).default;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
   return compiled;
-}
-
-function pathToFileUrl(p) {
-  return 'file://' + p.split(path.sep).join('/');
 }
 
 /* Fixtures shaped like the API: templates live inside the schedule. */
