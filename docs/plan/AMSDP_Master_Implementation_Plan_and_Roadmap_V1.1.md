@@ -695,3 +695,85 @@ The probes prove the deployment runs the **post-merge code** (the W2/W3 routes e
 | Authority | Documentation-only reconciliation under the task brief; no production action, no migration, no code change |
 
 *End of Amendment A-2.*
+
+---
+
+## Appendix F — Amendment A-3: Product Owner decisions of 25 November 2026 applied
+
+### F.1 Trigger
+
+The Product Owner answered the consolidated decision request
+(`implementation/AMSDP_Product_Owner_Decision_Pack_V1.0.md`) in writing on 25 November 2026. The
+decision record is `decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md`; this appendix applies it
+to the plan. Like A-1 and A-2 it is **append-only**: no earlier statement in this plan is rewritten,
+re-estimated or renumbered.
+
+### F.2 Decision gates (§4 of this plan) — state after the answers
+
+| Gate | State | Where the effect is recorded |
+|---|---|---|
+| **PO-01** | **CLOSED** | `product/AMSDP_Phase_Model_V1.1.md` publishes Phases 4/5/6 (names, scope, exit criteria, accepting authority) and defines **MP-30** as verification of the existing handoff surfaces |
+| **PO-03** | **CLOSED** | Dated annotations in MVP Scope §7 and Feature Catalogue §H; **SYM-001** is approved P1 |
+| **PO-04** | **CLOSED** | MP-09 → MP-13 → MP-14 → MP-15 authorised, **sequenced after the first clean rehearsal** |
+| **PO-05** | **CLOSED** | MP-04 and MP-26 deferred |
+| **PO-06** | **CLOSED** | MP-27 deferred; the Analytics Specification is **not an approved requirement** |
+| **PO-07** | **CLOSED** | MP-21 deferred; subscription is not phased in |
+| **PO-08** | **CLOSED** | D-5 numbering rule adopted, O-2 decided, POD-2 closed, POD-7 executed, **POD-11 = Faria Bushra** |
+| **PO-09** | **CLOSED** | Annotation-only corrections applied to the four named places |
+| **PO-10** | **CLOSED as an approach** | `deployment/AMSDP_PostgreSQL_Exposure_and_Host_Access_Plan_V1.0.md`; **execution still needs a maintenance window** |
+| **PO-11** | **CLOSED** | The doctor ↔ branch contract is ratified; the plan's "completeness claims only" caveat is discharged |
+| **PO-12** | **CLOSED** | `plan/AMSDP_Feature_Key_Register_V1.0.md` — 26 `F-nn` keys |
+
+**Still open and not touched by this amendment:** **B-1**, **B-2**, **B-3**, **B-4**, **Q-1**, **Q-2**,
+and the whole deferred band.
+
+### F.3 Task index (Appendix A) — status changes
+
+| Task | Was | Now | Note |
+|---|---|---|---|
+| **MP-30** | "TBD until the owner publishes Phase 4" | **Defined**: verification of the existing handoff surfaces; ≈ 1 day as originally estimated | Cannot close before MP-25's acceptance cell is met (**B-4**) |
+| **MP-34** | GATED (PO-09) | **IMPLEMENTED, awaiting owner review** | Annotations, PO-11 note and PO-12 register applied. Residual: the register's V2.5 family column (**R-1**) and **QUE-005** |
+| **MP-33** | GATED | **BLOCKED** | A first green CI run needs the work pushed; **O-3 forbids pushing** |
+| **MP-09, MP-13, MP-14, MP-15** | GATED (PO-04) | **AUTHORISED, NOT STARTED** | Gate is the first clean rehearsal, which has not been held |
+| **MP-24, MP-25, MP-35…MP-46** | BLOCKED (B-4) | **BLOCKED** unchanged | ≈ 20.5 engineer-days still waiting on one read |
+| **MP-04, MP-21, MP-26, MP-27** | DEFERRED / GATED | **DEFERRED** | PO-05, PO-06, PO-07 |
+| **MP-11, MP-12** | DEFERRED (Q-6 c) | **DEFERRED** | Not reopened |
+
+**No estimate in Appendix A changes.** The owner's answers close gates; they do not re-price work.
+
+### F.4 What this amendment does not claim
+
+1. **No task moves to `VERIFIED` or `ACCEPTED`.** The two harness repairs are `TESTED`; the
+   documentation acts are `IMPLEMENTED`; nothing was observed in a browser, a live API session or a
+   live database in this window.
+2. **No live change happened.** No migration was applied to the deployment, no reseed, no service
+   restarted, no host configuration altered. The `:5433` exposure described in Appendix E.6 is
+   **still open**.
+3. **MP-30's definition is narrow on purpose.** Phase 4 does not acquire a clinical feature by
+   implication; a future Phase 4 expansion needs a new owner decision.
+4. **D-5 is forward-only.** The annexes written between 21 and 25 November that say "no revision
+   number is advanced" stay as they are. The rule begins at **Revision 49**.
+
+### F.5 Open items this appendix does not touch
+
+| Item | State |
+|---|---|
+| **B-4** live database read | **OPEN** — owner selected "other"; the read is specified in the PO-10 plan |
+| **Q-1**, **Q-2** | **OPEN** — no code changed |
+| **D-3** | **OPEN — investigated**: reproduces only as a module-import collection error with no database present; no fixture changed |
+| **D-7**, **POD-6**, **POD-1/3/8/9/10** | Carried forward by PO-08 |
+| **O-4**, **O-5**, **MP-16 / 1–3** | Recorded, not blocking |
+| **QUE-005** | The one surviving P0 defect; no task currently owns it in this plan — **open gap, deliberately named** |
+
+### F.6 Document control
+
+| Field | Value |
+|---|---|
+| Amendment | A-3, 25 November 2026 |
+| Version | The plan remains **V1.1 with Amendments A-1, A-2 and A-3**; append-only, so every earlier statement stays auditable |
+| Trigger | The Product Owner's written answers to the consolidated decision request |
+| Effect | Closes the PO-01 and PO-03…PO-12 gates, defines MP-30, re-grades MP-34, records what stays blocked. **No scope, estimate or sequencing change beyond PO-04's fixed order** |
+| Authority | `.clinerules` §1 level 2 (explicit owner instruction), §11 (append-only), §6 (compliance reporting) |
+
+*End of Amendment A-3.*
+
