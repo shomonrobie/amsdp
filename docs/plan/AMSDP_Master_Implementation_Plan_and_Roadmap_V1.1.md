@@ -854,4 +854,122 @@ were delivered as such; the demo-data authority adds no work package.
 
 *End of Amendment A-4.*
 
+---
+
+## Appendix H — Amendment A-5: WP-C.2 / WP-C.3 public surface executed (25 November 2026)
+
+### H.1 Trigger
+
+The Product Owner's autonomous completion instruction of 25 November 2026
+authorised continued execution of this plan, including "the multi-display DQDS
+work under MP-35 through MP-46, respecting the dependency chain and B-4
+restriction", and confirmed that work not requiring B-4 must continue. This
+appendix records what was executed against that instruction, and one factual
+correction it requires. Append-only, like A-1 … A-4: no earlier statement is
+rewritten, re-estimated or renumbered.
+
+### H.2 A factual correction: the migration head is not `c4d8e2a91f60`
+
+§2.3, §6 MP-35, Appendix D.3 and the specification's §5.1 item 5 all state that
+new revisions sit on head `c4d8e2a91f60`. That is no longer true. The tree holds
+18 revisions and the single head is **`b2e5c7d91a04`** (`add_schedule_blocks`,
+MP-16), which revises `c4d8e2a91f60`. Verified with Alembic's own graph
+(`ScriptDirectory.from_config(...).get_heads() -> ['b2e5c7d91a04']`), not by
+reading filenames.
+
+| Was | Now |
+|---|---|
+| "single head `c4d8e2a91f60`" (§2.3, MP-35's deliverables) | **`b2e5c7d91a04` is the head**; MP-35's revision `d3f5a7b91c24` revises it |
+| MP-16's migration unrecorded in the head statement | MP-16's `b2e5c7d91a04` is the parent of the multi-display revision |
+
+No task, estimate, dependency or acceptance criterion changes. Only the value of
+"the current head" is corrected, and it is corrected from evidence.
+
+
+### H.3 Task status changes
+
+| Task | Was (§6 / Appendix D.3) | Now | Evidence |
+|---|---|---|---|
+| **MP-35** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED** — seed of two demo displays outstanding | two models, revision `d3f5a7b91c24`, branch-unique code, four CHECK constraints, `upgrade head` idempotent, schema snapshot 31 → 33 tables with **zero** existing tables changed |
+| **MP-36** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED** | resolver + SQL scope; unknown/cross-branch/cross-org/disabled all return the identical 404; the historic two-segment payload is unchanged by exact-key-set test |
+| **MP-37** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED** | department scope via `doctor_branches.room_id → facility_rooms.department_id`; `room_name` nullable |
+| **MP-41** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED** | `scope_type='room'` + `room_id`, CHECK-enforced; empty room is empty, never the branch |
+| **MP-42** | NOT IMPLEMENTED on the board | **IMPLEMENTED, TESTED (payload)** — BN/EN copy and rendering remain in MP-38 | mean of ≥ 3 completed consultations, else the facility default, `int ≥ 1`, `estimate: true` |
+| **MP-43** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED (API)** — the page's no-re-render behaviour remains in MP-38 | `board_version` hashes the projection only; weak `ETag`; `304` with no body |
+| **MP-44** | NOT IMPLEMENTED — `display.py:138` used `date.today()` | **display slice IMPLEMENTED, TESTED** (the two patient-service reads were already closed under Q-1) | already on `operational_today` since MP-06; now publishes `operational_date` and `timezone`. The midnight observation itself stays **BLOCKED (B-3)** |
+| **MP-45** | NOT IMPLEMENTED | **IMPLEMENTED, TESTED (server-side)** — admin controls remain in MP-39 | a switched-off field is **absent** from the raw body |
+| **MP-46** | NOT IMPLEMENTED | **PARTIAL** — GET-only guard, disabled-request audit and its throttle done; `queue.display.denied` belongs to MP-39's write routes and is **not** claimed | four verb probes → `405` + `Allow: GET` + `no-store`; 100 unknown probes → zero audit rows |
+| **MP-38, MP-39, MP-40** | NOT IMPLEMENTED / P1 | **unchanged — not started / BLOCKED** | see H.5 |
+
+**34 new tests** (`backend/tests/test_multidisplay.py`) plus the 26 existing DQDS
+tests, and three negative controls (scope filter removed → 4 failed; room field
+always published → 1 failed; version includes `updated_at` → 2 failed), each
+restored byte-identically (SHA-256 `True`).
+
+### H.4 What the B-4 row in F.3 actually blocks — clarified
+
+Appendix F.3 records MP-24, MP-25 and MP-35…MP-46 as **BLOCKED (B-4)**. That is
+correct for the *deployment* and was being read too broadly. It blocks:
+
+- reading the deployment's schema revision (MP-01) and therefore the
+  post-migration suite claim (MP-02);
+- applying revision `d3f5a7b91c24` to the deployment, without which a configured
+  display cannot be served there;
+- any browser, load or audibility evidence taken from the live stack (MP-03,
+  MP-40, MP-31, MP-32).
+
+It does **not** block writing, migrating and testing the registry on the local
+development database — which is what this amendment records. **The clarification
+relaxes nothing about the deployment:** no host was contacted, no port opened, no
+`pg_hba.conf` or bind address changed, no credential used or stored. The decision
+request is written up in
+`docs/deployment/AMSDP_B4_Database_Access_Decision_Brief_V1.0.md`.
+
+
+### H.5 One deliberate interpretation, and one sequencing deviation
+
+**Interpretation — one revision for one new table.** §8 rule 3 requires one
+revision per schema change for MP-09/10/11/13/21. MP-35, MP-37, MP-41 and MP-45
+all add *columns to a table that does not exist*. They are delivered as a single
+`CREATE TABLE` revision, because creating the table and then altering it twice
+immediately would add two irreversible steps and a window in which a display could
+not express "this field is off". One new table is one schema change. MP-37 and
+MP-41 are still delivered by their own behaviour and tests.
+
+**Deviation — MP-44 did not land "with MP-06, in the same change"** (§8 rule 11 and
+Appendix D.4 item 11). MP-06 landed earlier and moved the display path to
+`operational_today`; MP-44's remaining scope — publishing `operational_date` and
+`timezone` and pinning the day in a test — landed in this window. Risk **R-14**
+(display fixed, queue and dashboard left on server-local dates) did not
+materialise: both already resolve through the same helper, and the patient
+service was folded in under Q-1. The deviation is recorded rather than described
+as compliance.
+
+### H.6 What this amendment does not claim
+
+1. **No task moves to VERIFIED or ACCEPTED.** Every artefact is from the local
+   development database and `TestClient`. No browser, no live API session, no
+   deployment query.
+2. **No live or production change happened.** No migration on the deployment, no
+   reseed, no service restarted, no host configuration altered. `:5433` remains
+   exposed and open (Appendix E.6).
+3. **M-9 and M-10 are not met.** MP-38, MP-39 and MP-35's seed are outstanding, and
+   MP-40's evidence cannot be produced without B-4.
+4. **The demonstration is not implied.** AC-01…AC-22 are *tested* where they are
+   testable without a browser; AC-12 (six screens) and the BN/EN screenshots are
+   not.
+
+### H.7 Document control
+
+| Field | Value |
+|---|---|
+| Amendment | A-5, 25 November 2026 |
+| Version | The plan remains **V1.1 with Amendments A-1 … A-5**; append-only |
+| Trigger | Product Owner autonomous completion instruction, 25 November 2026 |
+| Effect | Records executed WP-C.2/WP-C.3 public surface, corrects the migration head, clarifies the B-4 blast radius, records one interpretation and one sequencing deviation. **No task renumbered, renamed, re-estimated or re-prioritised** |
+| Authority | `.clinerules` §1 level 2 (explicit owner instruction), §11 (append-only), §6 (compliance reporting) |
+| Report | `docs/implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md` |
+
+*End of Amendment A-5.*
+
 

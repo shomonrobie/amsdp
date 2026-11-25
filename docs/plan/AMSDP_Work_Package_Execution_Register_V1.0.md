@@ -398,6 +398,8 @@ next window can start work instead of writing another request.
 | 2026-11-25 | **Decision window: the Product Owner Decision Pack was written** — `implementation/AMSDP_Product_Owner_Decision_Pack_V1.0.md` (99,460 bytes, 1,127 lines; Docs Index annex added, count 148 → 149). It consolidates **PO-01, PO-03 … PO-12** (PO-02/PO-13 explicitly not reopened) with **B-1…B-4, Q-1…Q-4, O-3, Q-3, D-3** into one card per item — evidence, one recommendation, alternatives, a copy-paste response line, and the tasks each answer releases — plus a response sheet (§5) and a dependency map (§6). **It decides nothing and closes no gate.** New evidence it records: **Q-3 is two harness defects, not product defects** (dataset: committed blob is 80,517 bytes and hashes to the recorded `ac037c24…e51e`, `git ls-files --eol` `i/lf w/crlf`, `core.autocrlf=true`, no `.gitattributes`; calendar-render: raw Windows paths to the ESM loader, and a corrected probe passes all 9 tests); **the committed tree's migration head is `c4d8e2a91f60`, matching the recorded live revision**, the working tree being one ahead only because `b2e5c7d91a04` is untracked (B-4 row corrected); the Feature Catalogue §H.1 "P0 scope defects" are stale in the product's favour (branch scope enforced at `queuing/main.py:191–203`, `:297–300`, `:422–426`); and the Limitations Report §12 still claims in-memory storage with no PostgreSQL (PO-09 evidence). §2 gained the **MP-02 satisfied** note; §7 gained the decision-window note. **Nothing staged, committed, reverted or stashed** — 98 dirty entries at the window's start, 98 again after the probe file was removed, and 99 at close, the extra entry being this report itself (O-3). Report §8.5 lists every command executed, including the two individual test files run and the one temporary probe file created inside `frontend/tests/` and removed in the same window |
 | 2026-11-25 | **MP-29 worked** (responsive/touch/a11y; no dependencies) **and the MP-02 reds closed.** Recorded in §2 as **TESTED (frontend) + TESTED (backend, PostgreSQL)**: `frontend/lib/a11y.js` (new, 7 exports), `DataTable` now passes the row index (`c.render(row, ri)`, `rowProps(row, ri)`), the queue reorder goes through the tested `moveWithin` on **Alt+Arrow** with named arrows, `disabled` ends and an `aria-live` announcement, 3 i18n keys × 2 languages, and a `global.css` block (`.sr-only`, hover↔focus twins, 44 px floor, 360 px layout). **The pass found the reorder was broken for every input device**, not merely unusable by keyboard. Evidence: `a11y.test.mjs` + `a11y-page-contract.test.mjs` → **`17 passed`**; frontend suite `441/437/2/2` → **`458/454/2/2`** (Q-3 pair only); **D-1** closed (`"session_id" in template`), **D-2** closed (two-gate 403 contract, `ORGADMIN` fixture), **D-4** found and fixed (`.order_by(AuditEvent.id.desc())` over a UUID string → `timestamp.desc()`, two files), **D-3 not reproducible** and not claimed fixed; whole backend suite **`979 passed, 0 failed in 823.50s`** after being `5 failed, 972 passed` at MP-02. No schema change, no migration, no dependency, **no negative-control mutation** (disclosed), **nothing staged or committed** (O-3). §5 gained the MP-29 row; §6 the MP-29 file set; §7 now records that **every remaining work package is gated, deferred or blocked**. Report: `implementation/AMSDP_MP-29_Responsive_Touch_and_Accessibility_Implementation_Report_V1.0.md`; Docs Index annex added (count 147 → 148) |
 | 2026-11-25 | **Q-1 and Q-2 answered by the Product Owner: both APPROVED as recommended, plus a push authorisation and a demo-data authorisation** (decision record §11, Addendum A-1; plan Appendix G, Amendment A-4). Worked in the same window: **Q-1** — `backend/patient/main.py` no longer reads the host clock (the future-DOB check and the age both resolve through `common.timeutil.operational_today`, once per request), 12 new DB-free tests + a source guard; **Q-2** — the Waiting tile now reads `queue_length` and `in_queue` stays visible under its own label, one new PostgreSQL test proving the two populations differ by the appointment-less walk-ins. Evidence, negative controls, commits and the pushed remote tip: **§10**. Q-1/Q-2 rows in §4 are **superseded by §10, not edited**. Report: `implementation/AMSDP_Q1_Q2_Facility_Day_And_Dashboard_Counts_Report_V1.0.md`; Docs Index annex added (Revision 50) |
+| 2026-11-25 | **Multi-display public surface worked** (WP-C.2 / WP-C.3; the largest genuinely-unimplemented authorised block). Recorded in **§11** as IMPLEMENTED + TESTED: registry models and revision `d3f5a7b91c24`, `?display=` resolution with SQL scope, department and room scope, measured estimate, `ETag`/`304`, server-side field suppression, GET-only guard and throttled disabled-display audit. Evidence: 34 new tests (`backend/tests/test_multidisplay.py`), whole backend **`1027 passed, 0 failed in 630.62s`** (`993 + 34`), frontend `467 / 465 / 0 / 2`, three negative controls (4 / 1 / 2 failures) each restored byte-identically, and one latent cross-join defect found by a SQLAlchemy warning and fixed with a regression test. The migration head is corrected to **`b2e5c7d91a04`** (plan Amendment A-5, Appendix H). MP-38/39/40 remain not started / **BLOCKED (B-4)**; `queue.display.denied` remains with MP-39. B-4 decision brief written to `deployment/AMSDP_B4_Database_Access_Decision_Brief_V1.0.md`. Report: `implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md`; Docs Index annex added (Revision 51) |
+
 
 
 
@@ -483,6 +485,45 @@ the owner's own `docs/plan/` ratification note, not an agent edit — and it is 
 tracked file in the tree.
 
 <!-- §10 added 2026-11-25 under decision record Addendum A-1; §4 rows left as written (append-only). -->
+
+## 11. Multi-display public surface executed — WP-C.2 / WP-C.3 (25 November 2026)
+
+Executed under the Product Owner's autonomous completion instruction. Plan
+responses: **Amendment A-5** (Appendix H) corrects the migration head, records the
+status changes and clarifies what B-4 does and does not block. Report:
+`docs/implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md`.
+
+| Task | Deliverable | Status |
+|---|---|---|
+| **MP-35** | `QueueDisplay` + `QueueDisplayDoctor` models; revision `d3f5a7b91c24` (`down_revision = b2e5c7d91a04`) creating `queue_displays` and `queue_display_doctors`; `UNIQUE (branch_id, code)`; CHECKs on scope/language/status plus two half-configuration guards; three indexes | **IMPLEMENTED, TESTED** (demo seed outstanding) |
+| **MP-36** | `?display=<code>` resolver; scope as a SQL predicate; unknown / cross-branch / cross-org / disabled → the identical 404; the two-segment board's payload unchanged | **IMPLEMENTED, TESTED** |
+| **MP-37** | department scope through `doctor_branches.room_id → facility_rooms.department_id`; nullable `room_name` | **IMPLEMENTED, TESTED** |
+| **MP-41** | `scope_type='room'` + `room_id`, CHECK-enforced; empty room is empty | **IMPLEMENTED, TESTED** |
+| **MP-42** | estimate from ≥ 3 completed consultations (mean, from `status_history`), else `AMSDP_AVG_SERVICE_MINUTES`; `int ≥ 1`; `estimate: true` | **IMPLEMENTED, TESTED** (payload) |
+| **MP-43** | `board_version` over the projection only; weak `ETag`; `If-None-Match` → `304`, no body | **IMPLEMENTED, TESTED** (API) |
+| **MP-44** | `operational_date` + `timezone` published on a configured board | **IMPLEMENTED, TESTED** (display slice) |
+| **MP-45** | `show_room` / `show_estimated_wait` / `show_waiting_count` / `footer_text` enforced in the body builder | **IMPLEMENTED, TESTED** (server side) |
+| **MP-46** | GET-only guard (`405`, `Allow: GET`, `no-store`); throttled `queue.display.disabled_requested`; zero audit rows for anonymous unknown codes | **PARTIAL** — `queue.display.denied` stays with MP-39 |
+| **MP-38 / MP-39 / MP-40** | frontend language/typography, admin surface, demonstration | **not started / BLOCKED (B-4)** |
+
+**Tests and controls.** `backend/tests/test_multidisplay.py` — 34 tests, all
+passing; whole-tree backend **1027 passed / 0 failed in 630.62s** (`993 + 34`);
+frontend **467 tests, 465 passed, 0 failed, 2 skipped**. Three negative controls
+(scope filter removed → 4 failed; `room_name` always published → 1 failed;
+`updated_at` inside the version → 2 failed), each restored byte-identically
+(SHA-256 `True`). One latent defect was found by a SQLAlchemy warning during the
+first green run — an estimate query filtered by `Doctor.id` inside a
+`queue_entries` query cross-joined and multiplied samples — and was fixed with a
+regression test.
+
+**Database.** Local development PostgreSQL, `127.0.0.1:55432`, revision
+`b2e5c7d91a04` → `d3f5a7b91c24`. `alembic current` was read **before** the
+upgrade; the second `upgrade head` was a no-op; a schema snapshot (31 → 33 tables,
+**zero** existing tables changed) replaced a dump because no `pg_dump` binary
+exists on this host — disclosed, not glossed. The owner's deployment was **not**
+contacted, opened, rebound or migrated.
+
+<!-- §11 added 2026-11-25; §10 and every earlier section left as written. -->
 
 
 

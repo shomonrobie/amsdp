@@ -2064,3 +2064,45 @@ verification section and in register §10.
    the reason is recorded in report §6 rather than left as a silent omission.
 5. **The push does not make CI green.** MP-33's acceptance still needs an observed first green run.
 
+
+---
+
+## Annex — multi-display public surface executed (2026-11-25) — **Revision 51**
+
+**Numbering.** The rule is unchanged (PO-08, forward-only): *the next revision is the highest previously
+recorded revision + 1*. The last recorded revision is **50** (the annex above), so this annex is
+**Revision 51**. Nothing is retro-labelled.
+
+**Trigger.** The Product Owner's autonomous completion instruction of 25 November 2026 authorised
+continued execution of the plan, including "the multi-display DQDS work under MP-35 through MP-46,
+respecting the dependency chain and B-4 restriction", with the standing rule that work not requiring
+B-4 must continue. The plan applies it as **Amendment A-5** (Appendix H).
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md` | 28,479 | Before building on the display registry or quoting any figure from this window. It carries the environment (local `127.0.0.1:55432`, revision `b2e5c7d91a04` → `d3f5a7b91c24`), the schema proof (31 → 33 tables, **zero** existing tables changed), the public contract before/after, the nine disclosures, and the exact results: 34 new tests, **`1027 passed, 0 failed` in 630.62s**, frontend `467 / 465 / 0 / 2`, three negative controls |
+| `deployment/AMSDP_B4_Database_Access_Decision_Brief_V1.0.md` | 7,204 | Before answering **B-4**. States exactly what a read consists of (three `select`s and `docker compose ps`), the three safe access options with their exposure, which tasks each unblocks, that a read alone needs no production change, and that applying the new revision to the deployment needs a **separate** go-ahead |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` (**modified**) | 84,239 → 92,009 | The plan's new **Amendment A-5** (Appendix H): the executed status changes, the correction that the migration head is **`b2e5c7d91a04`** rather than the `c4d8e2a91f60` four places still state, the clarification of what the B-4 row blocks, one schema interpretation and one sequencing deviation |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` (**modified**) | 76,664 → 82,410 | The register's new **§11** and its §8 change-log row. §10 and every earlier section are left exactly as written |
+
+**Counts.** The previous annex recorded **156** `.md` files under `docs/`; this window adds **two** new
+documents, so the tree now holds **158** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → **158**).
+
+**Commit.** The code change is one path-grouped commit, `082e2a0` — `backend/common/models.py`,
+`backend/queuing/display.py`, the new revision and the new test file; 4 files, 1,289 insertions,
+23 deletions. The commit carrying this annex contains only `docs/`. **`.clinerules` remains
+uncommitted**: its change is the owner's own `docs/plan/` ratification note, not an agent edit.
+
+**What this annex deliberately does not claim.**
+
+1. **No task is `ACCEPTED`.** The Product Owner has not signed this work.
+2. **Nothing is `VERIFIED` for the deployment.** Every artefact is from the local development database
+   and `TestClient`; no browser session, no live API call, no deployment query (**B-2** outstanding,
+   **B-3** outstanding, **B-4** undecided).
+3. **No live or production change happened.** No migration on the deployment, no reseed, no service
+   restart, no host configuration change, no port opened. **The new revision is applied to the local
+   development database only.**
+4. **M-9 and M-10 are not met.** MP-38 (configured language and TV typography), MP-39 (display
+   administration) and MP-35's demo seed are outstanding, and MP-40's evidence cannot be produced
+   without B-4.
+
