@@ -162,6 +162,73 @@ class TestDashboardToday:
                        headers=_auth(_token(admin)))
         assert r.status_code == 422, bad
 
+    # --- Q-2: Waiting is the queue, In queue is an appointment state ---------
+    def test_waiting_and_in_queue_are_different_populations(self, admin):
+        """Q-2, approved 2026-11-25.
+
+        ``queue_length`` = live queue entries (what a person standing in the room
+        contributes); ``in_queue`` = appointment records whose status is
+        ``IN_QUEUE``.  A walk-in enqueued without an appointment row raises the
+        first and not the second — which is exactly why the two must not be
+        aliased on the dashboard.
+        """
+        s = SessionFactory()
+        p = Patient(id=str(uuid.uuid4()), organization_id="m6-org", name="P",
+                    mobile="01711111113")
+        s.add(p); s.commit()
+        queued = _mk_appt_today(s, p.id, status="IN_QUEUE")      # an appointment record
+        _mk_appt_today(s, p.id, status="CHECKED_IN")            # checked in, not queued
+        _mk_appt_today(s, p.id, status="BOOKED", booking="walk_in")  # booked only
+
+        def entry(status, position, appointment_id=None, day=None):
+            e = QueueEntry(id=str(uuid.uuid4()), organization_id="m6-org",
+                           branch_id="m6-branch", doctor_id="m6-doc",
+                           date=day or _today, position=position,
+                           token="T-M6-Q%d" % position, patient_id=p.id,
+                           appointment_id=appointment_id,
+                           entry_source="appointment" if appointment_id else "walk_in",
+                           status=status, status_history=[], position_history=[])
+            s.add(e); return e
+
+        entry("waiting", 1, appointment_id=queued.id)   # the queued appointment
+        entry("waiting", 2)                             # walk-in, no appointment row
+        entry("skipped", 3)                             # walk-in still in the room
+        entry("completed", 4)                           # left the queue: excluded
+        entry("waiting", 5, day=_today - timedelta(days=3))   # another day: excluded
+        s.commit(); s.close()
+
+        body = client.get("/api/v1/dashboard/today",
+                          headers=_auth(_token(admin))).json()
+        assert body["in_queue"] == 1, "appointment records in IN_QUEUE"
+        assert body["checked_in"] == 1
+        assert body["scheduled"] == 1
+        assert body["walk_ins"] == 1
+        assert body["queue_length"] == 3, (
+            "live entries awaiting a decision, on this day only: "
+            "waiting + walk-in waiting + skipped")
+        assert body["queue_length"] != body["in_queue"], (
+            "the two figures coincide only by accident; here they differ by the "
+            "appointment-less walk-ins")
+
+    def test_a_queue_entry_from_another_day_is_not_todays_waiting(self, admin):
+        """The queue figure follows the facility day, not a rolling window."""
+        s = SessionFactory()
+        p = Patient(id=str(uuid.uuid4()), organization_id="m6-org", name="P",
+                    mobile="01711111114")
+        s.add(p); s.commit()
+        s.add(QueueEntry(id=str(uuid.uuid4()), organization_id="m6-org",
+                         branch_id="m6-branch", doctor_id="m6-doc",
+                         date=_today - timedelta(days=1), position=1,
+                         token="T-M6-Y1", patient_id=p.id, appointment_id=None,
+                         entry_source="walk_in", status="waiting",
+                         status_history=[], position_history=[]))
+        s.commit(); s.close()
+        body = client.get("/api/v1/dashboard/today",
+                          headers=_auth(_token(admin))).json()
+        assert body["queue_length"] == 0
+        assert body["in_queue"] == 0
+        assert body["total"] == 0
+
 
 class TestDashboardPeriod:
     def test_period_totals_and_rates(self, admin):

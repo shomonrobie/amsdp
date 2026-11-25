@@ -1,4 +1,22 @@
-"""AMSDP dashboard aggregate endpoints (read-only, real DB counts)."""
+"""AMSDP dashboard aggregate endpoints (read-only, real DB counts).
+
+**Q-2 — two different populations, two different names.**  The payload carries
+both counts and they are not interchangeable:
+
+* ``queue_length`` counts **live queue entries** (``queue_entries`` rows in an
+  active state for the day) — the people actually standing in the room.  This is
+  the figure anything labelled *Waiting* must show, because it is the same
+  population the public board displays.  A walk-in enqueued without an
+  appointment row (``queuing.enqueue_patient`` stores ``appointment_id=NULL``)
+  raises ``queue_length`` and moves no appointment status.
+* ``in_queue`` counts **appointment records** whose status is ``IN_QUEUE`` — a
+  booking-state tally.  It can never exceed the number of appointments, and it
+  says nothing about who is present.
+
+The two therefore differ by exactly the appointment-less walk-ins, which is why
+the dashboard shows *both*, each with its own label (Product Owner decision Q-2,
+25 November 2026).  Do not alias one to the other.
+"""
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from datetime import datetime, timezone, timedelta
@@ -11,6 +29,10 @@ from common.timeutil import operational_today
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
+#: Entry states that still occupy the queue, and therefore count towards
+#: ``queue_length``: waiting, called, in consultation, and skipped-but-present.
+#: A completed or cancelled entry has left the queue and is excluded.  ``skipped``
+#: stays in because the patient is still in the room awaiting a decision (Q-2).
 QUEUE_ACTIVE = ["waiting", "called", "in_consultation", "skipped"]
 
 
@@ -25,6 +47,10 @@ def dashboard_today(doctor_id: str = Query(None), branch_id: str = Query(None),
     (BR §8) rather than the server's UTC date, and an unparseable value is a 422
     rather than a silent fallback — a dashboard that quietly answers about a
     different day than the one asked for is worse than one that refuses.
+
+    ``queue_length`` and ``in_queue`` answer different questions (Q-2): live
+    queue entries versus appointment rows whose status is ``IN_QUEUE``.  The
+    module docstring says which label each may carry.
     """
     session = SessionFactory()
     try:
