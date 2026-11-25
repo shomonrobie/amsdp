@@ -1584,6 +1584,47 @@ The accompanying revision note would read: snapshot **91** on disk / **89** regi
 
 ---
 
+---
+
+## Appendix D — Amendment A-1 (2026-11-24): OD-4 answered for the Hackathon Version
+
+**Why.** The Product Owner instructed on 2026-11-24 that **Multi-display DQDS Configuration** is an explicit Hackathon Version feature, principally Phase 3 with Phase 6 demonstration and acceptance. This appendix records the consequence for **OD-4** and for each DQDS finding in §"DQDS" of this analysis. **No finding is withdrawn and no status is upgraded**: everything below remains **NOT IMPLEMENTED** until code exists.
+
+### D.1 OD-4 — the scope question
+
+OD-4 asked which definition governs Phase 3 DQDS: the catalogue's DQDS-001 (doctor-wise token board only) or BR §33's fuller system, and offered three choices. For the **Hackathon Version** the answer is now:
+
+- **Option (2) applies to the registry and scope**: multiple displays per branch, each configured for its doctors or department, is **in Phase 3**, not later. Authority: owner instruction 2026-11-24; PQV §B.6; BR §33.2/§33.3.
+- **Option (3) applies to presentation and day handling**: the facility-local operational day and a television-scale layout are in Phase 3 (they already are, via DQD-001/DQD-004).
+- **Deferred**: room **on the queue entry** (DQD-002), estimated wait and countdown (DQD-005), "next N tokens" (DQD-008), and durable/shared rate limiting (DQD-007's second half).
+
+Full requirements: `docs/architecture/AMSDP_Multi_Display_DQDS_Functional_Specification_V1.0.md` (MD-01…MD-12, AC-01…AC-14). Tasks: `docs/plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` **MP-35…MP-40**. Register entry: `docs/audit/AMSDP_Requirements_Reconciliation_and_Implementation_Gap_Audit_V1.0.md` §14.4 **GAP-28**.
+
+### D.2 Effect on each DQDS finding
+
+| Finding | Effect of Amendment A-1 | Task |
+|---|---|---|
+| **DQD-001** board uses the server's date | Unchanged — a prerequisite for any credible multi-display demo | MP-06 |
+| **DQD-002** no room on the queue entry | **Stays deferred.** The hackathon room *label* is derived from `doctor_branches.room_id` and needs no queue change | MP-37 (label only) |
+| **DQD-003** one board per branch; no registry | **Now Phase 3 scope** rather than "scope-dependent" | MP-35, MP-36, MP-39 |
+| **DQD-004** app-scale presentation | Partly in scope: TV-scale typography and the display name in the header | MP-38 |
+| **DQD-005** no estimate/countdown | **Stays deferred** (specification D-04) | — |
+| **DQD-006** language is a per-TV setting | **Now Phase 3 scope**: the language belongs to the display configuration | MP-38 |
+| **DQD-007** per-process limiter, blind to a proxy | First half in scope: per-display accounting so several screens behind one NAT are not refused. Durable shared limiter stays deferred | MP-36 (accounting), MP-25 (durability) |
+| **DQD-008** no "next" tokens | **Stays deferred** (specification D-05) | — |
+| **DQD-009** nothing opens, registers or disables a display | **Now Phase 3 scope**: admin surface with create/edit/disable and a copyable URL. No device registration is invented | MP-39, MP-40 |
+| **DQD-010** 404 lacks rate-limit headers | Unchanged, minor; keep consistent when MP-36 adds the display 404 | MP-36 |
+| **DQD-011** token embeds part of the doctor id | Unchanged; a display filter must not make it worse | MP-11 family |
+| **DQD-012** board keeps a private copy of BN/EN strings | Unchanged; two displays in two languages makes a shared mechanism more valuable, not less | MP-28 |
+| **DQD-013** no frontend/browser test | Unchanged, and now more expensive: multi-display adds states worth testing | MP-38, MP-40 |
+| **DQD-014** public board URL cannot be revoked | **Partly answered in design**: disabling a display 404s its URL. Device-level revocation remains absent and is stated as such | MP-39 (specification §5.7) |
+
+### D.3 What this appendix does not change
+
+The findings, severities, test inventory, scenario verdicts and the four-stage roadmap in the body of this analysis stand as written. OD-1, OD-2, OD-3, OD-5, OD-6 and OD-7 are untouched.
+
+---
+
 *End of document.*
 
 
