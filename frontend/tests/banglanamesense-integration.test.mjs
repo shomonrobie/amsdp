@@ -23,7 +23,7 @@ test('patient registration page uses the reusable BanglaNameSense component', ()
   assert.match(page, /<div className='form-group'><BanglaNameSense id='patient-name'/);
   assert.match(page, /value=\{f\.name\}/);
   assert.match(page, /onChange=\{v=>setF\(\{\.\.\.f,name:v\}\)\}/);
-  assert.match(page, /label=\{T\('n'\)\}/);
+  assert.match(page, /label=\{t\('patN'\)\}/);
   assert.match(page, /required/);
 });
 
@@ -40,7 +40,7 @@ test('existing patient registration behaviour is preserved verbatim', () => {
   assert.match(page, /delete payload\.age/);
   assert.match(page, /fetch\('\/api\/v1\/patients',\{method:'POST'/);
   assert.match(page, /setDupes\(d\.duplicates\|\|\[\]\)/);
-  assert.match(page, /T\('dup'\)/);
+  assert.match(page, /t\('patDup'\)/);
   assert.match(page, /fetch\('\/api\/v1\/patients\?q='/);
   // Role gating on the Register button is unchanged.
   assert.match(page, /u\.role==='receptionist'/);

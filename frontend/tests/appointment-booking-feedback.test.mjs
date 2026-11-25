@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import {
   freeSeats, seatsWord, refusalCode, REFUSAL_KEYS, SEATS_WORD_MAX,
 } from '../lib/calendar/booking.js';
+import { DICT } from '../lib/i18n.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FE = path.resolve(HERE, '..');
@@ -27,6 +28,10 @@ const read = (rel) => fs.readFileSync(path.join(FE, rel), 'utf8');
 
 const PAGE = 'pages/appointments.js';
 const MODULE = 'lib/calendar/booking.js';
+
+/* MP-28 — dynamic keys (server refusals) are namespaced the same way the page
+   does it, so the dictionary assertions below test the real lookup. */
+const aptKey = (k) => 'apt' + String(k).charAt(0).toUpperCase() + String(k).slice(1);
 
 /** Code only — the comments are where the reasoning lives, not the rules. */
 const stripComments = (source) =>
@@ -101,12 +106,13 @@ test('a refusal the module cannot read is reported as unread, not guessed', () =
 });
 
 test('each code has a caption, and every caption exists in both languages', () => {
-  const page = read(PAGE);
+  // MP-28 moved the captions into lib/i18n.js under the `apt` namespace, so the
+  // assertion is made against the dictionary rather than the page source.
   const keys = [...Object.values(REFUSAL_KEYS),
-    'slotFull', 'seatLast', 'seatsLeft', 'noSlotsHint'];
+    'slotFull', 'seatLast', 'seatsLeft', 'noSlotsHint'].map(aptKey);
   for (const key of keys) {
-    const hits = (page.match(new RegExp(`(^|[\\s{,])${key}:'`, 'g')) || []).length;
-    assert.equal(hits, 2, `${key} must be defined in Bangla and in English`);
+    assert.ok(DICT.bn[key] && DICT.bn[key].trim(), `${key} must be defined in Bangla`);
+    assert.ok(DICT.en[key] && DICT.en[key].trim(), `${key} must be defined in English`);
   }
   // One code, one caption: the count is the guard against a new refusal code
   // shipping without words.  Q1 added four outside-hours codes
@@ -116,9 +122,9 @@ test('each code has a caption, and every caption exists in both languages', () =
 
 test('the booking dialog translates refusals instead of pasting the server sentence', () => {
   const page = read(PAGE);
-  assert.doesNotMatch(page, /setBookError\(T\('bookErr'\) \+ ':' \+ String/,
+  assert.doesNotMatch(page, /setBookError\(t\('aptBookErr'\) \+ ':' \+ String/,
     'the raw server sentence must not reach a Bangla screen');
-  assert.doesNotMatch(page, /setError\(T\('actionErr'\) \+ ':' \+ String/);
+  assert.doesNotMatch(page, /setError\(t\('aptActionErr'\) \+ ':' \+ String/);
   assert.equal((page.match(/refusalText\(e\)/g) || []).length, 4,
     'both booking paths and both status paths use the shared vocabulary');
   assert.match(page, /function refusalText\(err\)/);
@@ -128,23 +134,23 @@ test('the booking dialog translates refusals instead of pasting the server sente
 test('the slot button writes remaining seats as words, and explains a full one', () => {
   const page = read(PAGE);
   assert.match(page, /const word = seatsWord\(s\);/);
-  assert.match(page, /fill\(T\(word\.key\), \{ n: word\.n \}\)/);
-  assert.match(page, /title=\{T\('capacity'\) \+ ': ' \+ s\.capacity \+ ' · ' \+ seats\}/,
+  assert.match(page, /fill\(t\(aptKey\(word\.key\)\), \{ n: word\.n \}\)/);
+  assert.match(page, /title=\{t\('aptCapacity'\) \+ ': ' \+ s\.capacity \+ ' · ' \+ seats\}/,
     'the tooltip says why the button is disabled, not only a number');
 });
 
 test('an empty day explains the fallback it offers (F-18)', () => {
   const page = read(PAGE);
-  assert.match(page, /\{T\('noSlots'\)\}/);
-  assert.match(page, /\{T\('noSlotsHint'\)\}/,
+  assert.match(page, /\{t\('aptNoSlots'\)\}/);
+  assert.match(page, /\{t\('aptNoSlotsHint'\)\}/,
     'the free-text field must state that the booking falls outside every session');
   // The field itself is kept: a time outside every session still places the
   // card on the day.  Q1 closed the ambiguity — with nothing published the
   // booking is an outside-hours acceptance, so the dialog asks for the reason
   // the server requires and sends `appointment_type: 'unscheduled'`.
-  assert.match(page, /<input type='time' value=\{book\.time\} aria-label=\{T\('tm'\)\}/);
+  assert.match(page, /<input type='time' value=\{book\.time\} aria-label=\{t\('aptTm'\)\}/);
   assert.match(page, /id='book-override-reason'/);
-  assert.match(page, /\{T\('overrideHint'\)\}/);
+  assert.match(page, /\{t\('aptOverrideHint'\)\}/);
 });
 
 test('the module stays pure, so the browser and these tests run the same code', () => {

@@ -114,12 +114,12 @@ test('the booking dialog names the appointment type and asks for the override re
   assert.match(page, /reason: \(walk\.reason \|\| ''\)\.trim\(\)/);
   assert.match(page, /id='walk-reason'/);
   // The detail panel states the persisted type and the recorded reason.
-  assert.match(page, /T\(typeLabelKey\(detail\.appointment_type\)\)/);
+  assert.match(page, /t\(aptKey\(typeLabelKey\(detail\.appointment_type\)\)\)/);
   assert.match(page, /detail\.override_reason/);
   // A walk-in or outside-hours card is badged on its face, so it cannot be read
   // as an ordinary confirmed slot.
-  assert.match(page, /T\(typeBadgeKey\('walk_in'\)\)/);
-  assert.match(page, /T\(typeBadgeKey\('unscheduled'\)\)/);
+  assert.match(page, /t\(aptKey\(typeBadgeKey\('walk_in'\)\)\)/);
+  assert.match(page, /t\(aptKey\(typeBadgeKey\('unscheduled'\)\)\)/);
   assert.match(component, /appt\.appointment_type === 'walk_in'/);
 });
 
@@ -135,7 +135,9 @@ test('walk-in, check-in, status change and cancel-with-reason are preserved', ()
 test('the previous table survives as the list view', () => {
   assert.match(page, /view === 'list'/);
   for (const column of ['tk', 'p', 'd', 'dt', 'tm', 'st']) {
-    assert.ok(page.includes(`T('${column}')`), `list view keeps the ${column} column`);
+    // MP-28: the column captions live in the shared dictionary under `apt`
+    const key = 'apt' + column.charAt(0).toUpperCase() + column.slice(1);
+    assert.ok(page.includes(`t('${key}')`), `list view keeps the ${column} column`);
   }
   assert.match(page, /ACTIONS\[a\.status\] \|\| \[\]/);
 });
@@ -167,8 +169,8 @@ test('the grid is keyboard reachable and screen-reader labelled', () => {
   assert.match(component, /aria-label=\{`\$\{labels\.bookAt \|\| 'Book'\}/);
   assert.match(component, /aria-current=\{iso === todayDate \? 'date' : undefined\}/);
   assert.match(page, /aria-pressed=\{view === v\}/);
-  assert.match(page, /aria-label=\{T\('prev'\)\}/);
-  assert.match(page, /aria-label=\{T\('searchPatient'\)\}/);
+  assert.match(page, /aria-label=\{t\('aptPrev'\)\}/);
+  assert.match(page, /aria-label=\{t\('aptSearchPatient'\)\}/);
 });
 
 test('appointments are never hidden behind the schedule grid', () => {

@@ -25,6 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { DICT } from '../lib/i18n.js';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FE = path.resolve(HERE, '..');
 const read = (rel) => fs.readFileSync(path.join(FE, rel), 'utf8');
@@ -111,28 +113,29 @@ test('the page never gives the picker the patient age or sex', () => {
 
 test('the receptionist sees the recorded symptoms on the appointment', () => {
   const page = read(PAGE);
-  assert.match(page, /\[T\('sy'\), symptomLine\(detail\)\]/);
-  assert.match(page, /\[T\('onset'\), onsetLine\(detail\)\]/);
+  assert.match(page, /\[t\('aptSy'\), symptomLine\(detail\)\]/);
+  assert.match(page, /\[t\('aptOnset'\), onsetLine\(detail\)\]/);
   assert.ok(page.includes('s.kind === \'catalogue\''),
     'the detail view keeps catalogue entries and free text apart');
 });
 
 test('every new caption exists in both languages', () => {
-  const page = read(PAGE);
-  const keys = ['sy', 'syNone', 'onset', 'syPrompt', 'syPlaceholder', 'syOptional',
-    'sySelected', 'syRemove', 'syFreeText', 'syAddFree', 'syAlready', 'syFull',
-    'syHint', 'syList', 'onsetPrompt', 'onsetNotAsked', 'onsetNote',
-    'onsetNotePlaceholder'];
+  // MP-28 moved these keys out of the page's own table into lib/i18n.js, so
+  // the assertion is made against the dictionary itself rather than the source.
+  const keys = ['aptSy', 'aptSyNone', 'aptOnset', 'aptSyPrompt', 'aptSyPlaceholder',
+    'aptSyOptional', 'aptSySelected', 'aptSyRemove', 'aptSyFreeText', 'aptSyAddFree',
+    'aptSyAlready', 'aptSyFull', 'aptSyHint', 'aptSyList', 'aptOnsetPrompt',
+    'aptOnsetNotAsked', 'aptOnsetNote', 'aptOnsetNotePlaceholder'];
   for (const key of keys) {
-    const hits = (page.match(new RegExp(`(^|[\\s{,])${key}:'`, 'g')) || []).length;
-    assert.equal(hits, 2, `${key} must be defined in Bangla and in English`);
+    assert.ok(DICT.bn[key] && DICT.bn[key].trim(), `${key} must be defined in Bangla`);
+    assert.ok(DICT.en[key] && DICT.en[key].trim(), `${key} must be defined in English`);
   }
 });
 
-test('the picker labels come from the page\'s bilingual table', () => {
+test('the picker labels come from the shared dictionary', () => {
   const page = read(PAGE);
-  for (const mapped of ['title: T(\'sy\')', 'prompt: T(\'syPrompt\')',
-    'onsetTitle: T(\'onsetPrompt\')', 'addFree: T(\'syAddFree\')']) {
+  for (const mapped of ['title: t(\'aptSy\')', 'prompt: t(\'aptSyPrompt\')',
+    'onsetTitle: t(\'aptOnsetPrompt\')', 'addFree: t(\'aptSyAddFree\')']) {
     assert.ok(page.includes(mapped), `labels must be wired: ${mapped}`);
   }
 });
