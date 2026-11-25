@@ -54,9 +54,17 @@ the exposure is password-protected rather than open — but it is still an expos
 that no document records as a decision. §6.3 carries the recommendation; changing
 it is an owner decision, not something this runbook did.
 
-### 1.4 The live database is **two revisions behind** the merged code
+### 1.4 ~~The live database is **two revisions behind** the merged code~~ — **RESOLVED 23 November 2026**
 
-Verified against the running `amsdp-db-1` container:
+> **Status 2026-11-24: this section is historical.** The migration was applied on **23 November 2026**
+> — rehearsed against a disposable restored database first, with a pre-migration backup — taking the
+> live database from `a9c4e1f7b2d8` to the single head `c4d8e2a91f60` and creating `voice_packs`,
+> `queue_announcement_deliveries` and `announcement_platform_config`. **Do not re-run the upgrade.**
+> The check to run before anything else is `select version_num from alembic_version;` — it must
+> already print `c4d8e2a91f60`. The readings below are preserved because they are the evidence the
+> analysis was built on, not because they are current.
+
+Verified against the running `amsdp-db-1` container **on 2026-11-23, before the migration**:
 
 ```
 select version_num from alembic_version;        -> a9c4e1f7b2d8
@@ -77,8 +85,10 @@ applied to the development database. Consequences, both observed:
 * A rebuilt stack would serve `/api/v1/voice-packs` and the delivery-record paths
   against tables that are not there.
 
-So the first operational action after this merge is **migrate, then rebuild**
-(§4.3), which is the opposite order from the one people naturally reach for.
+So the first operational action **after the merge — on 2026-11-23 — was** migrate, then rebuild (§4.3).
+**That action has been taken.** From 2026-11-24 onwards the first action is a *read*: confirm
+`alembic_version` is `c4d8e2a91f60`, then rebuild only if a rebuild is needed. An unconditional
+`alembic upgrade head` now does nothing at best and misleads the operator at worst.
 
 ---
 
@@ -183,16 +193,22 @@ _tools/amsdp_stack.sh status
 
 The merged tree has **one** head — `c4d8e2a91f60` — and this session proved the whole
 chain applies to an *empty* database (`alembic upgrade head` exit 0 against a
-throwaway `postgres:16-alpine` container). The *live* development database is
-**behind** (§1.4): it is at `a9c4e1f7b2d8` and is missing `a7c3f19d2b64` and
-`c4d8e2a91f60`. Until it is migrated, the voice-pack API and announcement-delivery
-paths have no tables to write to.
+throwaway `postgres:16-alpine` container).
+
+**As at 2026-11-23 the live development database was behind** (§1.4): `a9c4e1f7b2d8`,
+missing `a7c3f19d2b64` and `c4d8e2a91f60`, so the voice-pack API and
+announcement-delivery paths had no tables to write to. **It was migrated the same day**
+and now sits at the head. This procedure is therefore **conditional from 2026-11-24**:
+`alembic current` decides whether anything remains to do, and an unconditional upgrade is
+no longer the correct reflex.
 
 ```
 _tools/pg_backup.sh                 # take the dump FIRST (§4.4)
 cd backend
 set -a; . ../.env; set +a          # provides POSTGRES_PASSWORD; nothing is printed
-../.venv/bin/alembic current       # what the live database is actually at
+../.venv/bin/alembic current       # MUST print c4d8e2a91f60 (applied 2026-11-23)
+                                   #   if it does → nothing to do; skip the upgrade
+                                   #   if it does not → run _tools/pg_backup.sh, then upgrade
 ../.venv/bin/alembic heads         # must print exactly one "(head)" line
 ../.venv/bin/alembic upgrade head  # forward-only, idempotent
 ../.venv/bin/alembic current       # now equals the head
@@ -519,7 +535,7 @@ throwaway container (§5.3) and checks the application through port 3100. Confir
 files (`organization/tests/test_voice_packs_api.py`,
 `queuing/tests/test_queue.py`), and all carry the same cause:
 `psycopg2.errors.UndefinedTable: relation "voice_packs" does not exist` — the live
-development database is two revisions behind (§1.4). Pointed at the migrated
+development database was two revisions behind (§1.4) **at the time of that run**. Pointed at the migrated
 throwaway database (§5.3) the same two files report **109 passed in 78s**, i.e. the
 error count and the passing count are the same number. That is the correct way to run
 them, and it is why a whole-tree run is evidence about *the database it ran against*
@@ -608,7 +624,7 @@ Do these in order, once, when the Windows workstation takes over development.
 | **O-2** facility-level enable/language | **NOT VERIFIED** — the queue-calling configuration is organization-level today (§7.4 of the merge); per-facility overrides do not exist | owner decision on whether facility scope is in MVP; if yes, new migration + tests |
 | **RBAC-R3** doctor assignment in the demo seed | **NOT VERIFIED** — the seed and the RBAC tests are green, but the specific "demo doctor is assigned to the branch that owns the queue" assertion has not been confirmed against the *seeded* demo data | run `_tools/verify_demo_login.sh` + inspect one doctor's assignments on the demo stack |
 | PostgreSQL published on `0.0.0.0:5433` | **OPEN — owner decision** (§6.3); the change is one line and was not applied | owner approves, then `docker compose up -d db` + `ss -ltn` |
-| **Live DB two revisions behind** (`a9c4e1f7b2d8` vs head `c4d8e2a91f60`) | **OPEN — release blocker for the QUE-006 features** (§1.4): `voice_packs` and `queue_announcement_deliveries` do not exist in the running database. Found by the full-suite run, confirmed by SQL, and explained by re-running the 109 erroring tests against a migrated database (`109 passed`) | run `_tools/pg_backup.sh`, then `alembic upgrade head`, then `_tools/amsdp_rebuild.sh` (§4.3) |
+| ~~**Live DB two revisions behind** (`a9c4e1f7b2d8` vs head `c4d8e2a91f60`)~~ **CLOSED 23 November 2026** | **RESOLVED — no longer a blocker.** The migration was applied on 2026-11-23, rehearsed against a disposable restored database first and with a pre-migration backup, taking the live DB to head `c4d8e2a91f60` and creating `voice_packs`, `queue_announcement_deliveries` and `announcement_platform_config`. The original finding — found by the full-suite run, confirmed by SQL, and explained by re-running the 109 erroring tests against a migrated database (`109 passed`) — is preserved as history in §1.4 | **No action.** Verify with `select version_num from alembic_version;` — expect `c4d8e2a91f60`; only if it differs, `_tools/pg_backup.sh` then `alembic upgrade head` (§4.3) |
 | No SSH server on the host | **OPEN — owner decision** (§6.1); today's transport is Git | owner |
 | Windows workstation steps (§5) | **NOT VERIFIED** — written from the repository and the host's toolchain, never executed on Windows | the Windows developer, once, following §5–§10 |
 
@@ -632,7 +648,7 @@ are ephemeral; the durable record is this section plus
 | Targeted backend suites | `pytest organization/tests queuing/tests doctor/tests/test_doctor.py appointment/tests/test_appointment_calendar_filters.py` | **262 passed**, 0 failed, 7m13s (`/tmp/amsdp_be_targeted.log`) |
 | Whole-tree backend suite, live DB | `bash /tmp/run_be_full.sh` → `pytest -q` | **682 passed, 109 errors, 0 failed**, 14m03s (`/tmp/amsdp_be_full.log`) |
 | The 109 errors, on a migrated DB | `AMSDP_DATABASE_URL=…:55460/amsdp pytest -q organization/tests/test_voice_packs_api.py queuing/tests/test_queue.py` | **109 passed**, 78s (`/tmp/amsdp_be_err2.log`) |
-| Live DB revision | `psql -tAc 'select version_num from alembic_version'` in `amsdp-db-1` | `a9c4e1f7b2d8`; `to_regclass('voice_packs')` → null |
+| Live DB revision | `psql -tAc 'select version_num from alembic_version'` in `amsdp-db-1` | `a9c4e1f7b2d8`; `to_regclass('voice_packs')` → null — **measured 2026-11-23 before the migration; superseded the same day (§1.4)** |
 | Container layout | `pytest organization/tests/test_container_layout_import.py` | passed |
 | Proxy table | `node --test tests/next-config-rewrites.test.mjs` | passed (inside the frontend suite) |
 | Announcement dedupe | `node --test tests/queue-announcement-dedupe.test.mjs` | passed (inside the frontend suite) |

@@ -10,6 +10,14 @@ on `hackathon-mvp`, confirmed by a server-side `git ls-remote`.
 facility-level configuration, the demo doctor's branch assignment, and runtime
 availability of the new tables (the live database is still behind — §7).
 
+> **Correction, 24 November 2026 — one item above has since closed.** This report was written
+> before the migration; later on **2026-11-23** the live database was migrated to the single head
+> `c4d8e2a91f60` (rehearsed against a disposable restored database first, with a pre-migration
+> backup), creating `voice_packs`, `queue_announcement_deliveries` and
+> `announcement_platform_config`. The "live database is still behind" statement and the matching
+> row in §7 are therefore **historical**. Every other sentence in this report stands unchanged.
+> Reconciliation record: `docs/implementation/AMSDP_Live_Deployment_Baseline_Reconciliation_Report_V1.0.md`.
+
 ---
 
 ## 1. Publication record
@@ -145,18 +153,20 @@ deleted to make the merge easier.
 
 ### 4.2 Why the whole-tree run is reported as 109 errors rather than 791 green
 
-The live development database `amsdp-db-1` is at `a9c4e1f7b2d8`, **two revisions behind**
-the single head `c4d8e2a91f60`. `voice_packs` and `queue_announcement_deliveries` do not
+The live development database `amsdp-db-1` **was** at `a9c4e1f7b2d8`, **two revisions behind**
+the single head `c4d8e2a91f60`, **when this section was written on 2026-11-23** (see the
+correction banner: it was migrated later the same day). `voice_packs` and `queue_announcement_deliveries` did not
 exist there, so every `voice_packs`/`queue` test dies at *fixture setup* with
 `psycopg2.errors.UndefinedTable` — no test assertion ever fails. This is
 database-state evidence, not a code defect, and the isolated re-run on a migrated
 database proves it: the same two files report 109 passes, matching the error count
 exactly.
 
-It is recorded here rather than quietly omitted because it is also a **release blocker**:
-the merge is published, but the running stack cannot serve `voice_packs` until the live
-database is migrated (`_tools/pg_backup.sh` → `alembic upgrade head` →
-`_tools/amsdp_rebuild.sh`).
+It is recorded here rather than quietly omitted because it was **also a release blocker at the time**:
+the merge was published, but the running stack could not serve `voice_packs` until the live
+database was migrated (`_tools/pg_backup.sh` → `alembic upgrade head` →
+`_tools/amsdp_rebuild.sh`). **That migration has since been applied — 2026-11-23 — so this
+paragraph and §4.3's `alembic current` row are historical.**
 
 ### 4.3 Schema
 
@@ -164,7 +174,7 @@ database is migrated (`_tools/pg_backup.sh` → `alembic upgrade head` →
 |---|---|
 | `alembic heads` | one head, `c4d8e2a91f60` |
 | `alembic upgrade head` on a fresh PostgreSQL 16 container | exit 0 |
-| `alembic current` on the live database | `a9c4e1f7b2d8` — **behind**, see §4.2 |
+| `alembic current` on the live database | `a9c4e1f7b2d8` — **behind at the time, see §4.2** (superseded 2026-11-23: now at the head `c4d8e2a91f60`) |
 | Merge introduced a second head | No |
 
 ### 4.4 Reports that carry the detailed evidence
@@ -242,7 +252,7 @@ for `.env`, keys, certificates, dumps and credential files and returned nothing.
 
 | Item | State | Closing condition |
 |---|---|---|
-| **Live database two revisions behind** | **OPEN — release blocker for the QUE‑006 features.** `a9c4e1f7b2d8` vs head `c4d8e2a91f60`; `voice_packs` and `queue_announcement_deliveries` absent | `_tools/pg_backup.sh`, then `alembic upgrade head`, then `_tools/amsdp_rebuild.sh` — documented in the runbook §1.4/§4.3, **not executed here** |
+| ~~**Live database two revisions behind**~~ — **CLOSED 2026-11-23** | ~~**OPEN — release blocker for the QUE‑006 features.** `a9c4e1f7b2d8` vs head `c4d8e2a91f60`; `voice_packs` and `queue_announcement_deliveries` absent~~ **Resolved after this report was written:** the migration was applied that day, taking the live DB to head and creating all three tables | ~~`_tools/pg_backup.sh`, then `alembic upgrade head`, then `_tools/amsdp_rebuild.sh`~~ **Done.** Remaining, separate item: a whole-tree suite run *against the migrated database* is still not recorded |
 | **B‑8** human audibility of playback | **NOT VERIFIED** — no automated artefact can prove a person hears the speaker; delivery rows and audio assets exist | a human, in the room, with the demo stack running |
 | **D‑5** documentation index numbering | **NOT IMPLEMENTED as a renumbering** — this report is registered in an unnumbered annex; no revision number is claimed | owner confirms the index head, then a docs-only commit |
 | **D‑7** manual-repeat delivery records | **NOT VERIFIED** — the repeat path is implemented and tested, but no manual scenario has been recorded | a scripted manual scenario logged under `docs/testing/` |
@@ -308,10 +318,13 @@ claims no revision number — that is D‑5, and it stays open.
 
 ## 10. Next actions, in order
 
-1. Back up and migrate the live database, then rebuild — runbook §4.3. Without this the
-   published QUE‑006 features cannot be exercised at runtime.
+1. ~~Back up and migrate the live database, then rebuild — runbook §4.3.~~ **DONE 2026-11-23**
+   (rehearsed on a disposable restore, pre-migration backup taken; live DB now at
+   `c4d8e2a91f60`). **Do not repeat it** — verify with
+   `select version_num from alembic_version;` first.
 2. Re-run the whole-tree backend suite against the migrated live database; expect the 109
-   errors to disappear (they already pass on a migrated database — §4.2).
+   errors to disappear (they already pass on a migrated database — §4.2). **Still open:**
+   no post-migration run is recorded, so this remains a prediction, not a result.
 3. Hand the runbook to the Windows developer; the first clone-and-run produces the
    evidence that closes the "Windows steps" row in §7.
 4. Owner decisions on the three `OPEN — owner decision` rows.
