@@ -83,6 +83,7 @@ verification report and recoverable from git history. **No migration-manifest en
 | 16 | `808bca5` docs(deployment): PO-10 plan | docs |
 | 17 | `3086742` docs(implementation): W6 audio reference verification | docs |
 | 18 | *(final)* docs: this report and Docs Index Revision 49 | docs |
+| 19 | docs(decisions): mark the PO-08 response line as adapted | docs — fixes the one place where a quotation had been paraphrased in place (the stale "next = 48" is now shown as omitted, not silently removed) and corrects the commit count in this report |
 
 **Not committed, deliberately:** `.clinerules` — its two-line edit is the owner's, and Q-4 authorises
 Business Rules §33 only. It remains modified in the working tree, untouched.
@@ -274,7 +275,7 @@ Both were fixed by applying the *approved rule*, not by reinterpreting the decis
 | Item | Value |
 |---|---|
 | Branch | `hackathon-mvp` (unchanged) |
-| Commits added | **18**, path-grouped; **nothing pushed** — the remote tip is unchanged |
+| Commits added | **19**, path-grouped; **nothing pushed** — the remote tip is unchanged |
 | Dirty entries at close | **1** — `.clinerules`, the owner's own edit, left untouched by design |
 | `.md` files under `docs/` | **155** (measured), all registered in Docs Index **Revision 49** |
 | Test status | Frontend **466 / 464 pass / 0 fail / 2 skipped**; backend **not runnable** here, no figure claimed |

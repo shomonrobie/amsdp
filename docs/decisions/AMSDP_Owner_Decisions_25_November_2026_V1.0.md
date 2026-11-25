@@ -98,6 +98,10 @@ PO-04 as authorising a subscription surface.
 
 > `PO-08: Approve Option B — D-5: adopt "highest previous revision + 1, each annex names its revision"; O-2: no facility-level announcement scope in MVP (platform + organisation only); POD-2: formally closed; POD-7: authorised to remove the unreferenced audio files with the list recorded; POD-11: reviewer is Faria Bushra. Carry D-3, D-7, POD-6, POD-1/3/8/9/10 forward.`
 
+*(The response sheet's parenthetical "next = 48" is omitted from the quotation above on purpose: the
+approval is of the **rule**, and the number in that parenthesis was wrong. The correction is recorded
+in the table below rather than quietly edited into the quote.)*
+
 Two measured corrections were required while applying this row. Both are recorded rather than
 silently absorbed:
 
