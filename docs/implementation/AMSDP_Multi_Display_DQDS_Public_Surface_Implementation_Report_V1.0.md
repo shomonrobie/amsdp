@@ -424,4 +424,14 @@ proven by tests, not by demonstration.
   records the executed package, its verification and its blockers.
 - **Index:** `docs/governance/AMSDP_Docs_Index_V1.0.md` **Revision 51** registers
   this report and the B-4 decision brief.
+- **Push, verified:** two path-grouped commits — `082e2a0` (backend) and `1f303d1`
+  (docs) — went to `origin/hackathon-mvp`; the remote reported
+  `0bd8059..1f303d1  hackathon-mvp -> hackathon-mvp`, and after a fetch local
+  `HEAD` and `origin/hackathon-mvp` were both
+  `1f303d1502819f45a0e27793c1e75f1a7c9c3c29` (`0  0` ahead/behind). No force-push,
+  no rewrite, no other branch. A green suite and a pushed commit still do not
+  make CI green: **MP-33 is unchanged**, and `gh` is not installed on this host.
+- **Next eligible work** is MP-39 (display administration), then MP-38 (configured
+  language and TV typography) — MP-40 depends on both plus B-4, and MP-31/MP-32
+  depend on the live stack.
 

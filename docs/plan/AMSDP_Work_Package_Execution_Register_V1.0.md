@@ -523,6 +523,21 @@ upgrade; the second `upgrade head` was a no-op; a schema snapshot (31 → 33 tab
 exists on this host — disclosed, not glossed. The owner's deployment was **not**
 contacted, opened, rebound or migrated.
 
+**The push, verified.** Two path-grouped commits were pushed to
+**`origin/hackathon-mvp`** and nothing else: `082e2a0` (backend — models,
+migration, resolver and the 34-test file; 4 files, 1,289 insertions, 23
+deletions) and `1f303d1` (docs — the report, the B-4 brief, Amendment A-5, this
+section and Docs Index Revision 51). The remote answered
+`0bd8059..1f303d1  hackathon-mvp -> hackathon-mvp`; after `git fetch`, local
+`HEAD` and `origin/hackathon-mvp` were both
+**`1f303d1502819f45a0e27793c1e75f1a7c9c3c29`**, and
+`git rev-list --left-right --count` reported **`0  0`**. That hash is the
+verification point. No force-push, no history rewrite, no tag, no other branch.
+The two commits were scanned for key/token patterns before they left the machine
+(`BEGIN … PRIVATE KEY`, `ghp_`, `sk-…`, `AKIA…`): **0 matches**. `.clinerules`
+remains uncommitted — the only modified tracked file, and its change is the
+owner's own `docs/plan/` ratification note.
+
 <!-- §11 added 2026-11-25; §10 and every earlier section left as written. -->
 
 
