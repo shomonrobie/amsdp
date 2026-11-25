@@ -18,6 +18,9 @@ export const DICT = {
     // MP-22 dashboard
     today: 'আজ', showingDay: 'দিন', facilityToday: 'প্রতিষ্ঠানের আজ', queueToday: 'আজকের কিউ',
     waitingNow: 'এখন অপেক্ষমাণ', walkIns: 'ওয়াক-ইন', noBookings: 'এই দিনে কোনো বুকিং নেই',
+    // Q-2: this key names the *appointment* tally, never the room count.
+    // "Waiting" (queue_length) already has its own key above.
+    inQueueRecords: 'কিউতে (অ্যাপয়েন্টমেন্ট রেকর্ড)',
     quickActions: 'দ্রুত কাজ', recentActivity: 'সাম্প্রতিক কার্যক্রম', noActivity: 'কোনো কার্যক্রম নেই',
     newAppointment: 'নতুন অ্যাপয়েন্টমেন্ট', rescheduledT: 'পুনঃনির্ধারিত', staffT: 'স্টাফ',
     callNext: 'পরবর্তী কল করুন', call: 'কল করুন', calledNotice: 'রোগীকে কল করা হয়েছে।',
@@ -366,6 +369,9 @@ announcePackHint: 'রেকর্ড করা ভয়েস ক্যাট�
     // MP-22 dashboard
     today: 'Today', showingDay: 'Showing', facilityToday: "Facility's today", queueToday: "Today's queue",
     waitingNow: 'Waiting now', walkIns: 'Walk-ins', noBookings: 'No bookings on this day',
+    // Q-2: this key names the *appointment* tally, never the room count.
+    // "Waiting" (queue_length) already has its own key above.
+    inQueueRecords: 'In queue (appointments)',
     quickActions: 'Quick actions', recentActivity: 'Recent activity', noActivity: 'No activity yet',
     newAppointment: 'New appointment', rescheduledT: 'Rescheduled', staffT: 'Staff',
     callNext: 'Call Next', call: 'Call', calledNotice: 'Patient called.', callFailed: 'Call failed',

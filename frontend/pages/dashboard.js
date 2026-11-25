@@ -17,6 +17,13 @@ import {
 // never widen it, because the server answers a non-disclosing 404 for a branch
 // the caller does not hold. `date` is the *facility* day: the server defaults it
 // to the organization's own today, not the server's UTC date.
+//
+// Q-2 (approved 2026-11-25): the tiles answer two different questions and must
+// not be aliased. **Waiting** is `queue_length` — live queue entries for the day,
+// the same population the public board shows, so an appointment-less walk-in
+// counts. **In queue** is `in_queue` — appointment *records* whose status is
+// IN_QUEUE, a booking-state tally that the queue panel shows separately under its
+// own label. The two differ by exactly the walk-ins.
 export default function Dashboard() {
   const user = getUser();
   const activeBranch = getActiveBranch();
@@ -54,7 +61,7 @@ export default function Dashboard() {
   const cards = today ? [
     { label: t('booked'), value: today.scheduled || 0 },
     { label: t('checkedIn'), value: today.checked_in || 0 },
-    { label: t('waiting'), value: today.in_queue || 0 },
+    { label: t('waiting'), value: today.queue_length || 0 },
     { label: t('completedT'), value: today.completed || 0 },
     { label: t('cancelledT'), value: today.cancelled || 0 },
     { label: t('noShow'), value: today.no_show || 0 },
@@ -104,6 +111,7 @@ export default function Dashboard() {
               <h2 style={{ fontSize: '1rem' }}>{t('queueToday')}</h2>
               <p role="status">
                 {t('waitingNow')}: {today.queue_length == null ? 0 : today.queue_length}
+                {' · '}{t('inQueueRecords')}: {today.in_queue == null ? 0 : today.in_queue}
                 {' · '}{t('walkIns')}: {today.walk_ins || 0}
               </p>
               {doctors.length === 0
