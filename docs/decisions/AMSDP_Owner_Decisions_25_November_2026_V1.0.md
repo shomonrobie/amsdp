@@ -300,6 +300,78 @@ them would rewrite history rather than fix the rule.
 
 *End of decision record.*
 
+---
+
+## 11. Addendum A-1 — the same window, later in the day (Q-1, Q-2, push, demo data)
+
+**Append-only.** Nothing in §1–§10 above is rewritten. Where this addendum answers an item, §9's row is
+**superseded by this section**, not edited: the record of what was open on the morning of 25 November
+stays readable, and the record of what was decided later that day sits beside it.
+
+### 11.1 Q-1 — the two patient-service date reads: **APPROVED, folded into MP-44**
+
+The Product Owner approved the recommendation. Conditions carried verbatim into the work:
+
+| Condition | How it was met |
+|---|---|
+| Inspect both existing paths and establish exactly what each does | `patient/main.py` read the clock twice: `datetime.now().date()` in `_validate_dob` (the future-DOB check) and `date.today()` in `_age_from_dob` (the displayed age). Neither used the facility's zone |
+| Consolidate into MP-44 without changing intended behaviour | Both now call `common.timeutil.operational_today` — the MP-44 helper that already served the queue, dashboard and display (BR §8) |
+| Preserve semantics, timezone handling, boundary conditions and API contracts | Field names, formats and status codes unchanged; `today` is an optional parameter, so existing call sites and tests keep working; "today" is allowed, "tomorrow" is 422, as before |
+| No duplicate reads or unnecessary queries | One `operational_today(session, org)` per request, threaded into every `_patient_to_dict`; the list endpoint reads the day once for the whole page |
+| Add or update tests; do not mark complete before they pass | 12 new tests in `backend/patient/tests/test_patient_facility_day.py`, plus a negative control (§11.6) |
+
+### 11.2 Q-2 — "Waiting" versus "In queue": **APPROVED as proposed**
+
+**Waiting = `queue_length`** (live queue entries: the people in the room, the same population the public
+board shows). **In queue = `in_queue`** (appointment *records* in status `IN_QUEUE`). The owner's
+condition was that this must not become a renaming exercise, so the data was inspected first:
+
+* `queuing.enqueue_patient` stores a walk-in with **`appointment_id = NULL`**, so an appointment-less
+  person standing in the room raises `queue_length` and moves no appointment status. The two figures
+  genuinely measure different populations; the model supports the distinction — no limitation to record.
+* Therefore the dashboard tile labelled **Waiting** was re-bound from `in_queue` to `queue_length`, and
+  `in_queue` remains on the page under its **own** label (`inQueueRecords`), so both meanings stay
+  visible and neither is aliased to the other.
+* Boundaries are pinned by test: booked-but-not-queued, checked-in, in-queue, waiting walk-in, skipped
+  and completed states, plus a queue entry belonging to another day.
+
+### 11.3 Repository push: **AUTHORISED**
+
+The Product Owner authorised pushing the local commits on `hackathon-mvp` to the configured remote.
+This **releases O-3 for that branch only** and does not authorise a force-push, a history rewrite, a
+branch deletion, or a push of any other branch. The push is recorded with its resulting remote tip.
+
+### 11.4 Demo data: **AUTHORISED, with limits**
+
+Demo data may be added **to the demo/testing database and environments only**, as synthetic,
+organisation-scoped, repeatable records, after the environment is identified and the database is
+backed up. It does **not** authorise a production reset, a destructive reseed, the removal of existing
+operational or patient data, the use of real patient information, or the replacement of existing rows.
+**B-1 (live reseed) is untouched and remains withheld.**
+
+### 11.5 What this addendum does not decide
+
+| Item | State |
+|---|---|
+| **B-4** — exact database access method | **STILL UNDECIDED.** The owner has clarified which database exists and where it is hosted but has not selected an access method; no port, firewall, SSH, `postgresql.conf`, `pg_hba.conf` or host-security change is authorised or performed |
+| **B-1 / B-2 / B-3** | **WITHHELD** — no reseed, no live-runtime verification, no midnight rollover observation. Failing to mention them is not approval |
+| **First clean rehearsal** | **NOT HELD** — PO-04's sequence (MP-09 → MP-13 → MP-14 → MP-15) stays gated behind it |
+| **MP-04, MP-11, MP-12, MP-21, MP-26, MP-27** | **DEFERRED** by PO-05, PO-06, PO-07 and Q-6(c); not reopened |
+| **MP-33** | The push satisfies its *mechanical* prerequisite. It does **not** accept MP-33: first-green-CI evidence and the owner's acceptance are still owed |
+| **QUE-005** | **OWNER ASSIGNMENT STILL OUTSTANDING** |
+| **Clinical V2.5 Parts III–VI** | **NOT IN SCOPE** — no expansion authorised |
+
+### 11.6 Evidence produced under this addendum
+
+Recorded in `implementation/AMSDP_Q1_Q2_Facility_Day_And_Dashboard_Counts_Report_V1.0.md` and
+`plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` Appendix **G** (Amendment A-4): tests run
+with their counts, the three negative controls (each proving a new test fails on the old behaviour, with
+the working file restored byte-identically), the commits, the remote tip after the push, and the
+database the suite was pointed at.
+
+*End of addendum A-1.*
+
+
 
 
 

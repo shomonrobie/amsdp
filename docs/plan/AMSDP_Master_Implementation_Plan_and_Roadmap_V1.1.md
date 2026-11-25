@@ -777,3 +777,81 @@ and the whole deferred band.
 
 *End of Amendment A-3.*
 
+---
+
+## Appendix G — Amendment A-4: Q-1, Q-2, push authorisation and demo-data authorisation applied (25 November 2026)
+
+### G.1 Trigger
+
+Later the same day the Product Owner issued a second written instruction
+(`decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` **§11, Addendum A-1**) answering **Q-1**
+and **Q-2** and granting two further authorities: pushing the local commits on `hackathon-mvp`, and
+adding demo data to demo/testing environments. This appendix applies that instruction to the plan.
+Append-only, like A-1, A-2 and A-3: no earlier statement is rewritten, re-estimated or renumbered.
+
+### G.2 Decision gates (§4 of this plan) — state after the addendum
+
+| Gate | Was (A-3) | Now | Where recorded |
+|---|---|---|---|
+| **Q-1** | OPEN — no code changed | **CLOSED — implemented inside MP-44** | Decision record §11.1; the two server-local reads in `backend/patient/main.py` now resolve through `common.timeutil.operational_today`; 12 new DB-free tests + a negative control |
+| **Q-2** | OPEN — no code changed | **CLOSED — the owner's distinction adopted** | Decision record §11.2; **Waiting = `queue_length`**, **In queue = `in_queue`** shown separately; the tile binding and the two-population test pin both |
+| **O-3** | "Path-grouped commits, no push" | **PARTIALLY RELAXED — push authorised for `hackathon-mvp` only** | Decision record §11.3. No force-push, no history rewrite, no branch deletion, no other branch. **MP-33 is not thereby accepted** |
+| **B-4** | OPEN | **STILL OPEN — undecided** | Decision record §11.5. The owner has clarified *which* database exists and that it is hosted on their Ubuntu machine, but has **not** selected an access method. Nothing was opened, rebound, or reconfigured |
+| **B-1, B-2, B-3** | WITHHELD | **UNCHANGED — withheld** | The demo-data authority is **not** a reseed authority and **not** a live-verification authority |
+| **First clean rehearsal** (PO-04) | NOT HELD | **NOT HELD** | MP-09 → MP-13 → MP-14 → MP-15 remain authorised-but-gated |
+| **QUE-005** | OPEN | **OPEN — assignment still outstanding** | No owner named; not inferred |
+
+### G.3 Task index (Appendix A) — status changes
+
+| Task | Was | Now | Note |
+|---|---|---|---|
+| **MP-44** (as Q-1's host task) | GATED (B-4) as part of the multi-display band | **Q-1 slice IMPLEMENTED + TESTED** | Only the two patient-service date reads were folded in. MP-44's own multi-display scope is untouched and still blocked by **B-4** |
+| **MP-07** | "Waiting tile → `today.in_queue`" | **Target corrected by Q-2** | The row above (Appendix A) is **superseded, not edited**: the tile now reads **`queue_length`**. The owner's distinction, the walk-in data path (`appointment_id = NULL`) and the two-population test are the reasons |
+| **MP-22** | Dashboard completion, TESTED (frontend) | **unchanged, plus one field** | The queue panel now publishes `in_queue` under its own label (`inQueueRecords`), so the page shows both figures instead of one ambiguous one |
+| **MP-33** | BLOCKED — "a first green CI run needs the work pushed; O-3 forbids pushing" | **UNBLOCKED MECHANICALLY, NOT ACCEPTED** | The commits are pushed; the first-green-CI evidence and the owner's acceptance are still owed. Silence is not acceptance |
+| **MP-24, MP-25, MP-35…MP-46** (rest) | BLOCKED (B-4) | **BLOCKED unchanged** | Still waiting on one read |
+| **MP-04, MP-21, MP-26, MP-27** | DEFERRED | **DEFERRED** | PO-05, PO-06, PO-07 |
+| **MP-11, MP-12** | DEFERRED (Q-6 c) | **DEFERRED** | Not reopened |
+
+**No estimate in Appendix A changes.** Q-1 and Q-2 were priced as one-line/one-plus-test items and
+were delivered as such; the demo-data authority adds no work package.
+
+### G.4 What this amendment does not claim
+
+1. **No task moves to `ACCEPTED`.** The code changes are `IMPLEMENTED` and `TESTED`; the machine that
+   ran them is the local development database, not the owner's deployment, so **`VERIFIED` is not
+   claimed** for the live runtime (**B-2**).
+2. **No live or production change happened.** No migration was applied to the deployment, no reseed,
+   no service restarted, no host configuration altered, **no database port opened**. The `:5433`
+   exposure recorded in Appendix E.6 is unchanged.
+3. **Q-2 is not "just a rename".** If the underlying data had not distinguished the two populations,
+   this amendment would have had to record a limitation instead; `enqueue_patient` storing
+   `appointment_id = NULL` is what made the approved distinction implementable.
+4. **The push does not make CI green.** It makes a green run *possible*; MP-33's acceptance still
+   needs an observed run.
+
+### G.5 Open items this appendix does not touch
+
+| Item | State |
+|---|---|
+| **B-4** live database read / access method | **OPEN — owner has not selected a method** |
+| **B-2** live application/runtime verification | **OUTSTANDING** until actually performed |
+| **B-3** midnight rollover observation | **OUTSTANDING** until actually observed |
+| **B-1** live reseed | **WITHHELD** |
+| **First clean rehearsal** | **NOT HELD** — the overbooking/priority gate stands |
+| **QUE-005** | **OPEN** — no owner assigned |
+| **Q-3** pair (`banglanamesense-dataset`, `calendar-render`) | Unchanged; both are harness defects with a recorded diagnosis |
+
+### G.6 Document control
+
+| Field | Value |
+|---|---|
+| Amendment | A-4, 25 November 2026 |
+| Version | The plan remains **V1.1 with Amendments A-1 … A-4**; append-only |
+| Trigger | The Product Owner's second written instruction of 25 November 2026 (decision record §11) |
+| Effect | Closes Q-1 and Q-2 against delivered code and tests, corrects MP-07's target field, releases the push for `hackathon-mvp`, and leaves B-1…B-4, QUE-005 and the rehearsal gate exactly as they stood |
+| Authority | `.clinerules` §1 level 2 (explicit owner instruction), §11 (append-only), §6 (compliance reporting) |
+
+*End of Amendment A-4.*
+
+

@@ -2016,3 +2016,51 @@ uncommitted** because Q-4 authorises Business Rules §33 only.
 
 
 
+
+---
+
+## Annex — Q-1 and Q-2 closed, and the first push of `hackathon-mvp` (2026-11-25) — **Revision 50**
+
+**Numbering.** Product Owner decision PO-08 (25 November 2026) made revision numbering forward-only:
+*the next revision is the highest previously recorded revision + 1*. The last recorded revision is
+**49** (the annex above), so this annex is **Revision 50**. Nothing is retro-labelled.
+
+**Trigger.** The Product Owner's second written instruction of 25 November 2026
+(`decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` **§11, Addendum A-1**) answered **Q-1**
+and **Q-2** and granted two authorities: pushing the local commits on `hackathon-mvp`, and adding demo
+data to demo/testing environments within stated limits. The plan applies it as **Amendment A-4**
+(Appendix G).
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_Q1_Q2_Facility_Day_And_Dashboard_Counts_Report_V1.0.md` | 16,263 | Before building on either change, or before quoting any test figure from this window. It carries the database identification (`127.0.0.1:55432`, PostgreSQL 16.4, `alembic_version` `b2e5c7d91a04`, fixture-heavy development data), the two defects, the three negative controls, and the exact figures: `46 passed` targeted, **`993 passed, 0 failed` whole backend suite in 967.75s**, `467 / 465 / 0 / 2` frontend, `Compiled successfully` build |
+| `decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` (**modified**) | 19,068 → 24,622 | The authority itself. Addendum A-1 (§11.1–§11.6) records Q-1, Q-2, the push authorisation, the demo-data limits, **what A-1 does not decide**, and the evidence pointers — append-only; no earlier answer is rewritten |
+| `plan/AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md` (**modified**) | 72,842 → 84,239 | The plan's new **Amendment A-4** (Appendix G): the gate table after the addendum, MP-07's corrected target field, the note that MP-33 is *mechanically unblocked but not accepted*, and the four things the amendment refuses to claim |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` (**modified**) | 67,264 → 76,664 | The register's new **§10**. §4's Q-1/Q-2 rows are left exactly as written — superseded, not edited — because rewriting them would erase the evidence that the question existed |
+
+**Counts.** The previous annex recorded **155** `.md` files under `docs/`; this window adds **one** new
+document, so the tree now holds **156** (measured: `Get-ChildItem docs -Recurse -Filter *.md` → **156**).
+
+**Commits and the push.** Three path-grouped commits, in this order: backend `e23a2ce` (4 files,
+301 insertions, 16 deletions), frontend `516e46b` (3 files, 37 insertions, 3 deletions), and the commit
+carrying this annex and the documents above. Nothing was staged that had not been read; **`.clinerules`
+remains uncommitted** because its change is the owner's own `docs/plan/` ratification note, not an
+agent's edit. The push target is `origin/hackathon-mvp` only — no force-push, no history rewrite, no
+branch deletion, no other branch. The remote tip after the push is recorded in the report's post-push
+verification section and in register §10.
+
+**What this annex deliberately does not claim.**
+
+1. **No task is `ACCEPTED`.** The Product Owner has not signed this work; `ACCEPTED` is assigned by the
+   owner, never inferred from a green suite.
+2. **Nothing is `VERIFIED`.** No browser session and no live API call against the deployment happened
+   in this window; the changes are `IMPLEMENTED` and `TESTED` on the local development database only
+   (**B-2** outstanding, **B-3** outstanding).
+3. **No live change happened.** No DDL, no migration, no reseed, no service restart, no host
+   configuration change, **no database port opened**. The `:5433` exposure recorded in the PostgreSQL
+   exposure plan is unchanged. **B-4 remains undecided**: the owner clarified which database exists but
+   did not select an access method.
+4. **The demo-data authority was not exercised.** No rows were seeded and no seeding script was added;
+   the reason is recorded in report §6 rather than left as a silent omission.
+5. **The push does not make CI green.** MP-33's acceptance still needs an observed first green run.
+
