@@ -1017,6 +1017,110 @@ class QueueAnnouncementDelivery(Base):
     )
 
 
+class QueueDisplay(Base):
+    """MP-35 / MD-01 — one configured public queue board.
+
+    Until now a branch had exactly one board: the route carried the org and
+    branch and nothing else, so every television in the building showed the same
+    doctors.  A display is the missing *configuration* object — which doctors a
+    screen shows, in which language, and which optional fields it may publish.
+
+    Tenancy
+    -------
+    ``organization_id`` is the tenant key and is derived from the branch, never
+    from a request body: the resolver refuses a display whose organization does
+    not match the branch in the URL, so a mis-typed row cannot publish another
+    tenant's doctors.  ``(branch_id, code)`` is unique — the code is the public
+    handle in ``?display=<code>`` and two screens must not be able to collide.
+
+    Scope
+    -----
+    ``branch``      every doctor with entries at the branch (the historic board)
+    ``doctors``     exactly the rows in :class:`QueueDisplayDoctor`; an empty
+                    membership is an **empty** board, never "all doctors", so a
+                    configuration mistake cannot widen a public feed
+    ``department``  doctors whose assigned room sits in ``department_id``
+    ``room``        doctors whose assigned room **is** ``room_id``
+
+    The two scope columns carry a CHECK constraint each: a half-configured
+    department/room display is refused by the database, not only by the service.
+
+    Publication policy (MD-17)
+    --------------------------
+    ``show_room``, ``show_estimated_wait`` and ``show_waiting_count`` are
+    enforced **server-side**: a field switched off is absent from the response
+    body, because hiding it in CSS would make the browser the safety boundary.
+    ``footer_text`` is facility-owned wording, rendered in the display language.
+
+    Lifecycle
+    ---------
+    ``active`` | ``disabled``.  A disabled display 404s exactly like an unknown
+    one.  Deleting is deliberately not offered: it would orphan audit rows, and
+    the audit trail is append-only (spec §5.1 item 6).
+    """
+
+    __tablename__ = "queue_displays"
+    __service__ = "queuing"
+
+    id                 = Column(String, primary_key=True, default=_new_id)
+    organization_id    = Column(String, ForeignKey("organizations.id"), nullable=False)
+    branch_id          = Column(String, ForeignKey("branches.id"), nullable=False)
+    name               = Column(String(120), nullable=False)
+    code               = Column(String(40), nullable=False)
+    #: 'bn' | 'en' — the board's configured language, above any device setting.
+    language           = Column(String(2), nullable=False, server_default="bn")
+    #: 'branch' | 'doctors' | 'department' | 'room'
+    scope_type         = Column(String(20), nullable=False, server_default="branch")
+    department_id      = Column(String, ForeignKey("facility_departments.id"))
+    room_id            = Column(String, ForeignKey("facility_rooms.id"))
+    footer_text        = Column(String(160), nullable=False, server_default="")
+    show_room          = Column(Boolean, nullable=False, server_default=text("true"))
+    show_estimated_wait = Column(Boolean, nullable=False, server_default=text("true"))
+    show_waiting_count = Column(Boolean, nullable=False, server_default=text("true"))
+    status             = Column(String(20), nullable=False, server_default="active")
+    created_by         = Column(String, ForeignKey("staff_users.id"))
+    created_at         = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("branch_id", "code", name="uq_display_branch_code"),
+        CheckConstraint("scope_type IN ('branch', 'doctors', 'department', 'room')",
+                        name="ck_display_scope_type"),
+        CheckConstraint("language IN ('bn', 'en')", name="ck_display_language"),
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_display_status"),
+        # A department/room scope without its target would otherwise fall back to
+        # the whole branch — the exact widening the specification forbids.
+        CheckConstraint("scope_type <> 'department' OR department_id IS NOT NULL",
+                        name="ck_display_department_scope"),
+        CheckConstraint("scope_type <> 'room' OR room_id IS NOT NULL",
+                        name="ck_display_room_scope"),
+        Index("idx_display_branch", "branch_id"),
+        Index("idx_display_org", "organization_id"),
+    )
+
+
+class QueueDisplayDoctor(Base):
+    """MD-02 — the doctor membership of a ``scope_type='doctors'`` display.
+
+    A join table rather than a JSON column: membership is read on **every poll**
+    of a public screen, so it must be an indexed SQL predicate, and a doctor id
+    must be checked to belong to the display's own organization and branch when
+    it is written.  ``(display_id, doctor_id)`` is the primary key, so the same
+    doctor cannot be added twice.
+    """
+
+    __tablename__ = "queue_display_doctors"
+    __service__ = "queuing"
+
+    display_id = Column(String, ForeignKey("queue_displays.id"), primary_key=True)
+    doctor_id  = Column(String, ForeignKey("doctors.id"), primary_key=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        # The resolver filters by doctor; the composite PK is display-first.
+        Index("idx_display_doctor_doctor", "doctor_id"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Audit — service: audit
 # ---------------------------------------------------------------------------
