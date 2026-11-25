@@ -4,23 +4,82 @@ Reads ``queue_config`` from the Organization ``config`` JSON:
 
     {
       "queue_config": {
+        "walk_in_policy": "end_of_queue" | "first_come"
+                          | "reserved_capacity" | "staff_placement",
         "walk_in_reserve_mode": "percent" | "count",
-        "walk_in_reserve_value": int   # percent of capacity, or fixed count
+        "walk_in_reserve_value": int,   # percent of capacity, or fixed count
+        "allowed_walk_in_policies": ["end_of_queue", ...]   # platform set
       }
     }
 
-Default: no reservation configured -> behaviour identical to prior releases.
+Default: no reservation configured, placement ``end_of_queue`` — behaviour
+identical to prior releases.
 """
+
+#: Walk-in placement policies (Business Rules §25).  The platform set: BR §25
+#: says a *Super Admin defines the available options* and the *Facility Admin
+#: selects* one, so this tuple is the superset a facility may be allowed to
+#: choose from, and ``allowed_walk_in_policies`` narrows it per organization.
+WALK_IN_POLICIES = ("end_of_queue", "first_come", "reserved_capacity",
+                    "staff_placement")
+
+#: The behaviour that reorders the least, and therefore the fallback for a
+#: missing, unknown or no-longer-allowed policy.
+DEFAULT_WALK_IN_POLICY = "end_of_queue"
+
+#: Upper bounds for the reserve configuration.  100 % reserves the whole day;
+#: the booking path already refuses to reserve more than the slot holds.
+MAX_WALK_IN_RESERVE_PERCENT = 100
+MAX_WALK_IN_RESERVE_COUNT = 100
+
+
+def allowed_walk_in_policies(org_config=None) -> list:
+    """The placement policies this organization may select.
+
+    A platform administrator can narrow the set through
+    ``queue_config.allowed_walk_in_policies``; everyone else inherits the
+    platform set.  An empty or malformed value means *the platform set* — a
+    corrupt block must not leave a facility with no usable policy at all.
+    """
+    raw = ((org_config or {}).get("queue_config") or {}).get(
+        "allowed_walk_in_policies")
+    if not isinstance(raw, (list, tuple)):
+        return list(WALK_IN_POLICIES)
+    allowed = [p for p in WALK_IN_POLICIES if p in raw]
+    return allowed or list(WALK_IN_POLICIES)
 
 
 def get_queue_config(org_config=None) -> dict:
+    """The organisation's queue configuration block, with safe fallbacks.
+
+    Two things are read from ``queue_config``: the walk-in **reserve split**
+    (how much published capacity is held back from advance bookings) and the
+    walk-in **placement policy** (where a walk-in joins the queue).  Both live
+    in one block so a facility has one queue policy to read and one to audit.
+
+    Every malformed value falls back rather than raising: a corrupt
+    configuration block must never make enqueueing or booking answer a 500, and
+    it must never widen a privilege.  A policy that is not in the allowed set
+    falls back to :data:`DEFAULT_WALK_IN_POLICY`, which is the behaviour that
+    reorders the least.
+    """
     cfg = (org_config or {}).get("queue_config") or {}
     mode = cfg.get("walk_in_reserve_mode")
     if mode not in ("percent", "count"):
         mode = "percent"
-    value = int(cfg.get("walk_in_reserve_value") or 0)
+    try:
+        value = int(cfg.get("walk_in_reserve_value") or 0)
+    except (TypeError, ValueError):
+        value = 0
+    allowed = allowed_walk_in_policies(org_config)
+    policy = cfg.get("walk_in_policy")
+    if not isinstance(policy, str) or policy not in allowed:
+        policy = (DEFAULT_WALK_IN_POLICY if DEFAULT_WALK_IN_POLICY in allowed
+                  else allowed[0])
     return {"walk_in_reserve_mode": mode,
-            "walk_in_reserve_value": max(value, 0)}
+            "walk_in_reserve_value": max(value, 0),
+            "walk_in_policy": policy,
+            "allowed_walk_in_policies": allowed}
 
 
 def reserved_for_capacity(capacity: int, org_config=None) -> int:
@@ -32,6 +91,35 @@ def reserved_for_capacity(capacity: int, org_config=None) -> int:
     if cfg["walk_in_reserve_mode"] == "count":
         return min(value, capacity)
     return int(round(capacity * value / 100.0))
+
+
+def get_walk_in_config(org_config=None) -> dict:
+    """The effective walk-in policy for one organization, plus its provenance.
+
+    The effective values come from :func:`get_queue_config` so the queuing
+    service, the booking path and this view can never disagree.  ``updated_at``
+    and ``updated_by`` are whatever the last administrative write recorded; they
+    are returned as strings so a malformed value cannot break a response.
+    """
+    cfg = get_queue_config(org_config)
+    stored = (org_config or {}).get("queue_config") or {}
+    cfg["updated_at"] = str(stored.get("updated_at") or "")
+    cfg["updated_by"] = str(stored.get("updated_by") or "")
+    return cfg
+
+
+def merge_walk_in_config(org_config, updates: dict) -> dict:
+    """Return a copy of *org_config* with the walk-in policy fields applied.
+
+    ``None`` means "leave unchanged", exactly like
+    :func:`merge_appointment_config`, so a partial update never erases a value
+    the caller did not name.
+    """
+    merged = dict(org_config or {})
+    block = dict(merged.get("queue_config") or {})
+    block.update({k: v for k, v in (updates or {}).items() if v is not None})
+    merged["queue_config"] = block
+    return merged
 
 
 #: Staff override policy (AMSDP-APPT-OWNER-DECISIONS-01, owner decision Q1).
@@ -111,6 +199,88 @@ def get_registration_policy(org_config=None) -> dict:
         if isinstance(value, bool):
             policy[key] = value
     return policy
+
+
+# ---------------------------------------------------------------------------
+# Doctor mobile-number duplicate policy (BR §9.6–§9.8, MP-17)
+# ---------------------------------------------------------------------------
+#
+# BR §9.6–§9.8 state three things, and the difference between them is the whole
+# feature:
+#
+#   6. default doctor mobile-number uniqueness is within an organization;
+#   7. Super Admin may allow duplicate doctor mobile numbers within an
+#      organization;
+#   8. the same mobile number may exist in different organizations.
+#
+# §9.8 is not a setting — tenancy settles it.  Every duplicate check in the
+# doctor service is scoped by ``organization_id``, so a number registered at one
+# facility can never block the same number at another, and this module has no
+# say in that.  §9.6 and §9.7 are one switch: **unique by default, duplicates
+# only where a platform administrator has allowed them**, stored in the
+# organization config JSON the way every other facility policy in this file is:
+#
+#     {
+#       "doctor_mobile_policy": {
+#         "allow_duplicate_mobile": false,
+#         "updated_at": "...", "updated_by": "..."
+#       }
+#     }
+#
+# The fallback is *enforced uniqueness*, and a stored value that is not a
+# boolean is ignored rather than coerced: a malformed configuration block must
+# never turn a uniqueness rule off.
+#
+# **Prospective only.**  Flipping the allowance changes no doctor row; it only
+# decides whether the next create/update that *would* collide is a 409.  If the
+# allowance is withdrawn, numbers that became duplicates while it was on stay in
+# place — they are referenced by appointments and by the append-only audit
+# trail, so the service does not merge, delete or deactivate doctors to restore
+# uniqueness behind the operator's back.
+
+#: The platform default for every organization (BR §9.6: unique within the org).
+DEFAULT_DOCTOR_MOBILE_POLICY = {"allow_duplicate_mobile": False}
+
+
+def get_doctor_mobile_policy(org_config=None) -> dict:
+    """Read ``doctor_mobile_policy`` from the Organization ``config`` JSON.
+
+    A missing, unknown or non-boolean value falls back to
+    :data:`DEFAULT_DOCTOR_MOBILE_POLICY` — uniqueness stays on unless somebody
+    with the authority to do so turned it off.
+    """
+    if not isinstance(org_config, dict):
+        org_config = {}
+    block = org_config.get("doctor_mobile_policy")
+    if not isinstance(block, dict):
+        # A string, list or number here is a corrupt configuration, not a
+        # permission: the default (unique) stands.
+        block = {}
+    policy = dict(DEFAULT_DOCTOR_MOBILE_POLICY)
+    value = block.get("allow_duplicate_mobile")
+    if isinstance(value, bool):
+        policy["allow_duplicate_mobile"] = value
+    return policy
+
+
+def doctor_mobile_must_be_unique(org_config=None) -> bool:
+    """Whether a doctor's mobile must be unused *within its organization*.
+
+    The single predicate the doctor service consults on create and update; it
+    is deliberately phrased as the *enforcement* question rather than the
+    storage question, so a caller cannot accidentally read the raw block and
+    forget the default.
+    """
+    return not get_doctor_mobile_policy(org_config)["allow_duplicate_mobile"]
+
+
+def merge_doctor_mobile_policy(org_config, updates: dict) -> dict:
+    """Return a copy of *org_config* with the doctor-mobile block updated."""
+    current = get_doctor_mobile_policy(org_config)
+    current.update({k: v for k, v in (updates or {}).items() if v is not None})
+    merged = dict(org_config or {})
+    merged["doctor_mobile_policy"] = current
+    return merged
 
 
 # ---------------------------------------------------------------------------

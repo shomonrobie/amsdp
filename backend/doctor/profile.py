@@ -39,7 +39,9 @@ from common.audit import record_audit
 from common.auth import (
     AuthContext, get_current_user, require_org_access, require_permission,
 )
-from common.config import get_registration_policy
+from common.config import (doctor_mobile_must_be_unique,
+                           get_doctor_mobile_policy, get_registration_policy,
+                           merge_doctor_mobile_policy)
 from common.database import SessionFactory
 from common.models import (
     Branch, Doctor, DoctorBranch, DoctorSpecialty, FacilityRoom, Organization,
@@ -112,6 +114,12 @@ class BmdcVerificationUpdate(BaseModel):
 class RegistrationPolicyUpdate(BaseModel):
     bmdc_required: Optional[bool] = None
     bmdc_verification_required: Optional[bool] = None
+
+
+class DoctorMobilePolicyUpdate(BaseModel):
+    """BR §9.7 — whether an organization tolerates two doctors on one number."""
+
+    allow_duplicate_mobile: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +233,45 @@ def organization_row(session, org_id: str) -> Organization:
     if not org:
         raise HTTPException(404, "not found")
     return org
+
+
+def mobile_in_use(session, organization_id: str, mobile: str,
+                  exclude_doctor_id: Optional[str] = None) -> Optional[Doctor]:
+    """The other doctor in *organization_id* already registered on *mobile*.
+
+    Scoped by organization on purpose: BR §9.8 allows the same number at a
+    different facility, so a cross-tenant match is not a duplicate and is never
+    looked for.
+    """
+    query = session.query(Doctor).filter(
+        Doctor.organization_id == organization_id,
+        Doctor.mobile == mobile)
+    if exclude_doctor_id:
+        query = query.filter(Doctor.id != exclude_doctor_id)
+    return query.first()
+
+
+def assert_mobile_available(session, org: Optional[Organization],
+                            organization_id: str, mobile: str,
+                            exclude_doctor_id: Optional[str] = None) -> None:
+    """Refuse a second doctor on one number *unless the organization allows it*.
+
+    BR §9.6 makes "one doctor per mobile number" the default **within** the
+    organization; BR §9.7 lets a platform administrator lift that per
+    organization (``common.config.doctor_mobile_policy``).  ``org`` may be
+    ``None`` — a caller that has not loaded the row, or a pre-migration state —
+    and the default then applies, so a missing configuration can only ever make
+    the check stricter.
+
+    BR §9.8 is unaffected by the switch: the lookup never leaves the tenant, so
+    the same number is always free at another facility.
+    """
+    if not doctor_mobile_must_be_unique(
+            org.config if org is not None else None):
+        return
+    if mobile_in_use(session, organization_id, mobile, exclude_doctor_id):
+        raise HTTPException(
+            409, "a doctor with this mobile number already exists")
 
 
 def enforce_activation_policy(session, doctor: Doctor,
@@ -932,6 +979,87 @@ def update_registration_policy(
                row.id, row.id, before=before, after=after)
         session.commit()
         return {"organization_id": row.id, "registration_policy": after}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@router.get("/api/v1/orgs/{org_id}/doctor-mobile-policy")
+def read_doctor_mobile_policy(
+    org_id: str,
+    auth: AuthContext = Depends(require_permission("doctor.manage")),
+):
+    """The organization's doctor mobile-number duplicate policy (BR §9.6–§9.7).
+
+    Read access for anyone who may register doctors, because the answer decides
+    whether the create form should warn about a repeat number *before* the save
+    is attempted; the 409 remains the authority either way.
+    """
+    require_org_access(org_id, service=SERVICE)(auth)
+    session = SessionFactory()
+    try:
+        row = organization_row(session, org_id)
+        return {"organization_id": row.id,
+                "doctor_mobile_policy": get_doctor_mobile_policy(row.config)}
+    finally:
+        session.close()
+
+
+@router.patch("/api/v1/orgs/{org_id}/doctor-mobile-policy")
+def update_doctor_mobile_policy(
+    org_id: str, data: DoctorMobilePolicyUpdate,
+    auth: AuthContext = Depends(require_permission("org.manage")),
+):
+    """Allow, or stop allowing, two doctors on one mobile number (BR §9.7).
+
+    **Only a platform administrator may change it.**  BR §9.7 names the Super
+    Admin, not the facility — the allowance is a platform-level exception the
+    facility is *given*, not one it can grant itself.  That is enforced here
+    rather than by omitting the route, because a 403 that says why is more
+    useful to an auditor than a 404 that pretends the setting does not exist.
+    Withdrawing the allowance is the conservative direction, but it is the same
+    switch: one rule is easier to hold than two.
+
+    **Prospective only.**  No doctor row is created, merged or removed; the
+    setting decides whether the next colliding write is a 409.  Existing
+    duplicates survive a withdrawal because appointments and the append-only
+    audit trail point at those rows.
+    """
+    require_org_access(org_id, service=SERVICE)(auth)
+    if not getattr(auth, "is_super_admin", False):
+        raise HTTPException(
+            403, "only a platform administrator may change the doctor "
+                 "mobile-number duplicate policy")
+    if data.allow_duplicate_mobile is None:
+        raise HTTPException(422, "no changes supplied")
+    session = SessionFactory()
+    try:
+        row = organization_row(session, org_id)
+        before = get_doctor_mobile_policy(row.config)
+        merged = merge_doctor_mobile_policy(
+            row.config, {"allow_duplicate_mobile":
+                         bool(data.allow_duplicate_mobile)})
+        merged["doctor_mobile_policy"]["updated_at"] = datetime.now(
+            timezone.utc).isoformat()
+        merged["doctor_mobile_policy"]["updated_by"] = auth.user_id
+        row.config = merged
+        after = get_doctor_mobile_policy(merged)
+        # target_type is "organization": the row that changed is the tenant's
+        # configuration, not a doctor.  (The sibling registration-policy route
+        # records under "doctor"; this one states what actually moved.)
+        record_audit(session, service=SERVICE, org_id=row.id,
+                     action="organization.doctor_mobile_policy.update",
+                     target_type="organization", target_id=row.id,
+                     actor_id=auth.user_id, actor_role=auth.role,
+                     before=before, after=after,
+                     reason="doctor mobile-number duplicate allowance")
+        session.commit()
+        return {"organization_id": row.id, "doctor_mobile_policy": after}
+    except HTTPException:
+        session.rollback()
+        raise
     except Exception:
         session.rollback()
         raise

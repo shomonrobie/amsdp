@@ -93,6 +93,11 @@ class StaffUserUpdate(BaseModel):
     locale: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
+    # MP-19: the branch a staff member's scope is derived from.  ``None`` means
+    # *unchanged* (the PATCH convention on this endpoint); the empty string means
+    # *clear* — organization-wide scope.  Anything else must name a branch of the
+    # same organization.
+    branch_id: Optional[str] = None
     # PO-RBAC-01: replace the full set of assigned doctors when provided.
     doctor_ids: Optional[list[str]] = None
     doctor_id: Optional[str] = None
@@ -109,6 +114,11 @@ class StaffUserResponse(BaseModel):
     role: str
     locale: str
     status: str
+    # MP-19: the staff administration screen edits these, so they must survive a
+    # read-modify-write round trip.  Optional for older callers.
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+
 
 class TokenResponse(BaseModel):
     token: str

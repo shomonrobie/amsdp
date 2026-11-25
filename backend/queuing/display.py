@@ -13,13 +13,14 @@ Security (Gate 1):
 - Zero patient PII: only doctor name, token number, and counts.
 """
 import json, time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Depends, Response
 from sqlalchemy import or_
 
 from common.database import SessionFactory
 from common.models import Organization, Branch, QueueEntry, Doctor
+from common.timeutil import operational_today
 
 router = APIRouter(prefix="/api/v1/queue/display", tags=["dqds"])
 
@@ -135,7 +136,11 @@ def get_queue_display(org_code: str, branch_code: str,
     session = SessionFactory()
     try:
         org, branch = _org_branch_or_404(session, org_code, branch_code)
-        today = date.today()
+        # Facility-local day (BR §8), never the server's date: the board must
+        # roll over at the facility's midnight, not the container's. The org
+        # comes from the path and is already tenant-validated, so the zone
+        # lookup stays inside this tenant.
+        today = operational_today(session, org.id)
 
         # Active entries for this org+branch+today only. The doctor join is
         # constrained to the same organization so a mis-joined queue entry can

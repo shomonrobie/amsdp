@@ -189,6 +189,10 @@ class AppointmentCreate(BaseModel):
     appointment_type: str = "scheduled"
     #: Required for ``unscheduled``; recorded and audited verbatim.
     override_reason: str = ""
+    #: MP-16 / BR §15: book into a blocked period anyway.  Refused with 403
+    #: unless the caller holds ``schedule.manage`` (the authority that creates a
+    #: block), and then requires ``override_reason`` — audited, never silent.
+    override_block: bool = False
     booking_source: str = "reception"
     notes: str = ""
     # --- AMSDP-SYMPTOM-01 — all optional, nothing is ever pre-filled ---------
@@ -212,6 +216,9 @@ class AppointmentReschedule(BaseModel):
     # capacity-checked exactly like a first booking.
     new_start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     reason: str = ""
+    #: MP-16: the destination may be inside a blocked period; same gate and
+    #: same mandatory reason as a first booking (``schedule.manage``).
+    override_block: bool = False
 
 class AppointmentTransfer(BaseModel):
     new_doctor_id: str
@@ -219,6 +226,8 @@ class AppointmentTransfer(BaseModel):
     new_date: str
     new_start_time: Optional[str] = Field(None, pattern=HHMM_PATTERN)
     reason: str = ""
+    #: MP-16: a transfer is a booking at the destination.
+    override_block: bool = False
 
 class WalkInCreate(BaseModel):
     patient_id: str
@@ -620,6 +629,60 @@ def _guard_slot(session, *, auth, doctor_id, appointment_date, start_time,
 
 
 
+def _guard_blocked(session, *, auth, doctor_id, appointment_date, start_time,
+                   end_time=None, override_reason="", allow_override=False):
+    """BR §15 / MP-16 — refuse a booking that falls inside a blocked period.
+
+    The blocked period is read per **doctor** and per **day**, through the same
+    :mod:`common.schedule_blocks` arithmetic ``available-slots`` uses, so the
+    hour the grid publishes as unavailable is exactly the hour this guard
+    refuses.  A stored row whose window cannot be read covers the whole day
+    (fail-closed), which is the direction that cannot produce a phantom booking.
+
+    ``allow_override`` is the authorised exception BR §15 allows.  It is never a
+    client boolean: the caller must have passed the capability check
+    (``schedule.manage`` — the authority that creates a block, so no new
+    privilege is invented) and must supply a reason; the audit event
+    ``appointment.block_override`` then records the block, the target slot and
+    that reason, in the same transaction as the booking.  An override that is not
+    persisted alongside the appointment it excuses is not an audit trail.
+    """
+    from common.models import ScheduleBlock
+    from common.schedule_blocks import first_covering, window_label
+
+    blocks = session.query(ScheduleBlock).filter(
+        ScheduleBlock.organization_id == auth.organization_id,
+        ScheduleBlock.doctor_id == doctor_id,
+        ScheduleBlock.status == "active",
+        ScheduleBlock.start_date <= appointment_date,
+        ScheduleBlock.end_date >= appointment_date).all()
+    block = first_covering(blocks, appointment_date, start_time, end_time)
+    if block is None:
+        return None
+    label = window_label(block.start_time, block.end_time)
+    if not allow_override:
+        raise HTTPException(
+            422,
+            "blocked_period: the doctor is unavailable for a blocked period "
+            f"covering {block.start_date}–{block.end_date} ({label}) — choose "
+            "another time or day; an administrator holding schedule.manage may "
+            "override it with a recorded reason")
+    record_audit(session, service="appointment", org_id=auth.organization_id,
+        action="appointment.block_override", target_type="schedule_block",
+        target_id=block.id, actor_id=auth.user_id, actor_role=auth.role,
+        branch_id=block.branch_id or auth.branch_id or "",
+        before={"block_id": block.id,
+                "start_date": str(block.start_date),
+                "end_date": str(block.end_date),
+                "window": label},
+        after={"doctor_id": doctor_id,
+               "appointment_date": str(appointment_date),
+               "start_time": start_time or "",
+               "end_time": end_time or ""},
+        reason=override_reason)
+    return block
+
+
 def _claim_seat(session, *, auth, doctor_id, appointment_date, slot,
                 appointment_id, appointment_type="scheduled") -> int:
     """Take the appointment's seat through the Q2 database guarantee.
@@ -733,6 +796,19 @@ def create_appointment(
             422, "use_walk_in_workflow: register the patient through "
                  "POST /api/v1/appointments/walk-in")
     override_reason = (data.override_reason or "").strip()
+    # MP-16 / BR §15: booking into a blocked period is the authorised exception.
+    # It is gated on ``schedule.manage`` — the capability that *creates* a block,
+    # so no new privilege is invented and the closed delegable list is unchanged
+    # — and it demands a reason before any database work happens.
+    block_override = bool(data.override_block)
+    if block_override:
+        _require_capability(
+            auth, "schedule.manage",
+            "schedule.manage is required to book into a blocked period")
+        if len(override_reason) < 3:
+            raise HTTPException(
+                422, "reason required: booking into a blocked period must "
+                     "record why the doctor accepted the patient")
     if data.appointment_type == "unscheduled":
         # The override is its own capability, needs a stated reason, and is
         # audited.  The role matrix already grants it to the front desk and to
@@ -792,6 +868,18 @@ def create_appointment(
                            appointment_date=apt_date, start_time=data.start_time,
                            schedule=schedule, clinic=clinic,
                            appointment_type=data.appointment_type)
+
+        # MP-16 / BR §15: the blocked period is checked against the *slot the
+        # booking takes*, not the minute string, so a 09:07 booking into a
+        # 09:00–09:15 slot that is blocked 09:00–09:10 is refused exactly as the
+        # availability read published it.
+        _guard_blocked(session, auth=auth, doctor_id=data.doctor_id,
+                       appointment_date=apt_date,
+                       start_time=((slot or {}).get("start_time")
+                                   or data.start_time),
+                       end_time=(slot or {}).get("end_time"),
+                       override_reason=override_reason,
+                       allow_override=block_override)
 
         # Generate serial number.  Safe because the doctor's row is locked
         # above: two concurrent bookings can no longer both read the same
@@ -1258,6 +1346,18 @@ def cancel_appointment(appointment_id: str, data: AppointmentStatusUpdate,
 def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
                             auth=Depends(require_permission("appointment.modify"))):
     import uuid
+    # MP-16 / BR §15: the destination may be a blocked period.  Same gate and
+    # same mandatory reason as a first booking, checked before any database work.
+    block_override = bool(data.override_block)
+    override_reason = (data.reason or "").strip()
+    if block_override:
+        _require_capability(
+            auth, "schedule.manage",
+            "schedule.manage is required to move a visit into a blocked period")
+        if len(override_reason) < 3:
+            raise HTTPException(
+                422, "reason required: rescheduling into a blocked period must "
+                     "record why the doctor accepted the patient")
     session = SessionFactory()
     try:
         # F-08: tenant + branch scope, and the row locked for the move.
@@ -1304,6 +1404,16 @@ def reschedule_appointment(appointment_id: str, data: AppointmentReschedule,
                     appointment_date=nd, start_time=new_time,
                     schedule=new_schedule, clinic=new_clinic,
                     exclude_id=orig.id, appointment_type=new_type)
+
+        # MP-16 / BR §15: the destination hour must not be inside a blocked
+        # period.  The original is only marked RESCHEDULED inside this same
+        # transaction, so a refusal here leaves the visit exactly where it was.
+        _guard_blocked(session, auth=auth, doctor_id=orig.doctor_id,
+                       appointment_date=nd,
+                       start_time=(new_slot or {}).get("start_time") or new_time,
+                       end_time=(new_slot or {}).get("end_time"),
+                       override_reason=override_reason,
+                       allow_override=block_override)
 
         serial = session.query(Appointment).filter(
             Appointment.doctor_id == orig.doctor_id,
@@ -1602,6 +1712,17 @@ def register_walk_in(data: WalkInCreate,
 def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
                           auth=Depends(require_permission("appointment.modify"))):
     import uuid
+    # MP-16 / BR §15: a transfer books at the destination, which may be blocked.
+    block_override = bool(data.override_block)
+    override_reason = (data.reason or "").strip()
+    if block_override:
+        _require_capability(
+            auth, "schedule.manage",
+            "schedule.manage is required to move a visit into a blocked period")
+        if len(override_reason) < 3:
+            raise HTTPException(
+                422, "reason required: transferring into a blocked period must "
+                     "record why the doctor accepted the patient")
     session = SessionFactory()
     try:
         # F-08: tenant + branch scope, and the original row locked for the move.
@@ -1648,6 +1769,16 @@ def transfer_appointment(appointment_id: str, data: AppointmentTransfer,
                     appointment_date=nd, start_time=t_time,
                     schedule=t_schedule, clinic=t_clinic,
                     exclude_id=orig.id)
+
+        # MP-16 / BR §15: the destination hour must not be inside a blocked
+        # period of the receiving doctor.  The move is uncommitted at this point,
+        # so a refusal here changes nothing.
+        _guard_blocked(session, auth=auth, doctor_id=data.new_doctor_id,
+                       appointment_date=nd,
+                       start_time=(t_slot or {}).get("start_time") or t_time,
+                       end_time=(t_slot or {}).get("end_time"),
+                       override_reason=override_reason,
+                       allow_override=block_override)
 
         serial = session.query(Appointment).filter(
             Appointment.doctor_id==data.new_doctor_id,

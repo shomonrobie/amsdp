@@ -28,14 +28,16 @@ from common.denial_audit import install_denial_audit
 
 try:
     from .profile import (
-        _audit, clean_mobile, doctor_dict as _doctor_to_dict,
+        _audit, assert_mobile_available, clean_mobile,
+        doctor_dict as _doctor_to_dict,
         enforce_activation_policy, replace_branch_assignments, scoped_doctor,
         set_specialties,
     )
     from .profile import router as profile_router
 except ImportError:                                   # script-mode import
     from profile import (                             # type: ignore
-        _audit, clean_mobile, doctor_dict as _doctor_to_dict,
+        _audit, assert_mobile_available, clean_mobile,
+        doctor_dict as _doctor_to_dict,
         enforce_activation_policy, replace_branch_assignments, scoped_doctor,
         set_specialties,
     )
@@ -95,13 +97,14 @@ def create_doctor(
     mobile = clean_mobile(data.mobile)
     session = SessionFactory()
     try:
-        duplicate = session.query(Doctor).filter(
-            Doctor.organization_id == auth.organization_id,
-            Doctor.mobile == mobile,
-        ).first()
-        if duplicate is not None:
-            raise HTTPException(
-                409, "a doctor with this mobile number already exists")
+        # BR §9.6–§9.8 (MP-17): one doctor per mobile number *within* the
+        # organization, unless a platform administrator has allowed duplicates
+        # here.  The organization row is read first because the allowance lives
+        # in its config; the lookup itself stays org-scoped, so the same number
+        # is still free at another facility whatever the switch says.
+        org = session.query(Organization).filter(
+            Organization.id == auth.organization_id).first()
+        assert_mobile_available(session, org, auth.organization_id, mobile)
         doctor = Doctor(
             organization_id=auth.organization_id,
             name=name, mobile=mobile,
@@ -114,8 +117,6 @@ def create_doctor(
         )
         session.add(doctor)
         session.flush()
-        org = session.query(Organization).filter(
-            Organization.id == auth.organization_id).first()
         enforce_activation_policy(session, doctor, org)
         replace_branch_assignments(
             session, doctor, data.branch_ids, auth.organization_id,
@@ -225,14 +226,12 @@ def update_doctor(
             doctor.name = name
         if data.mobile is not None:
             mobile = clean_mobile(data.mobile)
-            clash = session.query(Doctor).filter(
-                Doctor.organization_id == doctor.organization_id,
-                Doctor.mobile == mobile,
-                Doctor.id != doctor.id,
-            ).first()
-            if clash is not None:
-                raise HTTPException(
-                    409, "a doctor with this mobile number already exists")
+            # MP-17: same rule on update as on create, excluding this doctor —
+            # otherwise re-saving an unchanged number would collide with itself.
+            org = session.query(Organization).filter(
+                Organization.id == doctor.organization_id).first()
+            assert_mobile_available(session, org, doctor.organization_id,
+                                    mobile, exclude_doctor_id=doctor.id)
             doctor.mobile = mobile
         for field in ("speciality", "qualification", "locale"):
             val = getattr(data, field, None)

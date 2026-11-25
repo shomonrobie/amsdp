@@ -72,6 +72,9 @@ def _user_to_dict(user):
         username=user.username,
         display_name=user.display_name, role=user.role,
         locale=user.locale or "en", status=user.status or "active",
+        # MP-19: the administration screen round-trips these, so a save cannot
+        # silently blank a contact detail it never received.
+        email=user.email or None, mobile=user.mobile or None,
     )
 
 
@@ -149,6 +152,11 @@ def update_staff_user(
             if not auth.is_org_admin and auth.branch_id:
                 if user.branch_id != auth.branch_id:
                     raise HTTPException(404, "user not found")
+        # MP-19: the whole record is captured before any field is applied, so the
+        # trail can state what changed rather than only what it became.
+        before = {"role": user.role, "status": user.status or "active",
+                  "display_name": user.display_name,
+                  "branch_id": user.branch_id or ""}
         if data.display_name is not None:
             user.display_name = data.display_name
         if data.email is not None:
@@ -157,6 +165,27 @@ def update_staff_user(
             user.mobile = data.mobile
         if data.locale is not None:
             user.locale = data.locale
+        # MP-19: branch scope is editable.  ``""`` clears it (organization-wide),
+        # ``None`` leaves it alone — the convention the rest of this PATCH uses.
+        # A branch of another tenant, or one outside a branch-scoped actor's own
+        # scope, is the same non-disclosing 404 an unknown id gets.
+        if data.branch_id is not None:
+            wanted = (data.branch_id or "").strip()
+            if wanted != (user.branch_id or ""):
+                # Defence in depth: today only organization administrators reach
+                # this write (``staff.manage``), so the branch-scoped arm is not
+                # reachable — it stays here so that the rule is enforced *where
+                # the write happens* if staff management is ever delegated.
+                if (not auth.is_super_admin and not auth.is_org_admin
+                        and auth.branch_id and wanted != auth.branch_id):
+                    raise HTTPException(404, "branch not found")
+                if wanted:
+                    branch = session.query(Branch).filter(
+                        Branch.id == wanted,
+                        Branch.organization_id == user.organization_id).first()
+                    if not branch:
+                        raise HTTPException(404, "branch not found")
+                user.branch_id = wanted or None
         # PO-RBAC-04: save original role/status before changes for last-admin check.
         original_role = user.role
         original_status = user.status
@@ -260,9 +289,21 @@ def update_staff_user(
         record_audit(session, service="identity", org_id=user.organization_id,
             action="staff.updated", target_type="staff_user", target_id=user.id,
             actor_id=auth.user_id, actor_role=auth.role, branch_id=user.branch_id or "",
+            before=before,
             after={"role": user.role, "status": user.status or "active",
                    "display_name": user.display_name,
+                   "branch_id": user.branch_id or "",
                    "doctor_ids": doctor_ids})
+        # MP-19: a scope change is its own event.  "Who moved this user out of
+        # branch A" is a question an operator asks without diffing JSON.
+        if before["branch_id"] != (user.branch_id or ""):
+            record_audit(session, service="identity", org_id=user.organization_id,
+                action="staff.branch_scope_changed", target_type="staff_user",
+                target_id=user.id, actor_id=auth.user_id, actor_role=auth.role,
+                branch_id=user.branch_id or "",
+                before={"branch_id": before["branch_id"]},
+                after={"branch_id": user.branch_id or ""},
+                reason="branch scope change")
         # Q5: a doctor assignment change is its own event, with both sides.
         if doctor_ids is not None and sorted(doctor_ids) != previous_doctor_ids:
             record_audit(session, service="identity", org_id=user.organization_id,
@@ -348,6 +389,22 @@ def _grant_view(row) -> dict:
             "revoked_by": row.revoked_by or "",
             "revoked_at": str(row.revoked_at) if row.revoked_at else "",
             "reason": row.reason or ""}
+
+
+@router.get("/api/v1/staff/capabilities")
+def list_delegable_capabilities(
+    auth: AuthContext = Depends(require_permission("staff.read")),
+):
+    """The closed set of capabilities a grant may name (MP-19).
+
+    The administration screen must not carry its own copy of this list: a
+    hard-coded list in the browser drifts from the server, and then the UI
+    offers a capability the API refuses or hides one it would accept.  Reading
+    the catalogue is a ``staff.read`` act; granting still requires
+    ``staff.manage`` *and* organization-administrator authority
+    (:func:`_granting_authority`), and the server re-checks the name on grant.
+    """
+    return {"capabilities": sorted(DELEGABLE_CAPABILITIES)}
 
 
 @router.get("/api/v1/staff/users/{user_id}/capabilities")

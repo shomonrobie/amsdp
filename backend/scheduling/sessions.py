@@ -40,6 +40,7 @@ from common.models import (
     Doctor, DoctorBranch, FacilityDepartment, FacilityFloor, FacilityRoom,
     Schedule, ScheduleSession,
 )
+from common.slots import normalise_template
 
 router = APIRouter()
 
@@ -313,12 +314,20 @@ def sync_slot_templates(session, schedule: Schedule) -> None:
     The appointment calendar and ``available-slots`` read this projection, so a
     session must never be persisted without it.  ``session_id``/``room_id`` are
     carried along for the UI; the calendar ignores keys it does not know.
+
+    MP-18 / D-1: the rebuild is a **merge**, not a replacement.  A schedule may
+    declare its published hours before it declares any session — ``POST
+    /api/v1/schedules`` does exactly that — so a blind rebuild from the session
+    rows deleted the doctor's declared clinic hours the first time a session was
+    added.  Entries the schedule itself declares carry no ``session_id`` and are
+    kept; entries derived from a session always carry one and are always
+    rebuilt, which is what lets a retired session's window disappear.
     """
     rows = session.query(ScheduleSession).filter(
         ScheduleSession.schedule_id == schedule.id,
         ScheduleSession.status == "active").all()
     rows.sort(key=lambda r: (r.day_of_week, r.start_time))
-    schedule.slot_templates = [{
+    from_sessions = [{
         "day_of_week": row.day_of_week,
         "start_time": row.start_time,
         "end_time": row.end_time,
@@ -327,6 +336,71 @@ def sync_slot_templates(session, schedule: Schedule) -> None:
         "session_id": row.id,
         "room_id": row.room_id,
     } for row in rows]
+    covered = {(t["day_of_week"], t["start_time"], t["end_time"])
+               for t in from_sessions}
+    declared = []
+    for template in (schedule.slot_templates or []):
+        normal = normalise_template(template)
+        if normal is None or "session_id" in template:
+            continue
+        key = (normal["day_of_week"], normal["start_time"], normal["end_time"])
+        if key in covered:
+            continue
+        covered.add(key)
+        declared.append(template)
+    schedule.slot_templates = declared + from_sessions
+
+
+def windows_map(templates) -> dict:
+    """``{"0 09:00-10:00": 1}`` — the payload ``schedule.templates_changed`` uses.
+
+    Kept local rather than imported from ``main``: ``main`` imports this module's
+    router, so an import back would be circular.  Both sides derive the window
+    through :func:`common.slots.normalise_template`, so they cannot disagree about
+    what a window is or which capacity belongs to it.
+    """
+    out = {}
+    for template in templates or []:
+        normal = normalise_template(template)
+        if normal is None:
+            continue
+        key = (f"{normal['day_of_week']} "
+               f"{normal['start_time']}-{normal['end_time']}")
+        out[key] = normal["max_patients"]
+    return out
+
+
+def audit_template_projection(session, schedule: Schedule, auth: AuthContext,
+                              reason: str) -> None:
+    """Rebuild the schedule projection **and audit the schedule row it changes**.
+
+    MP-18: a session write is also a schedule write.  ``slot_templates`` is the
+    projection the calendar and ``available-slots`` read, and
+    :func:`sync_slot_templates` overwrites it on every session create, edit and
+    retire — so without this event the schedule row changed with no
+    ``schedule.*`` audit record, which is exactly the silent mutation MP-18's
+    acceptance criterion forbids.
+
+    The event is the same ``schedule.templates_changed`` the schedule ``PATCH``
+    writes, with the same ``{"windows": …}`` shape, so one search finds a hours
+    change wherever it was made.  It is emitted **only when the published
+    windows or their capacity actually moved**: re-chambering a session, or
+    editing one whose window is unchanged, records no schedule event because the
+    schedule's hours did not change — the room it moved to is the *session's*
+    field and is carried by ``schedule.session.update``.
+    """
+    stored_before = list(schedule.slot_templates or [])
+    sync_slot_templates(session, schedule)
+    stored_after = list(schedule.slot_templates or [])
+    before, after = windows_map(stored_before), windows_map(stored_after)
+    if before == after:
+        return
+    record_audit(session, service=SERVICE, org_id=schedule.organization_id,
+                 action="schedule.templates_changed", target_type="schedule",
+                 target_id=schedule.id, actor_id=auth.user_id,
+                 actor_role=auth.role, branch_id=schedule.branch_id,
+                 before={"windows": before}, after={"windows": after},
+                 reason=reason)
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +473,7 @@ def create_session(
         )
         session.add(row)
         session.flush()
-        sync_slot_templates(session, schedule)
+        audit_template_projection(session, schedule, auth, "session created")
         record_audit(
             session, service=SERVICE, org_id=auth.organization_id,
             action="schedule.session.create", target_type="schedule_session",
@@ -479,7 +553,7 @@ def update_session(
                 day_of_week=row.day_of_week, start_time=row.start_time,
                 end_time=row.end_time, exclude_id=row.id)
         session.flush()
-        sync_slot_templates(session, row.schedule)
+        audit_template_projection(session, row.schedule, auth, "session updated")
         after = session_dict(row)
         record_audit(
             session, service=SERVICE, org_id=row.organization_id,
@@ -534,7 +608,7 @@ def retire_session(
         before = session_dict(row)
         row.status = "inactive"
         session.flush()
-        sync_slot_templates(session, row.schedule)
+        audit_template_projection(session, row.schedule, auth, "session retired")
         record_audit(
             session, service=SERVICE, org_id=row.organization_id,
             action="schedule.session.retire", target_type="schedule_session",

@@ -33,13 +33,14 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import argparse, random, uuid, bcrypt
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from common.database import SessionFactory
 from common.models import (
     Organization, Branch, FacilityFloor, FacilityDepartment, FacilityRoom,
     Specialty, StaffUser, Doctor, DoctorBranch, DoctorSpecialty, Patient,
-    Schedule, Appointment, QueueEntry, SymptomCatalog,
+    Schedule, Appointment, QueueEntry, SymptomCatalog, StaffDoctorAssignment,
 )
+from common.timeutil import operational_today
 try:
     from seed.symptom_catalogue import DEMO_SYMPTOMS, demo_symptom_rows
 except ImportError:                       # script-mode import (python seed_demo.py)
@@ -174,6 +175,17 @@ DEMO_STAFF = [
     {"username": "assistant", "role": "assistant",
      "display_name": "Assistant", "locale": "bn"},
 ]
+
+#: Staff → doctor assignments the demo needs (PO-RBAC-01).  ``common.auth``
+#: derives doctor scope from ``staff_doctor_assignments`` and, once that table
+#: exists, refuses the legacy ``staff_users.doctor_id`` fallback — so without
+#: these rows the seeded doctor account sees no queue at all.  Exactly one
+#: doctor per account: the seed grants nothing beyond the demo path (MP-05).
+DEMO_STAFF_DOCTOR_ASSIGNMENTS = [
+    {"username": "doctor", "doctor_id": "demo-dr-002"},
+    {"username": "assistant", "doctor_id": "demo-dr-002"},
+]
+
 
 # Demo staff passwords are NOT stored in this repository.  Each account's
 # password is read from AMSDP_DEMO_PASSWORD_<USERNAME> (for example
@@ -557,6 +569,9 @@ def seed():
         _seed_symptoms(session)
         _seed_doctors(session)
         _seed_staff(session)
+        # PO-RBAC-01 / MP-05: the doctor and assistant accounts need explicit
+        # doctor scope, or the seeded doctor login reaches no queue.
+        _seed_staff_doctor_assignments(session)
         _seed_patients(session)
         _seed_schedules(session)
         _seed_appointments(session)
@@ -634,6 +649,45 @@ def _seed_staff(session):
         print(f"  Created staff: {s['username']} ({s['role']})")
 
 
+def _seed_staff_doctor_assignments(session):
+    """Give the demo doctor account (and the assistant) explicit doctor scope.
+
+    ``common.auth._load_assigned_doctor_ids`` returns the *active* rows and
+    refuses to fall back to the legacy ``staff_users.doctor_id`` column once the
+    table exists, so a doctor account with no assignment can reach no doctor's
+    queue — the demo path fails closed instead of opening.  Re-running is
+    idempotent: an existing row is left alone, a revoked one re-activated.
+    """
+    for a in DEMO_STAFF_DOCTOR_ASSIGNMENTS:
+        user = session.query(StaffUser).filter(
+            StaffUser.username == a["username"]).first()
+        if not user:
+            print(f"  Assignment '{a['username']}': staff row missing, skipping.")
+            continue
+        doctor = session.query(Doctor).filter(
+            Doctor.id == a["doctor_id"],
+            Doctor.organization_id == DEMO_ORG["id"]).first()
+        if not doctor:
+            print(f"  Assignment '{a['username']}': "
+                  f"doctor {a['doctor_id']} missing, skipping.")
+            continue
+        existing = session.query(StaffDoctorAssignment).filter(
+            StaffDoctorAssignment.staff_user_id == user.id,
+            StaffDoctorAssignment.doctor_id == doctor.id).first()
+        if existing:
+            if existing.status != "active":
+                existing.status = "active"
+                print(f"  Assignment {a['username']} → {doctor.id}: re-activated.")
+            else:
+                print(f"  Assignment {a['username']} → {doctor.id} exists, skipping.")
+            continue
+        session.add(StaffDoctorAssignment(
+            id=f"demo-assign-{a['username']}-{doctor.id}",
+            staff_user_id=user.id, doctor_id=doctor.id,
+            organization_id=DEMO_ORG["id"], status="active"))
+        print(f"  Created assignment: {a['username']} → {doctor.id}")
+
+
 def _doctor_columns(d):
     """Only real ``doctors`` columns — the rest of the dict is seeding metadata."""
     meta = {"specialty_ids", "branch_id", "extra_branch_ids", "room_id"}
@@ -694,10 +748,19 @@ def _seed_schedules(session):
         print(f"  Created schedule: {t['doctor_id']} @ {t['branch_id']}")
 
 
+def _demo_today(session):
+    """The demo facility's operational day (BR §8) — never the server's date.
+
+    ``date.today()`` reads the container's clock, so a re-seed at 01:00 Dhaka
+    filed the week and the queue under the previous day (GAP-03/GAP-25, MP-05).
+    """
+    return operational_today(session, DEMO_ORG["id"])
+
+
 def _seed_appointments(session):
     """Seed the generated week.  Stale demo rows from an earlier run (different
     dates) are removed first, so re-running never stacks two weeks of boards."""
-    today = date.today()
+    today = _demo_today(session)
     plan = plan_appointments(today)
 
     wanted_ids = {a["id"] for a in plan}
@@ -742,7 +805,7 @@ def _seed_appointments(session):
 
 
 def _seed_queue(session):
-    today = date.today()
+    today = _demo_today(session)
     for q in DEMO_QUEUE_PLAN:
         existing = session.query(QueueEntry).filter(
             QueueEntry.token == q["token"]).first()
@@ -887,7 +950,10 @@ RESET_ORDER = [
     # Recorded symptoms are children of the appointment (AMSDP-SYMPTOM-01).
     "appointment_symptoms", "appointments",
     "schedule_sessions", "schedules", "doctor_specialties",
-    "doctor_branches", "login_attempts", "patients", "staff_users", "doctors",
+    "doctor_branches", "login_attempts", "patients",
+    # MP-05: an assignment references both a staff row and a doctor row, so it
+    # must go before either parent or the reset fails on the foreign key.
+    "staff_doctor_assignments", "staff_users", "doctors",
     "facility_rooms", "facility_departments", "facility_floors",
     "specialties", "symptom_catalog",
 ]

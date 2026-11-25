@@ -57,6 +57,14 @@ except ImportError:
     from announcements import router as announcements_router
 app.include_router(announcements_router)
 
+# MP-10 / BR §25 — walk-in placement.  The policy is a facility setting now, so
+# the four behaviours live in one audited module (``placement``) instead of
+# being re-derived from a per-request parameter on each write path.
+try:
+    from .placement import place as place_entry
+except ImportError:
+    from placement import place as place_entry
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +90,9 @@ CLOSING_ACTIONS = ("start_consultation", "complete_consultation",
 def _install_security_filters():
     install_token_redaction()
 
-WALK_IN_POLICIES = ("end_of_queue", "first_come", "reserved_capacity", "staff_placement")
+# BR §25: the platform's walk-in placement policies are defined in
+# ``common.config`` (imported above) so the config view, the validation and the
+# placement itself can never disagree about the approved set.
 ACTIVE_STATUSES = ("waiting", "called", "in_consultation", "skipped")
 
 #: Appointment states a patient may be checked in from (owner decision Q3).
@@ -241,8 +251,9 @@ class CheckInRequest(BaseModel):
     branch_id: str = ""
     date: str = ""
     notes: str = ""
-    walk_in_policy: str = "end_of_queue"
-    position: Optional[int] = None
+    # MP-10: ``walk_in_policy`` / ``position`` are deliberately absent.  A booked
+    # patient is placed by the queue, not by the caller; the walk-in policy is a
+    # facility setting (BR §25) and no longer travels in a request body.
 
 @app.post("/api/v1/queue/check-in", status_code=201)
 def check_in_appointment(data: CheckInRequest,
@@ -304,7 +315,14 @@ def check_in_appointment(data: CheckInRequest,
         day = appt.appointment_date
         seq = _next_sequence(session, appt.doctor_id, day)
         token = _token_for(appt.doctor_id, seq)
-        pos = data.position if (data.walk_in_policy == "staff_placement" and data.position) else seq
+        # MP-10: the queue decides where a booked patient joins it.  The walk-in
+        # policy does not apply to an appointment (BR §25 governs walk-ins), so
+        # this is the append path — one implementation of "end of queue".
+        placement = place_entry(
+            session, organization_id=appt.organization_id,
+            doctor_id=appt.doctor_id, day=day, entry_source="appointment",
+            actor_id=auth.user_id, actor_role=auth.role)
+        pos = placement["position"]
         entry = QueueEntry(id=str(uuid.uuid4()),
             organization_id=appt.organization_id,
             branch_id=target_branch,
@@ -367,8 +385,12 @@ class QueueEnqueueRequest(BaseModel):
     date: str = ""
     entry_source: str = "walk_in"
     notes: str = ""
-    walk_in_policy: str = "end_of_queue"
+    # MP-10: the placement *policy* is a facility setting (BR §25) and is no
+    # longer accepted here.  ``position`` is the staff-placement input, and
+    # ``arrived_at`` is the arrival instant the first-come rule orders by —
+    # omit it and "now" is used, which appends.
     position: Optional[int] = None
+    arrived_at: Optional[str] = None
 
 @app.post("/api/v1/queue/enqueue", status_code=201)
 def enqueue_patient(data: QueueEnqueueRequest,
@@ -376,8 +398,6 @@ def enqueue_patient(data: QueueEnqueueRequest,
     import uuid
     if data.entry_source not in ("walk_in", "extra", "appointment"):
         raise HTTPException(422, f"invalid entry_source: {data.entry_source}")
-    if data.walk_in_policy not in WALK_IN_POLICIES:
-        raise HTTPException(422, f"invalid walk_in_policy: {data.walk_in_policy}")
     session = SessionFactory()
     try:
         # Facility-local day (BR §8), never the UTC date.
@@ -415,7 +435,22 @@ def enqueue_patient(data: QueueEnqueueRequest,
             raise HTTPException(404, "not found")
         seq = _next_sequence(session, data.doctor_id, day)
         token = _token_for(data.doctor_id, seq)
-        pos = data.position if (data.walk_in_policy == "staff_placement" and data.position) else seq
+        # MP-10 / BR §25 — the facility's placement policy decides the position.
+        # A refusal (staff placement without a position, or an out-of-range one)
+        # is a 422 with the rule that failed; nothing has been written yet.
+        org_row = session.query(Organization).filter(
+            Organization.id == auth.organization_id).first()
+        try:
+            placement = place_entry(
+                session, organization_id=auth.organization_id,
+                doctor_id=data.doctor_id, day=day,
+                entry_source=data.entry_source,
+                org_config=org_row.config if org_row else None,
+                actor_id=auth.user_id, actor_role=auth.role,
+                requested_position=data.position, arrived_at=data.arrived_at)
+        except ValueError as refusal:
+            raise HTTPException(422, str(refusal))
+        pos = placement["position"]
         entry = QueueEntry(id=str(uuid.uuid4()),
             organization_id=auth.organization_id,
             branch_id=target_branch,
@@ -431,7 +466,10 @@ def enqueue_patient(data: QueueEnqueueRequest,
                      target_type="queue_entry", target_id=entry.id,
                      actor_id=auth.user_id, actor_role=auth.role,
                      after={"status": "waiting", "position": pos, "token": token,
-                            "entry_source": data.entry_source},
+                            "entry_source": data.entry_source,
+                            # MP-10: why this position — policy, pool state and
+                            # how many rows the insertion moved (BR §25 audit).
+                            "placement": placement},
                      reason=f"enqueue ({data.entry_source})")
         session.commit()
         # Sequence 3: a new patient changes everyone's expected time.
@@ -451,14 +489,17 @@ def enqueue_patient(data: QueueEnqueueRequest,
 # ---------------------------------------------------------------------------
 
 class QueueAction(BaseModel):
-    action: str            # start_consultation | complete_consultation | cancel | mark_no_show | reinsert | call
+    action: str            # start_consultation | complete_consultation | cancel | mark_no_show | reinsert | call | recall
     reason: str = ""
     actor: str = ""
 
 # Allowed transitions per current status
 _TRANSITIONS = {
     "waiting":         ("call", "start_consultation", "cancel", "mark_no_show"),
-    "called":          ("start_consultation", "cancel", "mark_no_show"),
+    # MP-08: `recall` re-calls a patient who has already been called, without
+    # pretending the turn was missed. `call` stays refused from `called` (422),
+    # so a duplicated or retried `call` request still cannot announce twice.
+    "called":          ("recall", "start_consultation", "cancel", "mark_no_show"),
     "in_consultation": ("complete_consultation",),
     "skipped":         ("call", "reinsert", "start_consultation", "cancel"),
     "completed":       (),
@@ -466,7 +507,7 @@ _TRANSITIONS = {
     "no_show":         (),
 }
 _NEXT_STATUS = {
-    "call": "called", "start_consultation": "in_consultation",
+    "call": "called", "recall": "called", "start_consultation": "in_consultation",
     "complete_consultation": "completed", "cancel": "cancelled",
     "mark_no_show": "no_show", "reinsert": "waiting",
 }
@@ -478,7 +519,7 @@ def _granted_capabilities(auth: AuthContext) -> list[str]:
 
 
 def _doctor_may_call(auth: AuthContext) -> bool:
-    """May this caller use the queue ``call`` action as a doctor?
+    """May this caller use the queue ``call``/``recall`` actions as a doctor?
 
     QUE-006 / DEV-1, owner decision D. ``call`` normally requires
     ``queue.manage``, which the doctor role does not hold. An organization whose
@@ -486,6 +527,9 @@ def _doctor_may_call(auth: AuthContext) -> bool:
     their **own** patients forward; the own-patient rule is enforced after this
     gate by ``can_access_doctor`` (a foreign entry is a non-disclosing 404), so
     this function only answers the organization-policy half of the question.
+
+    MP-08: ``recall`` shares the rule, because it is the same act repeated for
+    the same patient — a doctor who may call once may call again.
 
     Only the ``doctor`` role is considered: an assistant is deliberately not
     covered, because the decision names doctors. A missing organization row
@@ -513,11 +557,12 @@ def queue_action(entry_id: str, data: QueueAction,
         require_permission("queue.consult")(auth)
     elif data.action in ("cancel", "mark_no_show", "reinsert"):
         require_permission("queue.manage")(auth)
-    elif data.action == "call":
+    elif data.action in ("call", "recall"):
         # DEV-1 (owner decision D): `queue.manage` remains the rule — it is what
         # the front desk and every administrative role holds — and an
         # organization that enables doctor queue-calling adds its own doctors
-        # for their own patients. Nothing else gains the action.
+        # for their own patients. Nothing else gains the action. MP-08: `recall`
+        # is the same permission answer as `call`, not a second capability.
         if not check_granted("queue.manage", auth.role,
                              _granted_capabilities(auth)):
             if not _doctor_may_call(auth):

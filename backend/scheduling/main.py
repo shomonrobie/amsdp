@@ -10,13 +10,15 @@ from datetime import date, datetime, timezone
 from sqlalchemy import func
 
 from common.database import SessionFactory
-from common.models import Schedule, Branch, Doctor
+from common.models import Schedule, Branch, Doctor, ScheduleBlock
 from common.auth import AuthContext, require_permission, get_current_user, branch_accessible
 from common.audit import record_audit
 from common.health import install_health
 from common.denial_audit import install_denial_audit
 # AMSDP-APPT-RELIABILITY — one slot arithmetic for both services (F-03/F-15/F-16).
 from common.slots import MIN_SLOT_DURATION, slot_starts, to_minutes
+# MP-16 — one definition of "this booking falls inside a blocked period".
+from common.schedule_blocks import first_covering, window_label
 
 app = FastAPI(title="AMSDP Scheduling Service")
 install_health(app, "scheduling")
@@ -35,6 +37,12 @@ try:
 except ImportError:                                   # script-mode import
     from sessions import router as sessions_router    # type: ignore
 app.include_router(sessions_router)
+# MP-16 / BR §15 — blocked dates and periods, with their own audit events.
+try:
+    from .blocks import router as blocks_router
+except ImportError:                                   # script-mode import
+    from blocks import router as blocks_router        # type: ignore
+app.include_router(blocks_router)
 
 
 
@@ -369,6 +377,11 @@ def get_available_slots(schedule_id: str, date_str: str = Query(...),
             "appointment_model": sched.appointment_model,
             "walk_in_reserve_mode": qcfg["walk_in_reserve_mode"],
             "walk_in_reserve_value": qcfg["walk_in_reserve_value"],
+            # MP-16: present on *every* answer, including the early returns below
+            # (an inactive or out-of-range schedule), so a client never has to
+            # branch on whether the key exists.
+            "blocked_periods": [],
+            "blocked_slot_count": 0,
             "slots": []}
         # An inactive schedule stores no hours, and a day outside the effective
         # range was never open — both used to publish a full grid of free slots.
@@ -386,6 +399,20 @@ def get_available_slots(schedule_id: str, date_str: str = Query(...),
             Appointment.start_time.isnot(None)).group_by(Appointment.start_time).all()
         occupancy = [(row[0], row[1]) for row in occupancy if row[0]]
 
+        # MP-16 / BR §15.  A blocked period is a *published* unavailability, so
+        # the read and the write path must agree (they share
+        # ``common.schedule_blocks``).  Read per **doctor**, not per schedule: a
+        # block means the doctor is unavailable, whichever of their schedules the
+        # caller happens to be looking at.  A row whose stored window cannot be
+        # parsed covers the whole day rather than raising — the read degrades, it
+        # never 500s (the F-14 rule).
+        blocks = session.query(ScheduleBlock).filter(
+            ScheduleBlock.organization_id == sched.organization_id,
+            ScheduleBlock.doctor_id == sched.doctor_id,
+            ScheduleBlock.status == "active",
+            ScheduleBlock.start_date <= target,
+            ScheduleBlock.end_date >= target).all()
+
         def _booked_between(window_start, window_end):
             return sum(count for start, count in occupancy
                        if window_start <= start < window_end)
@@ -395,6 +422,7 @@ def get_available_slots(schedule_id: str, date_str: str = Query(...),
         # an unusable template publishes nothing, a template for another weekday
         # publishes nothing, and a template without ``day_of_week`` still applies
         # to every day.
+        blocked_slots = 0
         for t in templates_for_day(sched.slot_templates or [], target.weekday()):
             maxp = t["max_patients"]
             for st, et in slot_starts(t):
@@ -403,13 +431,31 @@ def get_available_slots(schedule_id: str, date_str: str = Query(...),
                 if qcfg["walk_in_reserve_value"] > 0 and maxp:
                     reserved = reserved_for_capacity(maxp, org.config if org else None)
                 unreserved_capacity = max(maxp - reserved, 0)
+                blocked = first_covering(blocks, target, st, et) is not None
+                if blocked:
+                    blocked_slots += 1
                 slots.append({"start_time": st, "end_time": et,
                     "max_patients": maxp, "booked": booked,
                     "reserved_walkin": reserved,
                     "unreserved_capacity": unreserved_capacity,
-                    "available": max(maxp - booked, 0),
-                    "available_unreserved": max(unreserved_capacity - booked, 0)})
+                    # A blocked slot is published with zero availability rather
+                    # than removed: the grid must show *why* the hour is gone,
+                    # and the slot boundary stays the one the write path uses.
+                    "blocked": blocked,
+                    "available": 0 if blocked else max(maxp - booked, 0),
+                    "available_unreserved": 0 if blocked else max(unreserved_capacity - booked, 0)})
         payload["slots"] = slots
+        # Which blocks removed availability, without their reason text: the
+        # desk can fetch the reason from the schedule's block list, and
+        # minimisation keeps free-text out of a read that only needs a label.
+        payload["blocked_periods"] = [
+            {"block_id": b.id,
+             "start_time": b.start_time or "",
+             "end_time": b.end_time or "",
+             "whole_day": not (b.start_time or b.end_time),
+             "window_label": window_label(b.start_time, b.end_time)}
+            for b in blocks]
+        payload["blocked_slot_count"] = blocked_slots
         return payload
     finally:
         session.close()

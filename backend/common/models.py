@@ -587,6 +587,67 @@ class ScheduleSession(Base):
 
 
 
+class ScheduleBlock(Base):
+    """One blocked period of a doctor's availability — BR §15 / MP-16.
+
+    BR §15 names "breaks and unavailable periods" and "blocked dates and
+    periods" as part of schedule configuration, and the MVP acceptance requires
+    that a blocked period cannot be booked.  Before this table there was no
+    record, no route and no enforcement at all (gap-audit GAP-12 / F-20).
+
+    Semantics, deliberately explicit because the rest of the system depends on
+    them:
+
+    * A block names a **date range** (``start_date`` … ``end_date``, inclusive;
+      one day means ``start_date == end_date``) and optionally a **time window**
+      inside each of those days.  ``start_time`` **and** ``end_time`` are both
+      NULL for a whole-day block — the ordinary "doctor on leave" case.
+    * A block belongs to one ``schedule`` row for provenance and scoping, but it
+      is enforced at **doctor** granularity: a blocked doctor is unavailable,
+      whichever of their schedules a booking would resolve to.  A block created
+      against branch A therefore also covers branch B on the same day.  That is
+      the safe direction, and it is what "the doctor is unavailable" means.
+    * A block is never deleted.  Cancelling it sets ``status='cancelled'`` and
+      keeps the row, like every other state change in AMSDP, so the audit trail
+      and the record agree.
+
+    ``end_date >= start_date`` is a database check as well as a service
+    validation: an inverted range silently blocks nothing, which would be a
+    false promise of unavailability.
+    """
+
+    __tablename__ = "schedule_blocks"
+    __service__ = "scheduling"
+
+    id                = Column(String, primary_key=True, default=_new_id)
+    organization_id   = Column(String, ForeignKey("organizations.id"), nullable=False)
+    branch_id         = Column(String, ForeignKey("branches.id"), nullable=False)
+    schedule_id       = Column(String, ForeignKey("schedules.id"), nullable=False)
+    doctor_id         = Column(String, ForeignKey("doctors.id"), nullable=False)
+    start_date        = Column(Date, nullable=False)
+    end_date          = Column(Date, nullable=False)
+    start_time        = Column(String(5))          # HH:MM; NULL => whole day
+    end_time          = Column(String(5))          # HH:MM; NULL => whole day
+    reason            = Column(String(200), nullable=False)
+    status            = Column(String(20), default="active")
+    created_by        = Column(String)
+    created_at        = Column(DateTime(timezone=True), default=_utcnow)
+    cancelled_by      = Column(String)
+    cancelled_at      = Column(DateTime(timezone=True))
+    cancel_reason     = Column(String(200))
+
+    schedule          = relationship("Schedule")
+    doctor            = relationship("Doctor")
+    branch            = relationship("Branch")
+
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date", name="ck_block_dates_ordered"),
+        Index("idx_block_schedule", "schedule_id", "start_date"),
+        Index("idx_block_doctor", "doctor_id", "start_date"),
+        Index("idx_block_org", "organization_id"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Appointment — service: appointment
 # ---------------------------------------------------------------------------

@@ -16,14 +16,35 @@ QUEUE_ACTIVE = ["waiting", "called", "in_consultation", "skipped"]
 
 @router.get("/today")
 def dashboard_today(doctor_id: str = Query(None), branch_id: str = Query(None),
+                    date: str = Query(None),
                     auth: AuthContext = Depends(get_current_user)):
+    """The day's figures for one organization, optionally one branch/doctor.
+
+    ``date`` (MP-22) is the dashboard's date selector: a ``YYYY-MM-DD`` day in
+    the **facility** calendar.  It defaults to the facility's operational today
+    (BR §8) rather than the server's UTC date, and an unparseable value is a 422
+    rather than a silent fallback — a dashboard that quietly answers about a
+    different day than the one asked for is worse than one that refuses.
+    """
     session = SessionFactory()
     try:
         if branch_id:
             # Enforce branch authorization server-side (never trust the UI)
             require_branch_access(branch_id)(auth)
         # Facility-local day (BR §8), never the UTC date.
-        today = operational_today(session, auth.organization_id)
+        facility_today = operational_today(session, auth.organization_id)
+        if date:
+            try:
+                today = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(422, "date must use YYYY-MM-DD")
+            # ``strptime`` accepts unpadded fields ('2026-1-5'), which would make
+            # the selector's contract wider than the documented YYYY-MM-DD and let
+            # an ambiguous string through.  The round-trip pins the exact form.
+            if today.isoformat() != date:
+                raise HTTPException(422, "date must use YYYY-MM-DD")
+        else:
+            today = facility_today
         q = session.query(Appointment).filter(
             Appointment.organization_id == auth.organization_id,
             Appointment.appointment_date == today)
@@ -59,7 +80,8 @@ def dashboard_today(doctor_id: str = Query(None), branch_id: str = Query(None),
             Appointment.appointment_date == today).group_by(Appointment.doctor_id).all()
 
         return {
-            "date": str(today), "branch_id": branch_id, "doctor_id": doctor_id,
+            "date": str(today), "facility_today": str(facility_today),
+            "branch_id": branch_id, "doctor_id": doctor_id,
             "scheduled": counts["scheduled"], "confirmed": counts["confirmed"],
             "checked_in": counts["checked_in"], "in_queue": counts["in_queue"],
             "in_consultation": counts["in_consultation"],

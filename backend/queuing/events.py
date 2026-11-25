@@ -21,10 +21,13 @@ duplicate responses.
 Therefore:
 
 * a successful call gets ``qce:<entry id>:<history index>``;
-* a legitimate recall appends another record -> a different index -> a new id;
+* a recall is an explicit action of its own (``recall``, ``called -> called``,
+  MP-08) and appends its own record -> a different index -> a new id;
 * a repeated HTTP request cannot create a second record, because ``called`` is
   not a source status for ``call`` in ``_TRANSITIONS`` (the route answers 422
-  before touching the history), so a duplicate request has no new event;
+  before touching the history), so a duplicate request has no new event. Recall
+  does not weaken that: it is a separate action an operator must choose, so a
+  retried or double-submitted ``call`` still cannot announce twice;
 * nothing here depends on a browser clock, a local counter or the audit table.
 
 The module is deliberately pure (standard library only, no SQLAlchemy, no
@@ -38,8 +41,14 @@ existing status history. See the W2 reliability completion report, sections 3-4.
 
 from __future__ import annotations
 
-#: The action string the queue route records for a call (main.py:375-393).
+#: The action string the queue route records for a call (main.py:508-527).
 CALL_ACTION = "call"
+#: MP-08: the explicit recall action. A second call for the *same* entry is a
+#: different act, so it is a different action string rather than a repeated
+#: ``call`` — that is what keeps a duplicated ``call`` request refused (422).
+RECALL_ACTION = "recall"
+#: Every action that moves an entry into ``called``, and so is a call event.
+CALL_ACTIONS = (CALL_ACTION, RECALL_ACTION)
 #: The status a successful call moves the entry into.
 CALLED_STATUS = "called"
 #: Prefix for the derived identity. Kept short: the column contract is 120 chars.
@@ -50,7 +59,12 @@ MAX_EVENT_ID_LENGTH = 120
 
 
 def call_events(history) -> list[dict]:
-    """Every completed ``call`` transition in *history*, oldest first.
+    """Every completed call transition in *history*, oldest first.
+
+    A call event is a record that moved the entry into ``called`` through
+    ``call`` or ``recall`` (MP-08). Both count, because both end in an
+    announcement; the ``action`` is kept on the event so a caller can tell a
+    first call from a recall without parsing the id.
 
     Tolerant by design: a malformed or missing history yields an empty list
     rather than an exception, because a queue row must never fail to render
@@ -62,7 +76,7 @@ def call_events(history) -> list[dict]:
     for index, item in enumerate(history):
         if not isinstance(item, dict):
             continue
-        if item.get("action") != CALL_ACTION:
+        if item.get("action") not in CALL_ACTIONS:
             continue
         if item.get("to") != CALLED_STATUS:
             continue
@@ -70,6 +84,7 @@ def call_events(history) -> list[dict]:
         events.append({
             "index": index,
             "at": at if isinstance(at, str) else "",
+            "action": item.get("action"),
             "from": item.get("from") if isinstance(item.get("from"), str) else "",
         })
     return events

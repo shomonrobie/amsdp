@@ -76,6 +76,16 @@ except ImportError:
     from queue_calling_config import router as queue_calling_config_router
 app.include_router(queue_calling_config_router)
 
+# MP-10 / BR §24–§25 — the walk-in placement policy.  A facility setting now:
+# the platform administrator defines the available options, the facility
+# administrator selects one, and the queuing service reads the effective value
+# through ``common.config`` instead of trusting a request body.
+try:
+    from .walk_in_config import router as walk_in_config_router
+except ImportError:
+    from walk_in_config import router as walk_in_config_router
+app.include_router(walk_in_config_router)
+
 
 
 # ---------------------------------------------------------------------------
