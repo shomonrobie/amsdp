@@ -131,7 +131,7 @@ class TestWritingThePolicy:
             evt = s.query(AuditEvent).filter(
                 AuditEvent.action == "queue_calling_config.updated",
                 AuditEvent.target_id == ORG).order_by(
-                    AuditEvent.id.desc()).first()
+                    AuditEvent.timestamp.desc()).first()
             assert evt is not None
             assert evt.before["doctor_queue_calling_enabled"] is False
             assert evt.after["doctor_queue_calling_enabled"] is True

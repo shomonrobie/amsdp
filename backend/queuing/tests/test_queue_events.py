@@ -31,6 +31,12 @@ def _call(at="2026-11-21T09:00:00+00:00", frm="waiting"):
             "actor": "u-1", "reason": "", "at": at}
 
 
+def _recall(at="2026-11-21T09:05:00+00:00"):
+    """MP-08: the explicit recall action, ``called -> called``."""
+    return {"from": "called", "to": "called", "action": "recall",
+            "actor": "u-1", "reason": "", "at": at}
+
+
 def _history_with_two_calls():
     return [
         _call("2026-11-21T09:00:00+00:00"),
@@ -62,6 +68,38 @@ def test_recall_gets_a_new_event_id():
     assert second["call_event_id"] == "qce:" + ENTRY + ":2"
     assert second["call_count"] == 2
     assert second["call_event_at"] == "2026-11-21T09:12:00+00:00"
+
+
+def test_an_explicit_recall_is_a_call_event():
+    """MP-08: `recall` moves `called -> called` and ends in an announcement.
+
+    It must therefore be counted by the same identity rule as `call`, and the
+    recorded action must survive so a caller can tell the two apart.
+    """
+    history = [_call(), _recall()]
+    events = call_events(history)
+    assert [e["index"] for e in events] == [0, 1]
+    assert [e["action"] for e in events] == ["call", "recall"]
+    current = current_call_event(ENTRY, history)
+    assert current["call_event_id"] == "qce:" + ENTRY + ":1"
+    assert current["call_count"] == 2
+    assert current["call_event_at"] == "2026-11-21T09:05:00+00:00"
+
+
+def test_a_recall_supersedes_the_first_call_event():
+    history = [_call(), _recall()]
+    first = current_call_event(ENTRY, [_call()])
+    assert is_current_call_event(ENTRY, history, first["call_event_id"]) is False
+    assert is_current_call_event(ENTRY, history,
+                                 "qce:" + ENTRY + ":1") is True
+
+
+def test_a_recall_that_did_not_end_in_called_is_ignored():
+    """Defensive: the action alone does not make an event; the status does."""
+    history = [{"from": "called", "to": "skipped", "action": "recall",
+                "actor": "u-1", "reason": "", "at": "2026-11-21T09:00:00+00:00"}]
+    assert call_events(history) == []
+    assert current_call_event(ENTRY, history) is None
 
 
 def test_read_is_repeatable_for_same_history():

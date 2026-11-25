@@ -122,6 +122,46 @@ class TestDashboardToday:
         r = client.get("/api/v1/dashboard/today", headers=_auth(_token(admin, org="other-org")))
         assert r.status_code == 200 and r.json()["total"] == 0
 
+    # --- MP-22: the date selector -------------------------------------------
+    def test_an_explicit_date_selects_that_day(self, admin):
+        """The dashboard's date selector asks a question about one day."""
+        other_day = _today - timedelta(days=2)
+        s = SessionFactory()
+        p = Patient(id=str(uuid.uuid4()), organization_id="m6-org", name="P",
+                    mobile="01711111112")
+        s.add(p); s.commit()
+        _mk_appt_today(s, p.id, status="COMPLETED")            # the facility day
+        a = Appointment(id=str(uuid.uuid4()), organization_id="m6-org",
+                        branch_id="m6-branch", patient_id=p.id, doctor_id="m6-doc",
+                        appointment_date=other_day, start_time="10:00",
+                        status="COMPLETED", status_history=[],
+                        booking_source="phone", token_number="T-M6-2")
+        s.add(a); s.commit(); s.close()
+
+        selected = client.get(
+            "/api/v1/dashboard/today?date=" + other_day.isoformat(),
+            headers=_auth(_token(admin)))
+        assert selected.status_code == 200
+        body = selected.json()
+        assert body["date"] == other_day.isoformat()
+        assert body["total"] == 1, "only the selected day is counted"
+
+        plain = client.get("/api/v1/dashboard/today", headers=_auth(_token(admin)))
+        assert plain.json()["date"] == _today.isoformat()
+        assert plain.json()["total"] == 1, "the default stays the facility day"
+
+    def test_the_facility_day_is_reported_alongside_the_selection(self, admin):
+        r = client.get("/api/v1/dashboard/today?date=2026-01-05",
+                       headers=_auth(_token(admin)))
+        assert r.status_code == 200
+        assert r.json()["facility_today"] == _today.isoformat()
+
+    @pytest.mark.parametrize("bad", ["24-11-2026", "2026-13-01", "today", "2026-1-5"])
+    def test_an_unparseable_date_is_refused_not_guessed(self, admin, bad):
+        r = client.get("/api/v1/dashboard/today?date=" + bad,
+                       headers=_auth(_token(admin)))
+        assert r.status_code == 422, bad
+
 
 class TestDashboardPeriod:
     def test_period_totals_and_rates(self, admin):

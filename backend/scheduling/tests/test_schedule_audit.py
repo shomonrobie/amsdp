@@ -65,12 +65,20 @@ def _create(client, templates=None):
     return response.json()
 
 
-def _events(action, target_id):
+def _events(action, target_id, reason=None):
+    """The audit rows for one action, optionally only those with one reason.
+
+    The MP-18 projection tests set up a session *and then* act on it, and both
+    writes emit ``schedule.templates_changed`` on the same schedule id.  Counting
+    every row therefore counted the setup as a failure; the reason filter is how
+    a test names the one event it is about.
+    """
     with db_session() as s:
-        return s.query(AuditEvent).filter(
+        rows = s.query(AuditEvent).filter(
             AuditEvent.action == action,
             AuditEvent.target_id == target_id).order_by(
             AuditEvent.timestamp, AuditEvent.id).all()
+    return [row for row in rows if reason is None or row.reason == reason]
 
 
 def _actions(target_id):
@@ -178,4 +186,72 @@ class TestSessionAudit:
         retired = client.delete(f"/api/v1/sessions/{session_id}",
                                 headers=headers(ADMIN))
         assert retired.status_code in (200, 204), retired.text
-        assert "schedule.session.retire" in _actions(session_id)
+
+
+class TestScheduleProjectionAudit:
+    """MP-18 — a session write is also a *schedule* write.
+
+    ``scheduling.session.sync_slot_templates`` rebuilds ``schedules.slot_templates``
+    from the active sessions on every create, edit and retire: that list is the
+    projection ``available-slots`` and the calendar read.  Before MP-18 the trail
+    recorded the session change but not the schedule row it moved, which is the
+    silent mutation the acceptance criterion forbids.  These tests assert the
+    schedule-side event directly, on the schedule's own id.
+    """
+
+    def _session(self, client, schedule_id, start="11:00", end="12:00"):
+        created = client.post(
+            f"/api/v1/schedules/{schedule_id}/sessions", headers=headers(ADMIN),
+            json={"day_of_week": WEEKDAY, "start_time": start, "end_time": end,
+                  "slot_duration_minutes": 15, "max_patients": 1})
+        assert created.status_code == 201, created.text
+        return created.json()["id"]
+
+    def test_creating_a_session_audits_the_schedule_projection(self, client):
+        schedule = _create(client)
+        self._session(client, schedule["id"])
+        events = _events("schedule.templates_changed", schedule["id"])
+        assert len(events) == 1
+        event = events[0]
+        assert event.target_type == "schedule"
+        assert event.reason == "session created"
+        assert event.before == {"windows": {f"{WEEKDAY} 09:00-10:00": 1}}
+        assert event.after == {"windows": {f"{WEEKDAY} 09:00-10:00": 1,
+                                           f"{WEEKDAY} 11:00-12:00": 1}}
+
+    def test_moving_a_session_audits_both_window_sets(self, client):
+        schedule = _create(client)
+        session_id = self._session(client, schedule["id"])
+        moved = client.patch(f"/api/v1/sessions/{session_id}",
+                             headers=headers(ADMIN),
+                             json={"start_time": "13:00", "end_time": "14:00"})
+        assert moved.status_code == 200, moved.text
+        events = _events("schedule.templates_changed", schedule["id"], "session updated")
+        assert len(events) == 1
+        assert f"{WEEKDAY} 11:00-12:00" in events[0].before["windows"]
+        assert f"{WEEKDAY} 13:00-14:00" in events[0].after["windows"]
+        assert f"{WEEKDAY} 11:00-12:00" not in events[0].after["windows"]
+
+    def test_retiring_the_last_session_audits_the_window_disappearing(self, client):
+        schedule = _create(client)
+        session_id = self._session(client, schedule["id"])
+        retired = client.delete(f"/api/v1/sessions/{session_id}",
+                                headers=headers(ADMIN))
+        assert retired.status_code in (200, 204), retired.text
+        events = _events("schedule.templates_changed", schedule["id"], "session retired")
+        assert len(events) == 1
+        assert f"{WEEKDAY} 11:00-12:00" in events[0].before["windows"]
+        assert events[0].after == {"windows": {f"{WEEKDAY} 09:00-10:00": 1}}
+        assert events[0].reason == "session retired"
+
+    def test_an_edit_that_does_not_move_a_window_writes_no_schedule_event(self, client):
+        """The event says the *published windows* moved, so it must not be noise."""
+        schedule = _create(client)
+        session_id = self._session(client, schedule["id"])
+        quiet = client.patch(f"/api/v1/sessions/{session_id}",
+                             headers=headers(ADMIN),
+                             json={"slot_duration_minutes": 20})
+        assert quiet.status_code == 200, quiet.text
+        assert _events("schedule.templates_changed", schedule["id"], "session updated") == []
+        # The change itself is still in the trail, on the session.
+        assert "schedule.session.update" in _actions(session_id)

@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "identity"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "queuing"))
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (Organization, Branch, Doctor, Patient,
@@ -463,3 +463,122 @@ def test_dqds_never_returns_tracking_material():
         assert marker not in body, f"PQT material leaked: {marker}"
     assert body.count("A-001") == 1, "the serving token is published exactly once"
     assert "A-002" not in body, "queued tokens must never be published"
+
+
+# ---------------------------------------------------------------------------
+# Gap closure (MP-06 / GAP-03) — the board's day is the facility's day.
+def _queue_on(day, status: str, token: str, position: int, doctor=DOC_ID,
+              org=ORG_CODE):
+    """Insert one entry on an explicit day — ``_queue`` pins the module's TODAY."""
+    s = SessionFactory()
+    try:
+        s.add(QueueEntry(id=str(uuid.uuid4()), organization_id=org,
+                         branch_id=BR_CODE, doctor_id=doctor, date=day,
+                         position=position, token=token, status=status,
+                         patient_id=PAT_ID, entry_source="appointment",
+                         status_history=list(), position_history=list()))
+        s.commit()
+    finally:
+        s.close()
+
+
+def _set_org_zone(name):
+    """Point the DQDS org at ``name``; return the previous value to restore."""
+    s = SessionFactory()
+    try:
+        org = s.query(Organization).filter(Organization.id == ORG_CODE).first()
+        previous = org.timezone
+        org.timezone = name
+        s.commit()
+        return previous
+    finally:
+        s.close()
+
+
+# ---------------------------------------------------------------------------
+
+def test_dqds_uses_the_facility_day_not_the_server_day(monkeypatch):
+    """MP-06: the board rolls over at the facility's midnight (BR §8).
+
+    ``2026-11-23T19:00Z`` is ``2026-11-24 01:00`` in Asia/Dhaka, so the facility
+    is already on the 24th while a UTC server still calls it the 23rd. One
+    in-consultation entry is filed on each day; only the facility day's may be
+    published. A board that trusts the server clock publishes the previous day's
+    tokens for the first six hours of every Dhaka day.
+
+    The assertion is on ``currently_serving`` because the public schema
+    deliberately exposes only the serving token plus counts — a waiting entry's
+    token is never published, so a token-in-body check would be vacuous.
+    """
+    import common.timeutil as timeutil
+    import queuing.display as display_mod
+
+    fixed_utc = datetime(2026, 11, 23, 19, 0, tzinfo=timezone.utc)
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_utc.astimezone(tz) if tz else fixed_utc.replace(tzinfo=None)
+
+    class _ServerDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 11, 23)
+
+    monkeypatch.setattr(timeutil, "datetime", _FrozenDateTime)
+    # Inert after the fix; if the route ever reads the server clock again, this
+    # pin makes it answer the 23rd and the assertions below fail.
+    monkeypatch.setattr(display_mod, "date", _ServerDate, raising=False)
+
+    previous = _set_org_zone("Asia/Dhaka")
+    try:
+        _clear()
+        _queue_on(date(2026, 11, 24), "in_consultation", "F-024", 1)
+        _queue_on(date(2026, 11, 24), "waiting", "F-025", 2)
+        _queue_on(date(2026, 11, 23), "in_consultation", "F-023", 1)
+
+        r = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}")
+        assert r.status_code == 200
+        dina = [d for d in r.json()["doctors"]
+                if d["doctor_name"] == "Dr. Dina"][0]
+        assert dina["currently_serving"] == "F-024", dina
+        assert dina["patients_waiting"] == 1, dina
+    finally:
+        _set_org_zone(previous)
+        _clear()
+
+
+def test_dqds_honours_the_configured_facility_zone(monkeypatch):
+    """MP-06: the day comes from ``organizations.timezone``, not a constant.
+
+    At ``2026-11-23T19:00Z`` Dhaka is on the 24th but New York is on the 23rd at
+    14:00. With the org configured ``America/New_York`` the board must publish the
+    23rd's token — so a board hard-wired to Asia/Dhaka (or to the server clock)
+    fails this test even though it passes the rollover test above.
+    """
+    import common.timeutil as timeutil
+
+    fixed_utc = datetime(2026, 11, 23, 19, 0, tzinfo=timezone.utc)
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_utc.astimezone(tz) if tz else fixed_utc.replace(tzinfo=None)
+
+    monkeypatch.setattr(timeutil, "datetime", _FrozenDateTime)
+
+    previous = _set_org_zone("America/New_York")
+    try:
+        _clear()
+        _queue_on(date(2026, 11, 23), "in_consultation", "N-023", 1)
+        _queue_on(date(2026, 11, 24), "in_consultation", "N-024", 1)
+
+        r = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}")
+        assert r.status_code == 200
+        dina = [d for d in r.json()["doctors"]
+                if d["doctor_name"] == "Dr. Dina"][0]
+        assert dina["currently_serving"] == "N-023", dina
+    finally:
+        _set_org_zone(previous)
+        _clear()
+

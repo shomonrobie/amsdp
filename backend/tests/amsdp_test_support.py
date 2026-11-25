@@ -40,9 +40,9 @@ from common.auth import _ALGO, _SECRET                            # noqa: E402
 from common.database import SessionFactory                        # noqa: E402
 from common.models import (Appointment, AppointmentSymptom, Branch, Doctor,  # noqa: E402
                            DoctorBranch, Notification, Organization, Patient,
-                           QueueEntry, QueueSequence, Schedule, ScheduleSession,
-                           StaffCapabilityGrant, StaffUser, SymptomCatalog,
-                           TrackingToken)
+                           QueueEntry, QueueSequence, Schedule, ScheduleBlock,
+                           ScheduleSession, StaffCapabilityGrant, StaffUser,
+                           SymptomCatalog, TrackingToken)
 
 #: Password used by every user this module creates.
 PASSWORD = "testpass123"
@@ -345,6 +345,11 @@ def purge_org(org_id: str) -> None:
                 synchronize_session=False)
         s.query(Appointment).filter(
             Appointment.organization_id == org_id).delete(
+            synchronize_session=False)
+        # MP-16: blocked periods are business rows of the organization and point
+        # at schedules, so they go before the schedules they reference.
+        s.query(ScheduleBlock).filter(
+            ScheduleBlock.organization_id == org_id).delete(
             synchronize_session=False)
         # Sessions reference schedules, so they go first (AMSDP-FACILITY-DOCTOR-01).
         s.query(ScheduleSession).filter(

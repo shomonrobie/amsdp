@@ -140,37 +140,94 @@ class TestCheckIn:
         assert r.status_code == 422
 
 
+def _set_org_queue_config(block=None):
+    """Store the organization's walk-in configuration (MP-10, BR §25)."""
+    session = SessionFactory()
+    try:
+        org = session.query(Organization).filter(
+            Organization.id == "m5-org").first()
+        org.config = {"queue_config": block} if block else {}
+        session.commit()
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def walk_in_policy():
+    """Apply a placement policy for one test, then restore the default."""
+    def _apply(policy, **extra):
+        _set_org_queue_config({"walk_in_policy": policy, **extra})
+    yield _apply
+    _set_org_queue_config(None)
+
+
+def _enqueue(t, patient_id, **body):
+    payload = {"doctor_id": "m5-doc", "patient_id": patient_id,
+               "entry_source": "walk_in"}
+    payload.update(body)
+    return client.post("/api/v1/queue/enqueue", headers=_auth(t), json=payload)
+
+
 class TestWalkInPolicies:
-    def test_end_of_queue(self, receptionist):
-        session = SessionFactory(); p = _mk_patient(session); session.close()
-        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
-            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in", "walk_in_policy": "end_of_queue"})
-        assert r.status_code == 201 and r.json()["entry_source"] == "walk_in" and r.json()["position"] >= 1
+    """BR §25 — the policy is a facility setting, not a request parameter.
 
-    def test_first_come(self, receptionist):
-        session = SessionFactory(); p = _mk_patient(session); session.close()
-        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
-            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in", "walk_in_policy": "first_come"})
-        assert r.status_code == 201
+    The behaviour of each of the four policies is proven in
+    ``test_walk_in_placement.py``; these tests pin the contract change itself:
+    the body can no longer choose a policy, and an unusable stored value falls
+    back instead of refusing work.
+    """
 
-    def test_reserved_capacity(self, receptionist):
+    def test_end_of_queue(self, receptionist, walk_in_policy):
+        walk_in_policy("end_of_queue")
         session = SessionFactory(); p = _mk_patient(session); session.close()
-        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
-            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in", "walk_in_policy": "reserved_capacity"})
-        assert r.status_code == 201
+        r = _enqueue(_token(receptionist), p.id)
+        assert r.status_code == 201 and r.json()["entry_source"] == "walk_in"
+        assert r.json()["position"] >= 1
 
-    def test_staff_placement(self, receptionist):
+    def test_first_come(self, receptionist, walk_in_policy):
+        walk_in_policy("first_come")
         session = SessionFactory(); p = _mk_patient(session); session.close()
-        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
-            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in",
-                  "walk_in_policy": "staff_placement", "position": 5})
-        assert r.status_code == 201 and r.json()["position"] == 5
+        assert _enqueue(_token(receptionist), p.id).status_code == 201
 
-    def test_invalid_policy_rejected(self, receptionist):
+    def test_reserved_capacity(self, receptionist, walk_in_policy):
+        walk_in_policy("reserved_capacity", walk_in_reserve_mode="count",
+                       walk_in_reserve_value=2)
         session = SessionFactory(); p = _mk_patient(session); session.close()
-        r = client.post("/api/v1/queue/enqueue", headers=_auth(_token(receptionist)),
-            json={"doctor_id": "m5-doc", "patient_id": p.id, "entry_source": "walk_in", "walk_in_policy": "bogus"})
-        assert r.status_code == 422
+        assert _enqueue(_token(receptionist), p.id).status_code == 201
+
+    def test_staff_placement(self, receptionist, walk_in_policy):
+        walk_in_policy("staff_placement")
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        r = _enqueue(_token(receptionist), p.id, position=1)
+        assert r.status_code == 201 and r.json()["position"] == 1
+
+    def test_the_request_body_cannot_choose_the_policy(
+            self, receptionist, walk_in_policy):
+        """MP-10: ``walk_in_policy`` is retired — the facility setting decides.
+
+        The body still names ``staff_placement`` and position 1.  The policy in
+        force is ``end_of_queue``, so the entry is appended and the position in
+        the body has no effect.  A caller can no longer widen or change the
+        facility's placement rule by writing a field.
+        """
+        walk_in_policy("end_of_queue")
+        session = SessionFactory()
+        first = _mk_patient(session); second = _mk_patient(session)
+        session.close()
+        t = _token(receptionist)
+        assert _enqueue(t, first.id).status_code == 201
+        r = _enqueue(t, second.id, walk_in_policy="staff_placement", position=1)
+        assert r.status_code == 201, r.text
+        assert r.json()["position"] == 2, "the body must not place the patient"
+
+    def test_an_unknown_stored_policy_falls_back_to_end_of_queue(
+            self, receptionist, walk_in_policy):
+        """A corrupt setting must not refuse work, and must not place by surprise."""
+        walk_in_policy("bogus")
+        session = SessionFactory(); p = _mk_patient(session); session.close()
+        r = _enqueue(_token(receptionist), p.id)
+        assert r.status_code == 201, r.text
+        assert r.json()["position"] >= 1
 
 from queuing.main import app
 class TestTokens:
@@ -1608,6 +1665,120 @@ class TestQueueCallEventIdentity(_AnnouncementFixture):
         assert after["status"] == "waiting"
         assert after["call_event_id"] == ""
 
+
+class TestQueueRecall(_AnnouncementFixture):
+    """MP-08: a recall is an explicit act, not a repeated ``call``.
+
+    The plan's acceptance criterion is "two calls for one entry produce two
+    delivery rows with distinct ``qce:`` keys; both audited; position
+    unchanged". It is met through the ``recall`` action: ``call`` from
+    ``called`` stays **422**, so a retried or double-submitted request still
+    cannot produce a second announcement, and a real recall is a distinct,
+    chosen, audited event with its own identity.
+    """
+
+    def _recall(self, receptionist, entry_id):
+        return client.patch(f"/api/v1/queue/{entry_id}",
+                            headers=_auth(_token(receptionist)),
+                            json={"action": "recall"})
+
+    def test_recall_from_called_appends_a_distinct_call_event(self, receptionist):
+        e = self._called_entry(receptionist)
+        r = self._recall(receptionist, e["id"])
+        assert r.status_code == 200, r.text
+        second = r.json()
+        assert second["status"] == "called"
+        assert second["call_count"] == 2
+        assert second["call_event_id"] != e["call_event_id"]
+        # The identity is the append position, so a recall's id is strictly later.
+        assert (int(second["call_event_id"].rsplit(":", 1)[1])
+                > int(e["call_event_id"].rsplit(":", 1)[1]))
+        recalled = [h for h in second["status_history"]
+                    if h.get("action") == "recall"]
+        assert len(recalled) == 1, second["status_history"]
+        assert recalled[0]["from"] == "called" and recalled[0]["to"] == "called"
+        # A fresh read agrees: the identity is derived, not issued once.
+        assert self._read_entry(receptionist, e["id"])["call_event_id"] == \
+            second["call_event_id"]
+
+    def test_two_calls_for_one_entry_produce_two_delivery_rows(self, receptionist):
+        token = _token(receptionist)
+        e = self._called_entry(receptionist)
+        first_claim = self._claim(token, e["id"], e["call_event_id"])
+        assert first_claim.status_code == 201, first_claim.text
+
+        recalled = self._recall(receptionist, e["id"]).json()
+        second_claim = self._claim(token, e["id"], recalled["call_event_id"])
+        assert second_claim.status_code == 201, second_claim.text
+
+        assert recalled["call_event_id"] != e["call_event_id"]
+        assert second_claim.json()["delivery_id"] != first_claim.json()["delivery_id"]
+        # Two rows, keyed by two different events: neither consumed the other's slot.
+        assert len(self._deliveries(e["call_event_id"])) == 1
+        assert len(self._deliveries(recalled["call_event_id"])) == 1
+
+    def test_the_superseded_event_can_no_longer_be_claimed(self, receptionist):
+        token = _token(receptionist)
+        e = self._called_entry(receptionist)
+        recalled = self._recall(receptionist, e["id"]).json()
+        stale = self._claim(token, e["id"], e["call_event_id"])
+        assert stale.status_code == 409, stale.text
+        assert self._deliveries(e["call_event_id"]) == []
+
+    def test_both_the_call_and_the_recall_are_audited(self, receptionist):
+        e = self._called_entry(receptionist)
+        self._recall(receptionist, e["id"])
+        actions = self._audit_actions(e["id"])
+        assert "queue.call" in actions, actions
+        assert "queue.recall" in actions, actions
+
+    def test_recall_does_not_change_the_position_or_the_token(self, receptionist):
+        e = self._called_entry(receptionist)
+        after = self._read_entry(receptionist, e["id"])
+        assert after["position"] == e["position"], "a recall is not a reorder"
+        assert after["token"] == e["token"], "the patient keeps their token"
+        assert len(after["position_history"]) == len(e["position_history"])
+
+    def test_a_duplicate_call_is_still_refused_after_a_recall(self, receptionist):
+        """The announcement-duplication guard survives MP-08."""
+        e = self._called_entry(receptionist)
+        recalled = self._recall(receptionist, e["id"]).json()
+        again = client.patch(f"/api/v1/queue/{e['id']}",
+                             headers=_auth(_token(receptionist)),
+                             json={"action": "call"})
+        assert again.status_code == 422, again.text
+        after = self._read_entry(receptionist, e["id"])
+        assert after["call_event_id"] == recalled["call_event_id"]
+        assert after["call_count"] == 2
+
+    def test_recall_from_waiting_is_refused(self, receptionist):
+        e = self._enqueue(receptionist)
+        r = self._recall(receptionist, e["id"])
+        assert r.status_code == 422, r.text
+        after = self._read_entry(receptionist, e["id"])
+        assert after["status"] == "waiting"
+        assert after["call_event_id"] == ""
+        assert [h for h in after["status_history"]
+                if h.get("action") == "recall"] == []
+
+    def test_recall_is_refused_for_a_doctor_without_queue_manage(self, receptionist,
+                                                               doctor_user):
+        e = self._called_entry(receptionist)
+        refused = client.patch(f"/api/v1/queue/{e['id']}",
+                               headers=_auth(_token(doctor_user)),
+                               json={"action": "recall"})
+        assert refused.status_code == 403, refused.text
+        assert self._read_entry(receptionist, e["id"])["call_count"] == 1
+
+    def test_recall_follows_the_organizations_doctor_calling_policy(
+            self, receptionist, doctor_user, doctor_calling_enabled):
+        """Same organization policy as `call`: a doctor may recall own patients."""
+        e = self._called_entry(receptionist)
+        allowed = client.patch(f"/api/v1/queue/{e['id']}",
+                               headers=_auth(_token(doctor_user)),
+                               json={"action": "recall"})
+        assert allowed.status_code == 200, allowed.text
+        assert allowed.json()["call_count"] == 2
 
 class TestAnnouncementDeliveryClaim(_AnnouncementFixture):
     """V-12: two terminals, one call, one announcement."""
