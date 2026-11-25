@@ -48,176 +48,21 @@ import {
   seatsWord, refusalCode, REFUSAL_KEYS, bookingMode, typeLabelKey, typeBadgeKey,
   overrideProblem,
 } from '../lib/calendar/booking';
+import { t } from '../lib/i18n';
 
-const L = {
-  bn: { t:'অ্যাপয়েন্টমেন্ট', p:'রোগী', d:'ডাক্তার', dt:'তারিখ', tm:'সময়', st:'অবস্থা',
-    tk:'টোকেন', na:'এই দৃশ্যে কোনো অ্যাপয়েন্টমেন্ট নেই', bk:'বুকিং', wi:'ওয়াক-ইন',
-    cc:'বাতিল', ci:'চেক-ইন', week:'সপ্তাহ', day:'দিন', list:'তালিকা', view:'দৃশ্য',
-    today:'আজ', prev:'আগের', next:'পরের', allDoctors:'সব ডাক্তার', full:'পূর্ণ',
-    closed:'শিডিউল নেই', past:'শেষ', loading:'লোড হচ্ছে…', actions:'কর্ম',
-    searchPatient:'নাম বা মোবাইল দিয়ে রোগী খুঁজুন', notFound:'রোগী পাওয়া যায়নি',
-    selectPatient:'রোগী নির্বাচন করুন', change:'পরিবর্তন', chooseSlot:'সময় নির্বাচন করুন',
-    noSlots:'এই দিনে কোনো সেশন নেই', notes:'নোট', save:'সংরক্ষণ',
-    saving:'সংরক্ষণ হচ্ছে…', bookedOk:'বুকিং সম্পন্ন হয়েছে', needPatient:'রোগী নির্বাচন করুন',
-    needDoctor:'ডাক্তার নির্বাচন করুন', needDate:'তারিখ দিন', needTime:'সময় নির্বাচন করুন',
-    bookErr:'বুকিং ব্যর্থ', actionErr:'কাজটি সম্পন্ন হয়নি',
-    /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
-    noSlotsHint:'এই ডাক্তার এই দিনে কোনো সময়সূচি দেননি — এখানে লেখা সময় কোনো স্লট বা সেশনের '
-      + 'মধ্যে পড়ে না, এবং একসঙ্গে একজন রোগীকেই ধরা হয়',
-    /* AMSDP-APPT-OWNER-DECISIONS-01 (Q1) — scheduled, walk-in and unscheduled are
-       three different things, and the screen says which one it is booking. */
-    typeScheduled:'নির্ধারিত', typeWalkIn:'ওয়াক-ইন', typeUnscheduled:'সময়সূচির বাইরে',
-    typeWalkInShort:'ওয়াক-ইন', typeUnscheduledShort:'বাইরে',
-    typeLabel:'ধরন', overrideReason:'কারণ (আবশ্যক)', overrideReasonLabel:'গ্রহণের কারণ',
-    overrideHint:'এই সময় ডাক্তারের প্রকাশিত সেশনের বাইরে — কারণ লিখে রোগী গ্রহণ করুন। '
-      + 'এটি নির্ধারিত স্লট নয়।',
-    overrideReasonPlaceholder:'যেমন: জরুরি ভিজিট, সময়সূচি ছাড়া এসেছেন',
-    walkInReason:'কারণ (সেশন না থাকলে আবশ্যক)',
-    walkInHint:'রোগী এখন চেম্বারে আছেন — সেশন চললে সরাসরি ওয়াক-ইন, না চললে কারণ লিখে গ্রহণ।',
-    allFullHint:'এই দিনের সব স্লট পূর্ণ — অন্য সময় বা দিন বেছে নিন',
-    errNeedsOverride:'এই সময় প্রকাশিত সেশনে নেই — ওয়াক-ইন বা সময়সূচির বাইরে হিসেবে কারণসহ গ্রহণ করুন',
-    errOverrideLimit:'এই ডাক্তারের জন্য আজ সময়সূচির বাইরে গ্রহণের সীমা শেষ',
-    errOverrideDisabled:'এই প্রতিষ্ঠান সময়সূচির বাইরে রোগী গ্রহণ করে না',
-    errUseWalkIn:'ওয়াক-ইন ওয়ার্কফ্লো দিয়ে রোগী যোগ করুন',
-    /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
-    seatsLeft:'আরও {n}টি খালি', seatLast:'শেষ আসন', slotFull:'পূর্ণ',
-    errSlotFull:'এই সময়টি পূর্ণ — অন্য সময় বেছে নিন',
-    errNoSlot:'এই সময় ডাক্তারের ঠিক করা স্লটের মধ্যে নেই — তালিকা থেকে সময় বেছে নিন',
-    errOutsideSession:'এই সময় ডাক্তারের সেশনের বাইরে — সেশনের ভিতরের সময় দিন',
-    errBadDate:'তারিখটি ঠিক নেই — আবার বেছে নিন',
-    errBadTime:'সময়ের বিন্যাস ঠিক নেই — ঘণ্টা:মিনিট আকারে দিন',
-    errBadTransition:'এই অবস্থা থেকে এই পরিবর্তন করা যায় না — তালিকা হালনাগাদ করুন',
-    errPatient:'রোগীটি পাওয়া যায়নি — আবার খুঁজুন',
-    errDoctor:'ডাক্তারটি পাওয়া যায়নি — আবার বেছে নিন',
-    errBranch:'শাখাটি পাওয়া যায়নি — অন্য শাখা বেছে নিন',
-    errNotFound:'তথ্যটি পাওয়া গেল না — তালিকা হালনাগাদ করুন',
-    errNeedReason:'কারণ আবশ্যক', errForbidden:'এই কাজটি আপনার অনুমতির বাইরে',
-    errUnknown:'সার্ভার কারণ জানায়নি — আবার চেষ্টা করুন',
-    loadErr:'অ্যাপয়েন্টমেন্ট লোড করা যায়নি',
-    detail:'অ্যাপয়েন্টমেন্ট', reason:'বাতিলের কারণ', cancelTitle:'অ্যাপয়েন্টমেন্ট বাতিল',
-    cancelMsg:'এই অ্যাপয়েন্টমেন্ট বাতিল করতে চান? কারণ আবশ্যক।',
-    confirmCancel:'বাতিল নিশ্চিত করুন', back:'ফিরে যান', source:'উৎস',
-    weekTotal:'এই সপ্তাহে মোট', dayTotal:'এই দিনে মোট', capacity:'ধারণক্ষমতা',
-    booked:'বুক হয়েছে', walkOk:'ওয়াক-ইন যোগ হয়েছে', search:'খুঁজুন',
-    /* AMSDP-APPT-LIST-UX — the toolbar, the list view and its paging. */
-    subtitle:'ফাঁকা স্লটে ক্লিক করে বুক করুন, কার্ডে ক্লিক করে কাজ করুন',
-    searchAppt:'রোগীর নাম, মোবাইল বা টোকেন', filters:'ফিল্টার', allStatus:'সব অবস্থা',
-    branch:'শাখা', allBranches:'সব শাখা', clearFilters:'ফিল্টার মুছুন',
-    noResults:'কোনো অ্যাপয়েন্টমেন্ট মেলেনি', noResultsHint:'তারিখ বা ফিল্টার বদলে আবার দেখুন',
-    showing:'দেখানো হচ্ছে', pages:'পৃষ্ঠা', prevPage:'আগের পৃষ্ঠা', nextPage:'পরের পৃষ্ঠা',
-    pageSize:'প্রতি পৃষ্ঠা', loc:'কক্ষ', more:'আরও {n}', sortBy:'সাজান', total:'মোট',
-    /* AMSDP-CALENDAR-FILTER-01 (D-2) — the search matched beyond these dates. */
-    weekMatches:'এই সপ্তাহে মিলেছে', dayMatches:'এই দিনে মিলেছে',
-    otherDates:'এই তারিখগুলোর বাইরে আরও {n}টি মিল আছে — {d}টি তারিখে',
-    /* Bangla does not inflect its counters, so all three English variants are
-       the same sentence here; the keys still exist so `T()` never falls back. */
-    otherDatesOne:'এই তারিখগুলোর বাইরে আরও {n}টি মিল আছে — {d}টি তারিখে',
-    otherDatesOneDate:'এই তারিখগুলোর বাইরে আরও {n}টি মিল আছে — {d}টি তারিখে',
-    otherDatesTruncated:'(আরও তারিখ আছে — তালিকায় সব দেখুন)',
-    gotoNearest:'কাছের তারিখে যান', seeAllMatches:'তালিকায় সব দেখুন',
-    searchingOtherDates:'অন্য তারিখেও খোঁজা হচ্ছে…',
-    /* AMSDP-SYMPTOM-01 — the two optional questions the receptionist asks. */
-    sy:'উপসর্গ', syNone:'কোনো উপসর্গ দেওয়া হয়নি', onset:'কখন থেকে',
-    syPrompt:'আপনার কী কী সমস্যা হচ্ছে?',
-    syPlaceholder:'উপসর্গ খুঁজুন — বাংলা বা ইংরেজি', syOptional:'ঐচ্ছিক',
-    sySelected:'নির্বাচিত উপসর্গ', syRemove:'সরান', syFreeText:'নিজের ভাষায়',
-    syAddFree:'নিজের ভাষায় লিখে যোগ করুন',
-    syAlready:'এই উপসর্গটি আগেই নির্বাচন করা হয়েছে', syFull:'আরও উপসর্গ যোগ করা যাবে না',
-    syHint:'ঐচ্ছিক — রোগী যা বলছেন তাই লিখুন। এটি রোগনির্ণয় নয়।',
-    syList:'উপসর্গের প্রস্তাব', onsetPrompt:'কখন থেকে সমস্যা হচ্ছে?',
-    onsetNotAsked:'জিজ্ঞাসা করা হয়নি', onsetNote:'সংক্ষিপ্ত বিবরণ',
-    onsetNotePlaceholder:'যেমন: প্রায় চার দিন ধরে, সকালে বেশি' },
-  en: { t:'Appointments', p:'Patient', d:'Doctor', dt:'Date', tm:'Time', st:'Status',
-    tk:'Token', na:'No appointments in this view', bk:'Book', wi:'Walk-in',
-    cc:'Cancel', ci:'Check-in', week:'Week', day:'Day', list:'List', view:'View',
-    today:'Today', prev:'Previous', next:'Next', allDoctors:'All Doctors', full:'Full',
-    closed:'No clinic', past:'Past', loading:'Loading…', actions:'Actions',
-    searchPatient:'Search a patient by name or mobile', notFound:'No patient found',
-    selectPatient:'Select patient', change:'Change', chooseSlot:'Choose a time',
-    noSlots:'No clinic on this day', notes:'Notes', save:'Save',
-    saving:'Saving…', bookedOk:'Appointment booked', needPatient:'Select a patient',
-    needDoctor:'Select a doctor', needDate:'Pick a date', needTime:'Pick a time',
-    bookErr:'Booking failed', actionErr:'That action did not complete',
-    /* F-18 — the free-text fallback is not equivalent to a slot, and says so. */
-    noSlotsHint:'This doctor publishes no session on this day — a time entered here falls outside '
-      + 'every slot and session, and is counted one patient at a time',
-    /* AMSDP-APPT-OWNER-DECISIONS-01 (Q1) — the three persisted types. */
-    typeScheduled:'Scheduled', typeWalkIn:'Walk-in', typeUnscheduled:'Outside hours',
-    typeWalkInShort:'Walk-in', typeUnscheduledShort:'Outside',
-    typeLabel:'Type', overrideReason:'Reason (required)', overrideReasonLabel:'Acceptance reason',
-    overrideHint:'This time is outside the doctor\u2019s published sessions — record '
-      + 'why the patient is accepted. This is not a confirmed slot.',
-    overrideReasonPlaceholder:'e.g. urgent visit, arrived without an appointment',
-    walkInReason:'Reason (required outside a session)',
-    walkInHint:'The patient is here now — inside a session this is a walk-in, '
-      + 'otherwise record the reason and accept them.',
-    allFullHint:'Every slot this day is full — choose another time or day',
-    errNeedsOverride:'That time is outside the published sessions — register a '
-      + 'walk-in, or accept an outside-hours visit with a reason',
-    errOverrideLimit:'This doctor has reached today\u2019s outside-hours limit',
-    errOverrideDisabled:'This organization does not accept patients outside its sessions',
-    errUseWalkIn:'Register the patient through the walk-in workflow',
-    /* F-19 — a slot's remaining room in words, and every refusal with a next step. */
-    seatsLeft:'{n} left', seatLast:'last seat', slotFull:'Full',
-    errSlotFull:'That time is fully booked — choose another slot',
-    errNoSlot:'That time is not one of the doctor\'s published slots — pick one of the listed times',
-    errOutsideSession:'That time is outside the doctor\'s session — pick a time inside it',
-    errBadDate:'That date is not valid — pick it again',
-    errBadTime:'That time is not valid — use hours:minutes',
-    errBadTransition:'This appointment cannot change that way — refresh the list',
-    errPatient:'That patient was not found — search again',
-    errDoctor:'That doctor was not found — choose again',
-    errBranch:'That branch was not found — choose another',
-    errNotFound:'That record was not found — refresh the list',
-    errNeedReason:'A reason is required', errForbidden:'This action is outside your permission',
-    errUnknown:'The server gave no reason — try again',
-    loadErr:'Could not load appointments',
-    detail:'Appointment', reason:'Cancellation reason', cancelTitle:'Cancel appointment',
-    cancelMsg:'Cancel this appointment? A reason is required.',
-    confirmCancel:'Confirm cancel', back:'Back', source:'Source',
-    weekTotal:'This week', dayTotal:'This day', capacity:'Capacity',
-    booked:'booked', walkOk:'Walk-in registered', search:'Search',
-    /* AMSDP-APPT-LIST-UX — the toolbar, the list view and its paging. */
-    subtitle:'Click an empty slot to book, a card to act on it',
-    searchAppt:'Patient name, mobile or token', filters:'Filters', allStatus:'All statuses',
-    branch:'Branch', allBranches:'All branches', clearFilters:'Clear filters',
-    noResults:'No appointments match', noResultsHint:'Try another date or filter',
-    showing:'Showing', pages:'Pages', prevPage:'Previous page', nextPage:'Next page',
-    pageSize:'Per page', loc:'Chamber', more:'{n} more', sortBy:'Sort by', total:'Total',
-    /* AMSDP-CALENDAR-FILTER-01 (D-2) — the search matched beyond these dates. */
-    weekMatches:'Matched this week', dayMatches:'Matched this day',
-    otherDates:'{n} more matches on {d} other dates',
-    /* AMSDP-CALENDAR-FILTER-01 — English inflects both numbers; `matchesBannerKey`
-       picks the sentence so the banner never reads "1 more matches on 1 other
-       dates" (browser verification S02). */
-    otherDatesOne:'1 more match on 1 other date',
-    otherDatesOneDate:'{n} more matches on 1 other date',
-    otherDatesTruncated:'(more dates than can be listed — open the list)',
-    gotoNearest:'Go to nearest date', seeAllMatches:'See all in the list',
-    searchingOtherDates:'Searching other dates…',
-    /* AMSDP-SYMPTOM-01 — the two optional questions the receptionist asks. */
-    sy:'Symptoms', syNone:'No symptom recorded', onset:'Problem started',
-    syPrompt:'What problems are you having?',
-    syPlaceholder:'Search a symptom — Bangla or English', syOptional:'optional',
-    sySelected:'Selected symptoms', syRemove:'Remove', syFreeText:'as described',
-    syAddFree:'Add this exactly as described',
-    syAlready:'That symptom is already selected', syFull:'No further symptoms can be added',
-    syHint:'Optional — record what the patient reports. This is not a diagnosis.',
-    syList:'Symptom suggestions', onsetPrompt:'When did the problem start?',
-    onsetNotAsked:'Not asked', onsetNote:'Short description',
-    onsetNotePlaceholder:'e.g. about four days, worse in the morning' },
-};
+/** Dynamic keys (server refusals, list views) share the `apt` namespace. */
+function aptKey(k) {
+  const s = String(k || '');
+  return 'apt' + s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+
 
 /** Bangla is the default locale and the AppShell toggle writes this key. */
 function locale() {
   if (typeof window === 'undefined') return 'bn';
   return sessionStorage.getItem('locale') || 'bn';
 }
-function T(key) {
-  const table = L[locale()] || L.bn;
-  return table[key] || L.bn[key] || key;
-}
-
 /**
  * Fill a `{token}` template, emphasising the values it substitutes.
  *
@@ -250,7 +95,7 @@ function fill(template, values) {
  * reported as unrecognised rather than pasted verbatim.
  */
 function refusalText(err) {
-  return T(REFUSAL_KEYS[refusalCode(err)] || 'errUnknown');
+  return t(aptKey(REFUSAL_KEYS[refusalCode(err)] || 'errUnknown'));
 }
 
 /* The lifecycle order the status filter offers. Labels and tones come from
@@ -288,7 +133,7 @@ function SortTh({ column, label, query, onSort }) {
   return (
     <th scope='col' aria-sort={ariaSort(query, column)} className={TH}>
       <button type='button' onClick={() => onSort(column)}
-        aria-label={label + ' — ' + T('sortBy')}
+        aria-label={label + ' — ' + t('aptSortBy')}
         className={'inline-flex items-center gap-1 border-0 bg-transparent p-0 uppercase '
           + 'tracking-wide hover:opacity-80 ' + (active ? 'font-bold' : '')}>
         {label}
@@ -322,14 +167,14 @@ function PatientSearch({ selected, onPick, onClear }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
         border:'1px solid #cfe0e9', background:'#eef4f8', borderRadius:4, padding:'0.45rem 0.6rem' }}>
         <span><strong>{selected.name}</strong>{selected.mobile ? ' · ' + selected.mobile : ''}</span>
-        <button type='button' className='btn btn-sm btn-outline' onClick={onClear}>{T('change')}</button>
+        <button type='button' className='btn btn-sm btn-outline' onClick={onClear}>{t('aptChange')}</button>
       </div>
     );
   }
   return (
     <div>
       <input value={query} onChange={(e) => setQuery(e.target.value)}
-        placeholder={T('searchPatient')} aria-label={T('searchPatient')} />
+        placeholder={t('aptSearchPatient')} aria-label={t('aptSearchPatient')} />
       {busy && <div className='loading' style={{ padding:'0.4rem' }}>…</div>}
       {rows.length > 0 && (
         <ul className='bns-list' style={{ position:'static', marginTop:4, maxHeight:180 }}>
@@ -346,7 +191,7 @@ function PatientSearch({ selected, onPick, onClear }) {
         </ul>
       )}
       {!busy && query.trim().length >= 2 && rows.length === 0 && (
-        <div className='empty' style={{ padding:'0.4rem' }}>{T('notFound')}</div>
+        <div className='empty' style={{ padding:'0.4rem' }}>{t('aptNotFound')}</div>
       )}
     </div>
   );
@@ -432,7 +277,7 @@ export default function Appointments() {
       const data = await apiFetch('/api/v1/appointments?' + gridParams);
       setAppointments(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(T('loadErr') + ': ' + String(e.message || e));
+      setError(t('aptLoadErr') + ': ' + String(e.message || e));
     } finally {
       setLoading(false);
     }
@@ -489,7 +334,7 @@ export default function Appointments() {
       .then((d) => { if (alive) { setList(parseEnvelope(d)); setListBusy(false); } })
       .catch((e) => {
         if (!alive) return;
-        setListError(T('loadErr') + ': ' + String(e.message || e));
+        setListError(t('aptLoadErr') + ': ' + String(e.message || e));
         setList({ items: [], total: 0, page: 1, limit, pages: 0 });
         setListBusy(false);
       });
@@ -626,9 +471,9 @@ export default function Appointments() {
 
   const saveBooking = async () => {
     if (!book) return;
-    if (!book.patient) { setBookError(T('needPatient')); return; }
-    if (!book.doctorId) { setBookError(T('needDoctor')); return; }
-    if (!book.date) { setBookError(T('needDate')); return; }
+    if (!book.patient) { setBookError(t('aptNeedPatient')); return; }
+    if (!book.doctorId) { setBookError(t('aptNeedDoctor')); return; }
+    if (!book.date) { setBookError(t('aptNeedDate')); return; }
     /* Q1: with no published slot the booking is an explicit outside-hours
        acceptance, so it carries the type and a reason.  A typed time is still
        recorded (it places the card on the day), but it is no longer presented or
@@ -637,10 +482,10 @@ export default function Appointments() {
     const unscheduled = mode === 'unscheduled';
     if (unscheduled) {
       const problem = overrideProblem({ reason: book.overrideReason });
-      if (problem) { setBookError(T(problem)); return; }
+      if (problem) { setBookError(t(aptKey(problem))); return; }
     }
     const time = (book.time || '').slice(0, 5);
-    if (!time && !unscheduled) { setBookError(T('needTime')); return; }
+    if (!time && !unscheduled) { setBookError(t('aptNeedTime')); return; }
     setSaving(true); setBookError('');
     try {
       const created = await apiFetch('/api/v1/appointments', {
@@ -662,11 +507,11 @@ export default function Appointments() {
         }),
       });
       const token = created && created.token_number;
-      setNotice(T('bookedOk') + (token ? ' — ' + T('tk') + ': ' + token : ''));
+      setNotice(t('aptBookedOk') + (token ? ' — ' + t('aptTk') + ': ' + token : ''));
       setBook(null);
       await refresh();
     } catch (e) {
-      setBookError(T('bookErr') + ': ' + refusalText(e));
+      setBookError(t('aptBookErr') + ': ' + refusalText(e));
     } finally {
       setSaving(false);
     }
@@ -679,7 +524,7 @@ export default function Appointments() {
       setDetail(null);
       await refresh();
     } catch (e) {
-      setError(T('actionErr') + ': ' + refusalText(e));
+      setError(t('aptActionErr') + ': ' + refusalText(e));
     }
   };
 
@@ -690,14 +535,14 @@ export default function Appointments() {
       setDetail(null);
       await refresh();
     } catch (e) {
-      setError(T('actionErr') + ': ' + refusalText(e));
+      setError(t('aptActionErr') + ': ' + refusalText(e));
     }
   };
 
   const registerWalkIn = async () => {
     if (!walk) return;
-    if (!walk.patient) { setBookError(T('needPatient')); return; }
-    if (!walk.doctorId) { setBookError(T('needDoctor')); return; }
+    if (!walk.patient) { setBookError(t('aptNeedPatient')); return; }
+    if (!walk.doctorId) { setBookError(t('aptNeedDoctor')); return; }
     setSaving(true); setBookError('');
     try {
       await apiFetch('/api/v1/appointments/walk-in', {
@@ -716,10 +561,10 @@ export default function Appointments() {
           symptom_onset_note: walk.onsetNote || '',
         }),
       });
-      setWalk(null); setNotice(T('walkOk'));
+      setWalk(null); setNotice(t('aptWalkOk'));
       await refresh();
     } catch (e) {
-      setBookError(T('bookErr') + ': ' + refusalText(e));
+      setBookError(t('aptBookErr') + ': ' + refusalText(e));
     } finally {
       setSaving(false);
     }
@@ -768,13 +613,13 @@ export default function Appointments() {
      symptoms and onset options; these are only the surrounding captions, which
      follow the page's existing `T()` convention. */
   const symptomLabels = {
-    title: T('sy'), optional: T('syOptional'), prompt: T('syPrompt'),
-    placeholder: T('syPlaceholder'), selected: T('sySelected'), none: T('syNone'),
-    remove: T('syRemove'), freeText: T('syFreeText'), addFree: T('syAddFree'),
-    alreadySelected: T('syAlready'), full: T('syFull'), hint: T('syHint'),
-    listLabel: T('syList'), onsetTitle: T('onsetPrompt'),
-    onsetNotAsked: T('onsetNotAsked'), onsetNote: T('onsetNote'),
-    onsetNotePlaceholder: T('onsetNotePlaceholder'),
+    title: t('aptSy'), optional: t('aptSyOptional'), prompt: t('aptSyPrompt'),
+    placeholder: t('aptSyPlaceholder'), selected: t('aptSySelected'), none: t('aptSyNone'),
+    remove: t('aptSyRemove'), freeText: t('aptSyFreeText'), addFree: t('aptSyAddFree'),
+    alreadySelected: t('aptSyAlready'), full: t('aptSyFull'), hint: t('aptSyHint'),
+    listLabel: t('aptSyList'), onsetTitle: t('aptOnsetPrompt'),
+    onsetNotAsked: t('aptOnsetNotAsked'), onsetNote: t('aptOnsetNote'),
+    onsetNotePlaceholder: t('aptOnsetNotePlaceholder'),
   };
 
   /**
@@ -798,7 +643,7 @@ export default function Appointments() {
     if (!list.length) return '-';
     return list.map((s) => (s.kind === 'catalogue'
       ? (locale() === 'en' ? (s.name_en || s.name_bn) : (s.name_bn || s.name_en))
-      : s.text + ' (' + T('syFreeText') + ')')).join(', ');
+      : s.text + ' (' + t('aptSyFreeText') + ')')).join(', ');
   };
 
   const onsetLine = (a) => {
@@ -817,8 +662,8 @@ export default function Appointments() {
     : [];
   /* One vocabulary for every status on this page: the badge, the filter options
      and the action buttons all read lib/status. */
-  const actionLabel = (act) => (act === 'CANCELLED' ? T('cc')
-    : act === 'CHECKED_IN' ? T('ci') : statusLabel(act, locale()));
+  const actionLabel = (act) => (act === 'CANCELLED' ? t('aptCc')
+    : act === 'CHECKED_IN' ? t('aptCi') : statusLabel(act, locale()));
 
   /* --- the list view's derived handles ------------------------------------ */
   /** The list payload already carries the patient's name; no lookup needed. */
@@ -843,13 +688,13 @@ export default function Appointments() {
 
   return (
     <RequireLogin>
-      <AppShell active='/appointments' breadcrumbs={[{ label: T('t') }]}>
+      <AppShell active='/appointments' breadcrumbs={[{ label: t('aptT') }]}>
         <div>
           <PageHeader
-            title={T('t')}
-            subtitle={T('subtitle')}
+            title={t('aptT')}
+            subtitle={t('aptSubtitle')}
             meta={<>
-              <span>{T('view')}: <strong>{T(view)}</strong></span>
+              <span>{t('aptView')}: <strong>{t(aptKey(view))}</strong></span>
               <span>{gridView === 'day'
                 ? formatDayLong(anchor, locale())
                 : formatRange(range.from, range.to, locale())}</span>
@@ -861,26 +706,26 @@ export default function Appointments() {
                   would describe a total the grid is no longer showing. */}
               {view !== 'list' && (
                 <span>{(gridView === 'day'
-                  ? (searchActive ? T('dayMatches') : T('dayTotal'))
-                  : (searchActive ? T('weekMatches') : T('weekTotal')))}{' '}
+                  ? (searchActive ? t('aptDayMatches') : t('aptDayTotal'))
+                  : (searchActive ? t('aptWeekMatches') : t('aptWeekTotal')))}{' '}
                   {appointments.length}</span>
               )}
             </>}
             actions={<>
-              <Button variant='outline' size='sm' aria-label={T('prev')}
+              <Button variant='outline' size='sm' aria-label={t('aptPrev')}
                 onClick={() => setAnchor(shiftAnchor(gridView, anchor, -1))}>‹</Button>
               <Button variant='outline' size='sm'
-                onClick={() => setAnchor(today)}>{T('today')}</Button>
-              <Button variant='outline' size='sm' aria-label={T('next')}
+                onClick={() => setAnchor(today)}>{t('aptToday')}</Button>
+              <Button variant='outline' size='sm' aria-label={t('aptNext')}
                 onClick={() => setAnchor(shiftAnchor(gridView, anchor, 1))}>›</Button>
-              <div role='group' aria-label={T('view')} className='flex'>
+              <div role='group' aria-label={t('aptView')} className='flex'>
                 {['week', 'day', 'list'].map((v) => (
                   <Button key={v} size='sm' aria-pressed={view === v}
                     variant={view === v ? 'primary' : 'outline'}
-                    onClick={() => setView(v)}>{T(v)}</Button>
+                    onClick={() => setView(v)}>{t(aptKey(v))}</Button>
                 ))}
               </div>
-              {canBook && <Button size='sm' onClick={() => openBooking()}>{T('bk')}</Button>}
+              {canBook && <Button size='sm' onClick={() => openBooking()}>{t('aptBk')}</Button>}
               {canBook && (
                 <Button size='sm' variant='outline'
                   onClick={() => {
@@ -890,17 +735,17 @@ export default function Appointments() {
                          published session — then the server requires it. */
                       reason: '',
                       symptoms: { ids: [], texts: [] }, onset: '', onsetNote: '' });
-                  }}>{T('wi')}</Button>
+                  }}>{t('aptWi')}</Button>
               )}
             </>}
           />
 
-          <Toolbar label={T('filters')} end={<>
+          <Toolbar label={t('aptFilters')} end={<>
             {isFiltered(query) && (
-              <Button size='sm' variant='ghost' onClick={resetFilters}>{T('clearFilters')}</Button>
+              <Button size='sm' variant='ghost' onClick={resetFilters}>{t('aptClearFilters')}</Button>
             )}
             {view === 'list' && (
-              <Filter label={T('pageSize')} htmlFor='appt-page-size' className='w-24'>
+              <Filter label={t('aptPageSize')} htmlFor='appt-page-size' className='w-24'>
                 <Select id='appt-page-size' value={query.limit}
                   onChange={(e) => setQuery((q) => setLimit(q, Number(e.target.value)))}>
                   {LIST_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -909,29 +754,29 @@ export default function Appointments() {
             )}
           </>}>
             <SearchInput id='appt-search' value={searchText} onChange={setSearchText}
-              placeholder={T('searchAppt')} label={T('searchAppt')}
+              placeholder={t('aptSearchAppt')} label={t('aptSearchAppt')}
               className='w-full sm:w-72' />
-            <Filter label={T('d')} htmlFor='appt-doctor' className='w-44'>
+            <Filter label={t('aptD')} htmlFor='appt-doctor' className='w-44'>
               <Select id='appt-doctor' value={doctorId}
                 onChange={(e) => setDoctor(e.target.value)}>
-                <option value=''>{T('allDoctors')}</option>
+                <option value=''>{t('aptAllDoctors')}</option>
                 {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
             </Filter>
-            <Filter label={T('st')} htmlFor='appt-status' className='w-44'>
+            <Filter label={t('aptSt')} htmlFor='appt-status' className='w-44'>
               <Select id='appt-status' value={query.status}
                 onChange={(e) => setQuery((q) => setFilter(q, 'status', e.target.value))}>
-                <option value=''>{T('allStatus')}</option>
+                <option value=''>{t('aptAllStatus')}</option>
                 {LIFECYCLE.map((s) => (
                   <option key={s} value={s}>{statusLabel(s, locale())}</option>
                 ))}
               </Select>
             </Filter>
             {branches.length > 1 && (
-              <Filter label={T('branch')} htmlFor='appt-branch' className='w-44'>
+              <Filter label={t('aptBranch')} htmlFor='appt-branch' className='w-44'>
                 <BranchSelect id='appt-branch' branches={branches} value={query.branch_id}
                   onChange={(v) => setQuery((q) => setFilter(q, 'branch_id', v))}
-                  allowAll allLabel={T('allBranches')} label={T('branch')} />
+                  allowAll allLabel={t('aptAllBranches')} label={t('aptBranch')} />
               </Filter>
             )}
           </Toolbar>
@@ -943,22 +788,22 @@ export default function Appointments() {
               that the calendar has not been authorised to fetch. */}
           {view !== 'list' && matchesSummary && matchesSummary.outOfRange > 0 && (
             <div className='appt-matches' role='status' aria-live='polite'>
-              <span>{withNumbers(T(matchesBannerKey(matchesSummary)),
+              <span>{withNumbers(t(aptKey(matchesBannerKey(matchesSummary))),
                 { n: matchesSummary.outOfRange, d: matchesSummary.otherDateCount })}</span>
-              {matchesSummary.truncated && <span>{T('otherDatesTruncated')}</span>}
+              {matchesSummary.truncated && <span>{t('aptOtherDatesTruncated')}</span>}
               {nearestOther && (
                 <Button size='sm' variant='outline'
                   onClick={() => setAnchor(nearestOther)}>
-                  {T('gotoNearest')} — {formatDayLong(nearestOther, locale())}
+                  {t('aptGotoNearest')} — {formatDayLong(nearestOther, locale())}
                 </Button>
               )}
               <Button size='sm' variant='ghost' onClick={() => setView('list')}>
-                {T('seeAllMatches')}
+                {t('aptSeeAllMatches')}
               </Button>
             </div>
           )}
           {view !== 'list' && matchesBusy && (
-            <div className='sr-only' role='status' aria-live='polite'>{T('searchingOtherDates')}</div>
+            <div className='sr-only' role='status' aria-live='polite'>{t('aptSearchingOtherDates')}</div>
           )}
 
           {notice && <div className='success'>{notice}</div>}
@@ -968,12 +813,12 @@ export default function Appointments() {
             <div>
               {listError && <div className='error' role='alert'>{listError}</div>}
               {list.items === null && listBusy ? (
-                <div className='loading'>{T('loading')}</div>
+                <div className='loading'>{t('aptLoading')}</div>
               ) : listError && pageItems.length === 0 ? null : list.total === 0 ? (
-                <EmptyState icon={SearchIcon} title={T('noResults')} hint={T('noResultsHint')}
+                <EmptyState icon={SearchIcon} title={t('aptNoResults')} hint={t('aptNoResultsHint')}
                   action={isFiltered(query) ? (
                     <Button size='sm' variant='outline'
-                      onClick={resetFilters}>{T('clearFilters')}</Button>
+                      onClick={resetFilters}>{t('aptClearFilters')}</Button>
                   ) : undefined} />
               ) : (
                 <>
@@ -981,13 +826,13 @@ export default function Appointments() {
                     <table className='w-full border-collapse text-sm'>
                       <thead>
                         <tr className='border-b border-border'>
-                          <Th label={T('tk')} />
-                          <SortTh column='patient' label={T('p')} query={query} onSort={sortBy} />
-                          <SortTh column='doctor' label={T('d')} query={query} onSort={sortBy} />
-                          <SortTh column='date' label={T('dt')} query={query} onSort={sortBy} />
-                          <Th label={T('tm')} />
-                          <SortTh column='status' label={T('st')} query={query} onSort={sortBy} />
-                          <Th label={T('actions')} />
+                          <Th label={t('aptTk')} />
+                          <SortTh column='patient' label={t('aptP')} query={query} onSort={sortBy} />
+                          <SortTh column='doctor' label={t('aptD')} query={query} onSort={sortBy} />
+                          <SortTh column='date' label={t('aptDt')} query={query} onSort={sortBy} />
+                          <Th label={t('aptTm')} />
+                          <SortTh column='status' label={t('aptSt')} query={query} onSort={sortBy} />
+                          <Th label={t('aptActions')} />
                         </tr>
                       </thead>
                       <tbody>
@@ -1029,7 +874,7 @@ export default function Appointments() {
                                       CHECKED_IN supplies the button above. */}
                                   {!(ACTIONS[a.status] || []).includes('CHECKED_IN') && (
                                     <Button size='sm' variant='outline'
-                                      onClick={() => checkIn(a)}>{T('ci')}</Button>
+                                      onClick={() => checkIn(a)}>{t('aptCi')}</Button>
                                   )}
                                 </div>
                               </td>
@@ -1042,24 +887,24 @@ export default function Appointments() {
 
                   <div className='mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground'>
                     <span role='status' aria-live='polite'>
-                      {T('showing')} {firstRow}–{lastRow} · {T('total')}{' '}
+                      {t('aptShowing')} {firstRow}–{lastRow} · {t('aptTotal')}{' '}
                       <strong>{list.total}</strong>
                     </span>
-                    <nav aria-label={T('pages')} className='flex items-center gap-1'>
+                    <nav aria-label={t('aptPages')} className='flex items-center gap-1'>
                       <Button size='sm' variant='outline' disabled={list.page <= 1}
-                        aria-label={T('prevPage')}
+                        aria-label={t('aptPrevPage')}
                         onClick={() => setQuery((q) => setPage(q, list.page - 1))}>‹</Button>
                       {pageWin.truncatedStart ? <span aria-hidden='true' className='px-1'>…</span> : null}
                       {pageWin.numbers.map((n) => (
                         <Button key={n} size='sm'
                           variant={n === list.page ? 'primary' : 'outline'}
                           aria-current={n === list.page ? 'page' : undefined}
-                          aria-label={T('pages') + ' ' + n}
+                          aria-label={t('aptPages') + ' ' + n}
                           onClick={() => setQuery((q) => setPage(q, n))}>{n}</Button>
                       ))}
                       {pageWin.truncatedEnd ? <span aria-hidden='true' className='px-1'>…</span> : null}
                       <Button size='sm' variant='outline' disabled={list.page >= list.pages}
-                        aria-label={T('nextPage')}
+                        aria-label={t('aptNextPage')}
                         onClick={() => setQuery((q) => setPage(q, list.page + 1))}>›</Button>
                     </nav>
                   </div>
@@ -1067,7 +912,7 @@ export default function Appointments() {
               )}
             </div>
           ) : loading ? (
-            <div className='loading'>{T('loading')}</div>
+            <div className='loading'>{t('aptLoading')}</div>
           ) : (
             <AppointmentCalendar
               dates={range.dates}
@@ -1075,12 +920,12 @@ export default function Appointments() {
               schedules={scopedSchedules}
               today={today}
               lang={locale()}
-              labels={{ time: T('tm'), full: T('full'), closed: T('closed'),
-                past: T('past'), bookAt: T('bk'), grid: T('t'), more: T('more'),
+              labels={{ time: t('aptTm'), full: t('aptFull'), closed: t('aptClosed'),
+                past: t('aptPast'), bookAt: t('aptBk'), grid: t('aptT'), more: t('aptMore'),
                 /* Q1: a walk-in or outside-hours card says so on its face, so it
                    can never be read as an ordinary confirmed slot. */
-                typeWalkIn: T(typeBadgeKey('walk_in')),
-                typeUnscheduled: T(typeBadgeKey('unscheduled')) }}
+                typeWalkIn: t(aptKey(typeBadgeKey('walk_in'))),
+                typeUnscheduled: t(aptKey(typeBadgeKey('unscheduled'))) }}
               patientName={patientName}
               doctorName={(a) => a.doctor_name || doctorName(a.doctor_id)}
               /* The committed search term, not the keystroke buffer: what is
@@ -1095,67 +940,67 @@ export default function Appointments() {
           )}
 
           {book && (
-            <Modal title={T('bk')} onClose={() => setBook(null)}
+            <Modal title={t('aptBk')} onClose={() => setBook(null)}
               footer={<>
                 <button type='button' className='btn-outline'
-                  onClick={() => setBook(null)}>{T('back')}</button>
+                  onClick={() => setBook(null)}>{t('aptBack')}</button>
                 <button type='button' className='btn' disabled={saving}
-                  onClick={saveBooking}>{saving ? T('saving') : T('save')}</button>
+                  onClick={saveBooking}>{saving ? t('aptSaving') : t('aptSave')}</button>
               </>}>
               {bookError && <div className='error'>{bookError}</div>}
               <div className='form-group'>
-                <label>{T('p')}</label>
+                <label>{t('aptP')}</label>
                 <PatientSearch selected={book.patient}
                   onPick={(p) => setBook({ ...book, patient: p })}
                   onClear={() => setBook({ ...book, patient: null })} />
               </div>
               <div className='form-group'>
-                <label>{T('d')}</label>
-                <select value={book.doctorId} aria-label={T('d')}
+                <label>{t('aptD')}</label>
+                <select value={book.doctorId} aria-label={t('aptD')}
                   onChange={(e) => setBook({ ...book, doctorId: e.target.value, time: '' })}>
                   <option value=''>—</option>
                   {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div className='form-group'>
-                <label>{T('dt')}</label>
-                <input type='date' value={book.date} aria-label={T('dt')}
+                <label>{t('aptDt')}</label>
+                <input type='date' value={book.date} aria-label={t('aptDt')}
                   onChange={(e) => setBook({ ...book, date: e.target.value, time: '' })} />
               </div>
               <div className='form-group'>
-                <label>{T('chooseSlot')}</label>
+                <label>{t('aptChooseSlot')}</label>
                 {slotChoices.length === 0 ? (
                   <>
                     <div style={{ fontSize:'0.8rem', color:'#8a6d00', marginBottom:4 }}>
-                      {T('noSlots')}
+                      {t('aptNoSlots')}
                     </div>
                     {/* F-18 — the free-text field is a walk-in fallback, not a
                         slot, and the dialog says what the booking will then be.
                         Keeping the field is the documented current behaviour
                         (owner decision Q1 on outside-session bookings is still
                         open); presenting it as equivalent to a slot is not. */}
-                    <input type='time' value={book.time} aria-label={T('tm')}
+                    <input type='time' value={book.time} aria-label={t('aptTm')}
                       onChange={(e) => setBook({ ...book, time: e.target.value })} />
                     <div style={{ fontSize:'0.75rem', color:'#8a6d00', marginTop:4 }}>
-                      {T('noSlotsHint')}
+                      {t('aptNoSlotsHint')}
                     </div>
                   </>
                 ) : (
-                  <div className='flex flex-wrap' role='radiogroup' aria-label={T('chooseSlot')}
+                  <div className='flex flex-wrap' role='radiogroup' aria-label={t('aptChooseSlot')}
                     style={{ maxHeight: 190, overflowY: 'auto' }}>
                     {slotChoices.map((s) => {
                       /* F-19 — a full or nearly full slot says so in words; the
                          arithmetic alone read the same at 3/4 and 4/4. */
                       const word = seatsWord(s);
                       const seats = word
-                        ? fill(T(word.key), { n: word.n })
+                        ? fill(t(aptKey(word.key)), { n: word.n })
                         : s.booked + '/' + s.capacity;
                       return (
                         <button key={s.start} type='button' role='radio'
                           aria-checked={book.time === s.start} disabled={s.full}
                           className={'btn btn-sm' + (book.time === s.start ? '' : ' btn-outline')}
                           style={{ opacity: s.full ? 0.45 : 1, margin: 1 }}
-                          title={T('capacity') + ': ' + s.capacity + ' · ' + seats}
+                          title={t('aptCapacity') + ': ' + s.capacity + ' · ' + seats}
                           onClick={() => setBook({ ...book, time: s.start })}>
                           {s.start}{' '}
                           <span style={{ fontSize: '0.68rem' }}>{seats}</span>
@@ -1171,20 +1016,20 @@ export default function Appointments() {
                   the server refuse a booking the dialog already knew was special. */}
               {bookingMode(slotChoices).requiresReason ? (
                 <div className='form-group'>
-                  <label htmlFor='book-override-reason'>{T('overrideReason')}</label>
+                  <label htmlFor='book-override-reason'>{t('aptOverrideReason')}</label>
                   <input id='book-override-reason' value={book.overrideReason || ''}
-                    aria-label={T('overrideReason')}
-                    placeholder={T('overrideReasonPlaceholder')}
+                    aria-label={t('aptOverrideReason')}
+                    placeholder={t('aptOverrideReasonPlaceholder')}
                     aria-describedby='book-override-hint'
                     onChange={(e) => setBook({ ...book, overrideReason: e.target.value })} />
-                  <small id='book-override-hint' className='muted'>{T('overrideHint')}</small>
+                  <small id='book-override-hint' className='muted'>{t('aptOverrideHint')}</small>
                 </div>
               ) : null}
               {/* F-19 — a day whose slots are all full is stated, not left to a row
                   of equally grey buttons. */}
               {bookingMode(slotChoices).mode === 'allFull' ? (
                 <div style={{ fontSize: '0.78rem', color: '#8a6d00' }}>
-                  {T('allFullHint')}
+                  {t('aptAllFullHint')}
                 </div>
               ) : null}
               {/* AMSDP-SYMPTOM-01 — optional, empty by default, and the
@@ -1207,15 +1052,15 @@ export default function Appointments() {
                 onChange={(code) => setBook({ ...book, onset: code, onsetNote: code ? book.onsetNote : '' })}
                 onNoteChange={(text) => setBook({ ...book, onsetNote: text })} />
               <div className='form-group'>
-                <label>{T('notes')}</label>
-                <input value={book.notes} aria-label={T('notes')}
+                <label>{t('aptNotes')}</label>
+                <input value={book.notes} aria-label={t('aptNotes')}
                   onChange={(e) => setBook({ ...book, notes: e.target.value })} />
               </div>
             </Modal>
           )}
 
           {detail && (
-            <Modal title={T('detail')} onClose={() => setDetail(null)}
+            <Modal title={t('aptDetail')} onClose={() => setDetail(null)}
               footer={<>
                 {(ACTIONS[detail.status] || []).map((act) => (
                   <button key={act} type='button'
@@ -1227,26 +1072,26 @@ export default function Appointments() {
                 ))}
                 {!(ACTIONS[detail.status] || []).includes('CHECKED_IN') && (
                   <button type='button' className='btn btn-outline'
-                    onClick={() => checkIn(detail)}>{T('ci')}</button>
+                    onClick={() => checkIn(detail)}>{t('aptCi')}</button>
                 )}
                 <button type='button' className='btn-outline'
-                  onClick={() => setDetail(null)}>{T('back')}</button>
+                  onClick={() => setDetail(null)}>{t('aptBack')}</button>
               </>}>
               <table style={{ boxShadow: 'none' }}>
                 <tbody>
-                  {[[T('p'), patientName(detail)], [T('d'), doctorName(detail.doctor_id)],
-                    [T('dt'), detail.appointment_date], [T('tm'), detail.start_time || '-'],
-                    [T('tk'), detail.token_number || '-'],
-                    [T('st'), <StatusBadge key='st' status={detail.status} size='sm' />],
+                  {[[t('aptP'), patientName(detail)], [t('aptD'), doctorName(detail.doctor_id)],
+                    [t('aptDt'), detail.appointment_date], [t('aptTm'), detail.start_time || '-'],
+                    [t('aptTk'), detail.token_number || '-'],
+                    [t('aptSt'), <StatusBadge key='st' status={detail.status} size='sm' />],
                     // Q1: the persisted type is always stated, and an outside-hours
                     // acceptance always shows the reason it was recorded with.
-                    [T('typeLabel'), T(typeLabelKey(detail.appointment_type))],
-                    [T('overrideReasonLabel'), detail.override_reason || '-'],
-                    [T('loc'), detail.location_label || '-'],
-                    [T('source'), detail.booking_source || '-'],
-                    [T('sy'), symptomLine(detail)],
-                    [T('onset'), onsetLine(detail)],
-                    [T('notes'), detail.notes || '-']].map(([label, value]) => (
+                    [t('aptTypeLabel'), t(aptKey(typeLabelKey(detail.appointment_type)))],
+                    [t('aptOverrideReasonLabel'), detail.override_reason || '-'],
+                    [t('aptLoc'), detail.location_label || '-'],
+                    [t('aptSource'), detail.booking_source || '-'],
+                    [t('aptSy'), symptomLine(detail)],
+                    [t('aptOnset'), onsetLine(detail)],
+                    [t('aptNotes'), detail.notes || '-']].map(([label, value]) => (
                     <tr key={label}>
                       <td style={{ fontWeight: 600, background: '#f6f9fc', width: '38%' }}>{label}</td>
                       <td>{value}</td>
@@ -1258,7 +1103,7 @@ export default function Appointments() {
           )}
 
           {cancelTarget && (
-            <ConfirmDialog title={T('cancelTitle')} message={T('cancelMsg')} requireReason
+            <ConfirmDialog title={t('aptCancelTitle')} message={t('aptCancelMsg')} requireReason
               onConfirm={(reason) => {
                 const target = cancelTarget;
                 setCancelTarget(null);
@@ -1268,23 +1113,23 @@ export default function Appointments() {
           )}
 
           {walk && (
-            <Modal title={T('wi')} onClose={() => setWalk(null)}
+            <Modal title={t('aptWi')} onClose={() => setWalk(null)}
               footer={<>
                 <button type='button' className='btn-outline'
-                  onClick={() => setWalk(null)}>{T('back')}</button>
+                  onClick={() => setWalk(null)}>{t('aptBack')}</button>
                 <button type='button' className='btn' disabled={saving}
-                  onClick={registerWalkIn}>{saving ? T('saving') : T('save')}</button>
+                  onClick={registerWalkIn}>{saving ? t('aptSaving') : t('aptSave')}</button>
               </>}>
               {bookError && <div className='error'>{bookError}</div>}
               <div className='form-group'>
-                <label>{T('p')}</label>
+                <label>{t('aptP')}</label>
                 <PatientSearch selected={walk.patient}
                   onPick={(p) => setWalk({ ...walk, patient: p })}
                   onClear={() => setWalk({ ...walk, patient: null })} />
               </div>
               <div className='form-group'>
-                <label>{T('d')}</label>
-                <select value={walk.doctorId} aria-label={T('d')}
+                <label>{t('aptD')}</label>
+                <select value={walk.doctorId} aria-label={t('aptD')}
                   onChange={(e) => setWalk({ ...walk, doctorId: e.target.value })}>
                   <option value=''>—</option>
                   {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -1308,18 +1153,18 @@ export default function Appointments() {
                 onChange={(code) => setWalk({ ...walk, onset: code, onsetNote: code ? walk.onsetNote : '' })}
                 onNoteChange={(text) => setWalk({ ...walk, onsetNote: text })} />
               <div className='form-group'>
-                <label htmlFor='walk-reason'>{T('walkInReason')}</label>
+                <label htmlFor='walk-reason'>{t('aptWalkInReason')}</label>
                 <input id='walk-reason' value={walk.reason || ''}
-                  aria-label={T('walkInReason')}
-                  placeholder={T('overrideReasonPlaceholder')}
+                  aria-label={t('aptWalkInReason')}
+                  placeholder={t('aptOverrideReasonPlaceholder')}
                   aria-describedby='walk-reason-hint'
                   onChange={(e) => setWalk({ ...walk, reason: e.target.value })} />
                 {/* Q1: why the field exists, said before the refusal happens. */}
-                <small id='walk-reason-hint' className='muted'>{T('walkInHint')}</small>
+                <small id='walk-reason-hint' className='muted'>{t('aptWalkInHint')}</small>
               </div>
               <div className='form-group'>
-                <label>{T('notes')}</label>
-                <input value={walk.notes} aria-label={T('notes')}
+                <label>{t('aptNotes')}</label>
+                <input value={walk.notes} aria-label={t('aptNotes')}
                   onChange={(e) => setWalk({ ...walk, notes: e.target.value })} />
               </div>
             </Modal>

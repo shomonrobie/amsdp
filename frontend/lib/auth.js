@@ -20,7 +20,7 @@ export function can(perm) {
   if (u.role === 'super_admin') return true;
   const perms = {
     super_admin: ['*'],
-    org_admin: ['org.manage', 'staff.manage', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
+    org_admin: ['org.manage', 'staff.read', 'staff.manage', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
       // AMSDP-FACILITY-DOCTOR-01 — floors / departments / rooms / specialities
       'facility.read', 'facility.manage',
       // AMSDP-SYMPTOM-01 — the bilingual symptom catalogue

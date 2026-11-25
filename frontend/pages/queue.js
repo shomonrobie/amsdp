@@ -10,7 +10,9 @@ import QueueAnnouncements, { useQueueAnnouncements } from '../components/queue/Q
 import { trackCalledTransitions } from '../lib/announcements/queue-transitions';
 import { createCallAnnouncer } from '../lib/announcements/call-announcer';
 import { createQueueRefresher } from '../lib/queue/queue-refresh';
-import { createCallGate, isCallable, performCall } from '../lib/queue/queue-call';
+import { createCallGate, isCallable, isRecallable, performCall, RECALL_ACTION } from '../lib/queue/queue-call';
+import { buildEnqueueBody, effectivePolicy, needsPosition, policyLabelKey } from '../lib/queue/walk-in';
+import { moveWithin, positionLabel, reorderRowProps } from '../lib/a11y';
 import { getUser, apiFetch, can, getActiveBranch } from '../lib/auth';
 import { t } from '../lib/i18n';
 
@@ -19,7 +21,6 @@ const ST_LABELS = {
   waiting: 'waitingKey', called: 'calledKey', in_consultation: 'inConsultationKey', skipped: 'skippedKey',
   completed: 'completedKey', cancelled: 'cancelledKey', no_show: 'noShowKey',
 };
-const WALK_POLICIES = ['end_of_queue', 'first_come', 'reserved_capacity', 'staff_placement'];
 
 export default function Queue(){
   const user = getUser();
@@ -36,7 +37,11 @@ export default function Queue(){
   const [showWi, setShowWi] = React.useState(false);
   const [ciAppt, setCiAppt] = React.useState('');
   const [wiPat, setWiPat] = React.useState('');
-  const [wiPolicy, setWiPolicy] = React.useState('end_of_queue');
+  // MP-10 / BR §25 — the facility's walk-in placement policy, read from the
+  // server. The form never chooses it; where the policy is `staff_placement`
+  // the operator is asked for the position, which the server validates.
+  const [placement, setPlacement] = React.useState(null);
+  const [wiPosition, setWiPosition] = React.useState('');
   const [cancelTarget, setCancelTarget] = React.useState(null);
   // Sequence 3 / BR §27A — missed-turn + recovery state
   const [missedTarget, setMissedTarget] = React.useState(null);
@@ -46,6 +51,9 @@ export default function Queue(){
   const [recoverReason, setRecoverReason] = React.useState('');
   const [busy, setBusy] = React.useState('');
   const [notice, setNotice] = React.useState('');
+  // MP-29: a reorder moves a row the user cannot see moving — the list is
+  // re-read from the server. The new position is announced instead of shown.
+  const [announce, setAnnounce] = React.useState('');
   // QUE-006 / POD-12 — the entry whose `call` request is in flight, if any.
   const [calling, setCalling] = React.useState('');
   // QUE-006 / W2 — the last delivery-claim result, shown as a quiet note (it is
@@ -245,6 +253,36 @@ export default function Queue(){
     }
   };
 
+  // MP-08 — recall: call a patient who is already `called`, again.
+  //
+  // The server refuses a repeated `call` from `called` with 422, deliberately,
+  // so a retried or double-submitted request cannot produce a second
+  // announcement. A real recall is therefore its own action (`recall`), gated by
+  // the same permission and sharing the same single-flight gate. Nothing about
+  // the announcement changes: the refetch publishes a new `call_event_id`, and
+  // the tracker (lib/announcements/queue-transitions.js) treats a new event as a
+  // new call even though the status never left `called`.
+  const recallEntry = async (entry) => {
+    if (!canCall || !isRecallable(entry)) return;   // UI mirror; the server decides
+    if (callGate.current.current()) return;         // one call at a time
+    setCalling(entry.id); setError(''); setNotice('');
+    const result = await performCall({
+      entry,
+      authorised: canCall,
+      gate: callGate.current,
+      action: RECALL_ACTION,
+      request: (id, payload) => apiFetch('/api/v1/queue/' + id,
+        { method: 'PATCH', body: JSON.stringify(payload) }),
+    });
+    setCalling('');
+    if (result.status === 'called') {
+      setNotice(t('recalledNotice'));
+      loadQueue();
+    } else if (result.status === 'failed') {
+      setError(t('recallFailed') + ': ' + ((result.error && result.error.message) || result.error));
+    }
+  };
+
   const doAction = async (id, action, reason) => {
     try {
       await apiFetch('/api/v1/queue/' + id, { method: 'PATCH', body: JSON.stringify({ action, reason: reason || '' }) });
@@ -259,10 +297,30 @@ export default function Queue(){
   };
 
   const walkIn = async () => {
+    // MP-10: the body is built by `lib/queue/walk-in.js` — it never carries a
+    // policy, and carries a position only where the facility asks staff for one.
+    const built = buildEnqueueBody({
+      doctorId: docId, patientId: wiPat, config: placement, position: wiPosition,
+    });
+    if (!built.ok) {
+      setError(built.error === 'position_required' ? t('positionRequired') : t('select'));
+      return;
+    }
     try { await apiFetch('/api/v1/queue/enqueue', { method: 'POST',
-      body: JSON.stringify({ doctor_id: docId, patient_id: wiPat, entry_source: 'walk_in', walk_in_policy: wiPolicy }) });
-      setShowWi(false); setWiPat(''); loadQueue(); }
+      body: JSON.stringify(built.body) });
+      setShowWi(false); setWiPat(''); setWiPosition(''); loadQueue(); }
     catch (e) { setError('Walk-in failed: ' + e.message); }
+  };
+
+  // MP-10 / BR §25 — read the facility's placement policy when the walk-in form
+  // opens. A failed read is not fatal: the form then sends no policy (there is
+  // no field any more) and the server applies the facility's setting anyway.
+  const openWalkIn = () => {
+    setError(''); setWiPosition(''); setShowWi(true);
+    if (!user.organization_id) return;
+    apiFetch('/api/v1/orgs/' + encodeURIComponent(user.organization_id) + '/walk-in-config')
+      .then((cfg) => setPlacement(cfg))
+      .catch(() => setPlacement(null));
   };
 
   // Sequence 3 / BR §27A — staff-confirmed missed turn. The token and the
@@ -305,13 +363,20 @@ export default function Queue(){
   };
 
   const move = async (idx, dir) => {
+    // MP-29: the index must be a real position. Before this change the table
+    // handed the cell renderer only the row, so `idx` was `undefined`, the swap
+    // wrote `undefined` into `entry_ids`, and every reorder was refused by the
+    // server. A missing index is now a no-op instead of a corrupt payload.
     const ids = entries.map((e) => e.id);
-    const j = idx + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[idx], ids[j]] = [ids[j], ids[idx]];
-    try { await apiFetch('/api/v1/queue/reorder', { method: 'POST',
-      body: JSON.stringify({ entry_ids: ids, reason: dir < 0 ? 'manual_move_up' : 'manual_move_down' }) });
-      loadQueue(); }
+    const next = moveWithin(ids, idx, dir);
+    if (!next.moved) return;
+    try {
+      await apiFetch('/api/v1/queue/reorder', { method: 'POST',
+        body: JSON.stringify({ entry_ids: next.list,
+          reason: dir < 0 ? 'manual_move_up' : 'manual_move_down' }) });
+      setAnnounce(t('movedTo') + ' ' + positionLabel(next.to, ids.length));
+      loadQueue();
+    }
     catch (e) { setError('Reorder failed: ' + e.message); }
   };
 
@@ -325,7 +390,7 @@ return (
           {canManage && (
             <div className="flex items-center gap-2">
               <button className="btn" onClick={() => setShowCi(true)}>{t('checkIn')}</button>
-              <button className="btn" onClick={() => setShowWi(true)}>{t('walkIn')}</button>
+              <button className="btn" onClick={openWalkIn}>{t('walkIn')}</button>
             </div>
           )}
         </div>
@@ -340,9 +405,15 @@ return (
         {error && <ErrorAlert>{error}</ErrorAlert>}
         {notice && <SuccessAlert>{notice}</SuccessAlert>}
         <QueueAnnouncements controller={announcements} canAnnounce={canAnnounce} delivery={delivery} />
+        <p className="sr-only" role="status" aria-live="polite">{announce}</p>
         {loading ? <LoadingState /> : entries.length === 0 ? <EmptyState msg={t('empty')} /> : (
           <div className="table-wrap">
             <DataTable rowKey="id" rows={entries}
+              rowProps={(r, i) => reorderRowProps({
+                index: i, total: entries.length, canMove: !!canManage,
+                label: t('token') + ' ' + r.token,
+                onMove: move,
+              })}
               columns={[
                 { key: 'position', label: '#' },
                 { key: 'token', label: t('token') },
@@ -352,12 +423,22 @@ return (
                   {r.status === 'skipped' && <span className="org-ctx"> {t('awaitingRecovery')}</span>}</span>), label: t('status') },
                 { render: (r, i) => (
                   <div className="flex flex-wrap">
-                    {canManage && <><button className="btn btn-sm btn-outline" onClick={() => move(i, -1)}>↑</button>
-                      <button className="btn btn-sm btn-outline" onClick={() => move(i, 1)}>↓</button></>}
+                    {canManage && <><button className="btn btn-sm btn-outline"
+                      aria-label={t('moveUp') + ' ' + r.token}
+                      disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                      <button className="btn btn-sm btn-outline"
+                        aria-label={t('moveDown') + ' ' + r.token}
+                        disabled={i === entries.length - 1} onClick={() => move(i, 1)}>↓</button></>}
                     {canCall && isCallable(r) && (
                       <button className="btn btn-sm" disabled={!!busy || !!calling}
                         onClick={() => callEntry(r)}>
                         {calling === r.id ? t('pleaseWait') : t('call')}
+                      </button>
+                    )}
+                    {canCall && isRecallable(r) && (
+                      <button className="btn btn-sm btn-outline" disabled={!!busy || !!calling}
+                        onClick={() => recallEntry(r)}>
+                        {calling === r.id ? t('pleaseWait') : t('recall')}
                       </button>
                     )}
                     {canConsult && r.status === 'waiting' && <button className="btn btn-sm" onClick={() => doAction(r.id, 'start_consultation')}>{t('start')}</button>}
@@ -404,10 +485,16 @@ return (
                 <option value="">{t('select')}...</option>
                 {patients.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.mobile})</option>)}
               </select></div>
-            <div className="form-group"><label>{t('policy')}</label>
-              <select value={wiPolicy} onChange={(e) => setWiPolicy(e.target.value)}>
-                {WALK_POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select></div>
+            {/* MP-10 / BR §25 — the placement policy is the facility's, so it is
+                shown, not chosen. Where it is staff placement the operator is
+                asked for the position; the server validates the range. */}
+            <div className="form-group"><label>{t('placementPolicy')}</label>
+              <p className="org-ctx">{t(policyLabelKey(effectivePolicy(placement)))}</p></div>
+            {needsPosition(placement) && (
+              <div className="form-group"><label>{t('position')} *</label>
+                <input type="number" min="1" value={wiPosition}
+                  onChange={(e) => setWiPosition(e.target.value)} /></div>
+            )}
           </Modal>
         )}
 
