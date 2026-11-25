@@ -472,7 +472,11 @@ sufficient, and recording that is better than manufacturing rows to justify an a
 (frontend, 3 files) and `6fa7e6f` (docs) were pushed to **`origin/hackathon-mvp`** and nothing else:
 `a4ddc2c..6fa7e6f  hackathon-mvp -> hackathon-mvp`. After a `git fetch`, local `HEAD` and
 `origin/hackathon-mvp` were both **`6fa7e6fc2490bf8f0e49728d941fd742b575591a`** with
-`git rev-list --left-right --count` reporting **`0  0`**. 22 commits went up in that push (the 19 that
+`git rev-list --left-right --count` reporting **`0  0`**. That hash is the **verification point**. The
+docs-only commits that came after it — the post-push note in report §7.3 (`a1a0bdb`) and the removal of
+the push marker (`29edc41`), plus the commit carrying this sentence — contain **no code change**: the
+backend and frontend commits `e23a2ce` and `516e46b` are untouched, so what was verified is what ship.
+22 commits went up in that push (the 19 that
 had accumulated from the MP-05…MP-33 work plus these 3); the range was scanned for key/token patterns
 before it left the machine and matched nothing. **`.clinerules` remains uncommitted** — its change is
 the owner's own `docs/plan/` ratification note, not an agent edit — and it is now the only modified
