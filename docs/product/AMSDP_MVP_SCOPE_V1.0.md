@@ -537,6 +537,16 @@ brainstorming or the initial concept draft.
 -   EMR/EHR.
 -   Prescriptions, diagnoses, clinical notes, symptoms or treatment
     plans.
+
+    > **Annotation — 2026-11-25 (Product Owner decision PO-03, Option A). The clause above is
+    > preserved and superseded only as stated here.** **Symptom and onset capture** — a symptom
+    > value plus an onset timing recorded against an appointment (catalogue feature **SYM-001**) —
+    > is an **approved P1 capability**, not out of scope. Everything else in the clause stays
+    > explicitly out of scope: **prescriptions, diagnoses, clinical notes and treatment plans are
+    > not approved and remain excluded.** Ratification is retrospective: the capability was already
+    > implemented and tested, and **no code changed on 2026-11-25**.
+    > Evidence: `docs/implementation/AMSDP_Appointment_Symptoms_and_Onset_Implementation_Report_V1.0.md`,
+    > `docs/decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` §2.2.
 -   Vitals intake such as blood pressure, weight or temperature.
 -   Clinical decision support or AI triage.
 -   Medical document uploads or clinical file management.

@@ -1325,6 +1325,13 @@ Features in sections G.1 and G.2 are **not** part of the section D decision chec
 | Features accepted | 0 | Acceptance requires Product Owner action |
 | Features blocked | 0 | None identified as blocked |
 
+> **Annotation — 2026-11-25 (Product Owner decisions PO-03 / PO-09; the table above is unchanged).**
+> The row **"Features awaiting Product Owner scope decisions: 0"** is **superseded**. **SYM-001**
+> (symptom and onset capture) was implemented and unauthorised when this table was written; **PO-03**
+> (25 November 2026) ratified it as approved **P1**, so the count is now true *by decision* rather
+> than by oversight. No other row changes — in particular **"Features browser verified: 0"** and
+> **"Features accepted: 0"** remain correct, and this annotation is not an acceptance of anything.
+
 ### H.1 Features with known authorization/scope defects (P0)
 
 These features are implemented but have known branch/resource scope defects that must be remediated before MVP release:
@@ -1337,6 +1344,25 @@ These features are implemented but have known branch/resource scope defects that
 | QUE-004 | `_scoped_entry_or_404()` lacks branch check | R-02, `queuing/main.py:98-105` |
 | QUE-005 | No queue homogeneity check | R-04, `queuing/main.py:367-409` |
 | DOC-002 | `create_schedule` doesn't validate branch scope | R-05, `scheduling/main.py:68-88` |
+
+> **Annotation — 2026-11-25 (Product Owner decision PO-09, Option B; the six rows above are preserved
+> exactly as written and each is now superseded or restated below).** Every row was re-checked
+> against the current tree on 2026-11-25. The line references above point at code that has since been
+> rewritten, so this table **understates** the product rather than overstating it.
+>
+> | Feature | Re-verified state on 2026-11-25 | Evidence |
+> |---|---|---|
+> | QUE-003 | **Enforced now.** The `branch_id` query parameter is validated with `branch_accessible()` before it filters, and branch-scoped users are filtered even when they omit it | `backend/queuing/main.py:224–232` |
+> | QUE-004 | **Enforced now.** `_scoped_entry_or_404()` checks the entry's *stored* branch; the function itself carries the `P0-1` comment recording why | `backend/queuing/main.py:191–203` |
+> | QUE-001 | **Enforced now.** Check-in derives the branch from the appointment and refuses a caller-supplied `branch_id` that differs | `backend/queuing/main.py:297–300` |
+> | QUE-002 | **Enforced now.** Enqueue validates the requested branch before use | `backend/queuing/main.py:422–426` |
+> | QUE-005 | **STANDS.** No queue-homogeneity check was found in `backend/queuing/main.py` on 2026-11-25. It remains owned by the queue work package and is **not** closed by any decision taken on 25 November 2026 | search of the module |
+> | DOC-002 | **Enforced now.** `create_schedule` validates `data.branch_id` with `branch_accessible()` and loads the branch inside the organisation | `backend/scheduling/main.py:185–193` |
+>
+> Five of the six P0 defects are therefore **already remediated in code** and this section's title no
+> longer describes the tree. **QUE-005 is the one that is still real.** No code changed on
+> 2026-11-25 to produce this result: the annotation records what the code already does. Evidence:
+> `docs/decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` §2.8.
 
 ### H.2 Features already supported by approved decisions
 

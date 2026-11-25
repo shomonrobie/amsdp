@@ -16,6 +16,30 @@
 
 **Workaround:** `python -m pytest backend/tests/test_e2e.py -v` to re-seed.
 
+> **Annotation — 2026-11-25 (Product Owner decisions PO-09 / PO-13; nothing above is deleted or
+> rewritten, and the table stays as the record of what was believed on 2026-11-05).** Three of the
+> four statements above are **superseded and must not be repeated in a demonstration or a report**:
+>
+> - **"In-memory storage" is false of the current tree.** Every service persists through SQLAlchemy to
+>   PostgreSQL. No service keeps authoritative state in a Python dictionary.
+> - **"No PostgreSQL" is false.** `docker-compose.yml` defines the database, every service resolves its
+>   connection from `DATABASE_URL`, and the deployed stack runs against it.
+> - **"No migrations run" is false.** Alembic is the only schema mechanism and the chain is applied by
+>   the deployment procedure and by CI. **Measured 2026-11-25: 17 revision files** in
+>   `backend/alembic/versions/`.
+> - **"No seed data"** holds only in the narrow sense that a demo database is seeded once:
+>   `backend/seed/seed_demo.py` is the supported path (MP-05).
+>
+> **What is genuinely limited — stated so this correction does not overstate the product:**
+> announcement **audibility has never been confirmed by a human in the room** (the reviewer is now
+> named — Faria Bushra, POD-11, 2026-11-25); there is **no browser end-to-end suite**, so no page is
+> `BROWSER VERIFIED`; the notification provider is a **mock**, and the SMS half of PO-02 remains
+> undecided; and apart from the POD-11 appointment every review in this programme has been
+> **single-engineer**.
+>
+> Evidence: `docs/implementation/AMSDP_PostgreSQL_Verification_and_MP-01_Reconciliation_Report_V1.0.md`,
+> `docs/decisions/AMSDP_Owner_Decisions_25_November_2026_V1.0.md` §2.8.
+
 ---
 
 ## 2. Authentication & Authorization
