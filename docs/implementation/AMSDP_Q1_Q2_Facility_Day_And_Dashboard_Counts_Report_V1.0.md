@@ -306,7 +306,9 @@ $ git rev-list --left-right --count origin/hackathon-mvp...HEAD
   held at verification time.
 
 
-<!--PUSH-VERIFY-->
+<!-- Push verified above: a4ddc2c..6fa7e6f, then 6fa7e6f..a1a0bdb. Any further docs-only commit that
+     touches this report or the register is itself after the push and cannot contain its own hash. -->
+
 
 ---
 
