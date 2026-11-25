@@ -6,6 +6,7 @@
 **Version:** 1.0\
 **Baseline:** 4 November 2026\
 **Status:** Approved business-rule baseline for implementation\
+**Amendment:** PO-13 / PO-02, 24 November 2026 — §33 scope status: full multi-display DQDS required for Hackathon delivery\
 **Authority:** This document consolidates
 `AMSDP_Master_Feature_List_V2.0_Draft.md` and the product-owner
 decisions confirmed during the AMSDP project discussion.
@@ -765,9 +766,69 @@ Requirements:
     queues or settings.
 13. Enforce tenant and branch scope for every display data feed.
 
-DQDS, television integration and multi-display configuration are
-later-phase capabilities. Design the Phase 1 queue/token data model so
-DQDS can be added without redesigning the queue engine.
+### 33.1 Scope status --- PRODUCT OWNER DECISION PO-13 (24 November 2026)
+
+The full capability in items 1--13 above is **required for Hackathon
+delivery**. It is not optional, not deferred and not a later-phase
+capability. The paragraph that previously classified DQDS, television
+integration and multi-display configuration as later-phase capabilities
+is removed by this decision and must not be reinstated or cited.
+
+Two different questions must not be confused: **delivery** of the
+capability is mandatory; **adoption** by a given subscriber remains
+optional (the sentence above about facilities not being obliged to run a
+screen is unchanged). A facility may choose not to operate a display; no
+implementation may choose not to build one.
+
+Required for Hackathon delivery, explicitly (numbered independently of
+items 1--13 above):
+
+1.  Multiple independently configured displays per branch, with no fixed
+    cap; each display is a separate record with its own name, code,
+    configuration, language and enabled/disabled state.
+2.  Display targeting by branch, doctor, department, room or queue, as
+    applicable. Where a target cannot be expressed against the existing
+    data model, the closest derived target is used and the derivation is
+    documented --- never a silent fall-back to the whole branch.
+3.  Configurable Bangla and English display language, held on the display
+    itself so that a screen keeps its language across a power cycle.
+4.  Server-side filtering and strict organization and branch isolation on
+    every display feed.
+5.  Automatic refresh when authorized queue information changes.
+6.  Large, readable typography suitable for television and waiting-area
+    displays.
+7.  Current token/serial with the relevant doctor and room information.
+8.  Estimated waiting-time information where sufficient data exists,
+    clearly identified as an estimate and never as a guaranteed
+    consultation time.
+9.  Token-only public payloads by default: no patient names, mobile
+    numbers or other personally identifiable information.
+10. Facility-controlled public-display information: the facility decides
+    what its own screens show.
+11. Read-only public access. No public user can change appointments,
+    queues, displays or settings through a display.
+12. Administrator configuration of displays, with audit logging of every
+    configuration change.
+
+**Interpretation rule.** No implementation agent may use earlier
+later-phase wording, an MVP-scope ranking, a roadmap position or any
+other document to reduce, defer or independently reinterpret this
+scope. A reduction requires a new product-owner decision recorded in
+this section.
+
+**No separate scope tiers.** There is no MVP Scope, Hackathon Version or
+Later Releases distinction governing this requirement (product-owner
+decision PO-02, 24 November 2026). Section 33 governs.
+
+**Boundaries that still apply.** Implementation remains subject to the
+documented dependencies, the security requirements (tenant and branch
+scope enforced server-side from the authenticated principal; unknown,
+cross-tenant, cross-branch or disabled display targets return 404, never
+403; audit events append-only; no patient identity on a public screen)
+and the acceptance criteria in the DQDS functional specification.
+Approval of this scope does not by itself authorise production
+deployment, unrelated implementation work or a change to any other
+approved rule.
 
 ------------------------------------------------------------------------
 
