@@ -38,6 +38,10 @@ const nextConfig = {
       { source: '/api/v1/symptoms/:path*', destination: 'http://appointment:8005/api/v1/symptoms/:path*' },
       // Dashboard (metrics + audit search)
       { source: '/api/v1/dashboard/:path*', destination: 'http://appointment:8005/api/v1/dashboard/:path*' },
+      // Appointment — BR §43 operational reports (MP-23). Its own prefix, served
+      // by the appointment service; without this rule the reports screen would
+      // read Next's own 404 through the browser origin.
+      { source: '/api/v1/reports/:path*', destination: 'http://appointment:8005/api/v1/reports/:path*' },
       // Queue
       { source: '/api/v1/queue/:path*', destination: 'http://queuing:8006/api/v1/queue/:path*' },
       // Organization — the W3 voice-pack registry (QUE-006). Its own prefix, so

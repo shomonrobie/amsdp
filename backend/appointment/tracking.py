@@ -13,25 +13,68 @@ from common.models import TrackingToken, Appointment, Patient, Doctor, Branch, Q
 from common.auth import AuthContext, require_permission
 from common.audit import record_audit
 from common.tracking_tokens import token_hash, generate_raw_token, revoke_for_appointment
+from common.rate_limit import hit
 
 router = APIRouter(prefix="/api/v1", tags=["pqt"])
 
 # ---------------------------------------------------------------------------
-# Rate limiting (in-process sliding window; DB-backed bucket deferred to M9-F)
+# Rate limiting (MP-25 / GAP-20)
+#
+# The budget now lives in the database, so it is shared by every worker and
+# survives a restart.  The in-process window is kept as a *fallback* only: if the
+# database cannot be reached, the public page must still answer, and a counter
+# that is merely approximate is better than a 500 on a patient's tracking link.
+# The fallback is documented here rather than discovered: while it is in force the
+# budget is per process again, which is exactly the state MP-25 exists to end.
 # ---------------------------------------------------------------------------
 _RATE: dict[str, list[float]] = {}
 _RATE_LIMIT = 10          # requests
 _RATE_WINDOW = 60.0       # seconds
+_RATE_HEADERS = ("X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset")
 
 
-def _rate_limited(request: Request):
-    ip = request.client.host if request.client else "unknown"
+def _memory_fallback(ip: str) -> None:
+    """Count one request in this process only; raise 429 when over budget."""
     now = time.monotonic()
     ts = [t for t in _RATE.get(ip, []) if now - t < _RATE_WINDOW]
     if len(ts) >= _RATE_LIMIT:
         raise HTTPException(429, "too many requests")
     ts.append(now)
     _RATE[ip] = ts
+
+
+def _rate_limited(request: Request):
+    """Charge one request to the caller's durable budget.
+
+    A refusal carries ``Retry-After`` and the rate headers, so a client can wait
+    instead of retrying blindly.  ``304`` and ``429`` are never cached (the route
+    already sends ``no-store``).
+    """
+    ip = request.client.host if request.client else "unknown"
+    session = SessionFactory()
+    try:
+        allowed, remaining, reset_epoch = hit(
+            session, f"pqt:{ip}", limit=_RATE_LIMIT,
+            window_seconds=int(_RATE_WINDOW))
+        session.commit()
+    except Exception:
+        # Database unavailable: keep the page up with the per-process window.
+        session.rollback()
+        _memory_fallback(ip)
+        return None
+    finally:
+        session.close()
+
+    if not allowed:
+        retry_after = max(1, reset_epoch - int(time.time()))
+        raise HTTPException(429, "too many requests", headers={
+            "Retry-After": str(retry_after),
+            "X-RateLimit-Limit": str(_RATE_LIMIT),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": str(reset_epoch),
+            **_NO_CACHE_HEADERS,
+        })
+    return None
 
 
 _NO_CACHE_HEADERS = {
@@ -201,6 +244,10 @@ def get_tracking(token: str):
                 "my_position": my_position,
                 "patients_ahead": patients_ahead,
                 "estimated_wait_min": estimated_wait_min,
+                # MP-25 / R-13: the flag makes the estimate machine-readable as
+                # well as labelled in the page, so no consumer can present the
+                # number as a promise.
+                "estimate": estimated_wait_min is not None,
             },
             "privacy": "This page shows only your appointment.",
         })

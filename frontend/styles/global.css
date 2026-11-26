@@ -87,53 +87,71 @@ tr:hover { background:#f8faff; }
 .pqt-serving { font-size:0.9rem; margin-bottom:0.75rem; }
 .pqt-stats { display:flex; justify-content:space-around; font-size:0.82rem; }
 .stat-num { font-size:1.4rem; font-weight:700; color:#1a5c7a; }
-/* DQDS — public waiting-room queue display, TV/monitor-friendly */
-.dqds-root { min-height:100vh; background:#0a2a3d; display:flex; align-items:flex-start; justify-content:center; padding:1.5rem; font-family:system-ui,sans-serif; }
-.dqds-card { background:#fff; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.12); max-width:960px; width:100%; padding:1rem 1.25rem; }
+/* MP-25 — the printable token card.  The QR and the token are the only things a
+   patient needs to carry; everything else on the page is screen furniture. */
+.pqt-print-block { display:flex; align-items:center; gap:0.75rem; margin-top:1rem; padding-top:0.75rem; border-top:1px dashed #ccc; }
+.pqt-qr { width:96px; height:96px; image-rendering:pixelated; background:#fff; }
+.pqt-print-side { display:flex; flex-direction:column; gap:0.4rem; }
+.pqt-print-hint { font-size:0.72rem; color:#777; margin:0; }
+@media print {
+  body { background:#fff; }
+  .pqt-root { background:#fff; padding:0; }
+  .pqt-card { box-shadow:none; border:none; max-width:none; padding:0; }
+  /* Hide what a printer cannot use and what must not leave the screen. */
+  .pqt-print-side button, nav, .dqds-lang { display:none !important; }
+  .pqt-print-block { border-top:1px solid #000; page-break-inside:avoid; }
+  .pqt-qr { width:120px; height:120px; }
+}
+/* DQDS — public waiting-room queue display, TV/monitor-friendly.
+
+   MP-38 / AC-11: the token must be the largest element at BOTH 1920×1080 and
+   1366×768.  That is a statement about relative size across viewports, so the
+   type scale is `clamp()` against the viewport rather than a ladder of
+   breakpoints — a ladder is what kept the old board capped at 1180 px with a
+   2.5 rem token that a patient could not read from three metres away. */
+.dqds-root { min-height:100vh; background:#0a2a3d; display:flex; align-items:flex-start; justify-content:center; padding:clamp(0.75rem,1.5vw,2rem); font-family:system-ui,sans-serif; }
+.dqds-card { background:#fff; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.12); max-width:min(96vw,1800px); width:100%; padding:clamp(0.75rem,1.2vw,2rem); }
 .dqds-error, .dqds-empty { text-align:center; padding:2rem; color:#666; }
-.dqds-loading { text-align:center; padding:2rem; color:#999; font-size:1rem; }
-.dqds-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; padding-bottom:0.5rem; border-bottom:2px solid #1a5c7a; }
-.dqds-org { font-size:1.1rem; font-weight:700; color:#1a5c7a; margin:0; }
-.dqds-branch { font-size:0.82rem; color:#555; margin:0.25rem 0; }
-.dqds-title { font-size:0.9rem; color:#555; font-weight:600; }
-.dqds-doctors { display:flex; flex-direction:column; gap:0.4rem; }
-.dqds-doc-row { display:flex; justify-content:space-between; align-items:center; padding:0.6rem 0.75rem; background:#f6f9fc; border-radius:6px; border-left:4px solid #1a5c7a; }
-.dqds-doc-name { font-size:1rem; font-weight:600; color:#1a5c7a; flex:1; min-width:120px; }
-.dqds-doc-info { display:flex; gap:1.5rem; align-items:center; }
-.dqds-serving { display:flex; flex-direction:column; align-items:center; background:#e4f0f7; padding:0.3rem 0.7rem; border-radius:6px; }
+.dqds-loading { text-align:center; padding:2rem; color:#999; font-size:clamp(1rem,1.2vw,1.5rem); }
+.dqds-header { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:0.75rem; padding-bottom:0.5rem; border-bottom:2px solid #1a5c7a; }
+.dqds-org { font-size:clamp(1.15rem,2.2vw,2.6rem); font-weight:700; color:#1a5c7a; margin:0; }
+.dqds-branch { font-size:clamp(0.85rem,1vw,1.4rem); color:#555; margin:0.25rem 0; }
+.dqds-scope { font-size:clamp(0.75rem,0.85vw,1.15rem); color:#1a5c7a; margin:0.15rem 0; }
+.dqds-title { font-size:clamp(0.9rem,1vw,1.5rem); color:#555; font-weight:600; }
+.dqds-doctors { display:flex; flex-direction:column; gap:clamp(0.4rem,0.6vw,0.9rem); }
+.dqds-doc-row { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:clamp(0.5rem,0.8vw,1.25rem) clamp(0.6rem,1vw,1.5rem); background:#f6f9fc; border-radius:6px; border-left:clamp(4px,0.4vw,10px) solid #1a5c7a; }
+.dqds-doc-head { flex:1 1 auto; min-width:0; }
+.dqds-doc-name { font-size:clamp(1.05rem,1.9vw,2.6rem); font-weight:600; color:#1a5c7a; }
+.dqds-room { font-size:clamp(0.8rem,1vw,1.4rem); color:#555; }
+.dqds-doc-info { display:flex; gap:clamp(0.75rem,1.6vw,2.5rem); align-items:center; }
+.dqds-serving { display:flex; flex-direction:column; align-items:center; background:#e4f0f7; padding:0.25rem clamp(0.5rem,0.8vw,1.2rem); border-radius:6px; }
 .dqds-waiting { display:flex; flex-direction:column; align-items:center; }
-.dqds-label { font-size:0.72rem; color:#777; }
-.dqds-token { font-size:1.4rem; font-weight:700; color:#1a5c7a; }
-.dqds-wait-count { font-size:1.2rem; font-weight:700; color:#c62828; }
-.dqds-footer { display:flex; justify-content:space-between; font-size:0.7rem; color:#999; margin-top:0.75rem; padding-top:0.4rem; border-top:1px solid #eee; }
+.dqds-label { font-size:clamp(0.7rem,0.85vw,1.2rem); color:#777; }
+/* The token is the one number a patient reads across a waiting room. */
+.dqds-token { font-size:clamp(1.8rem,5.2vw,6.5rem); font-weight:700; color:#1a5c7a; line-height:1.05; }
+.dqds-wait-count { font-size:clamp(1.2rem,2.4vw,3.2rem); font-weight:700; color:#c62828; }
+/* MD-13 / R-13: the estimate is always marked as an estimate, in place. */
+.dqds-estimate { background:#fff8e1; border:1px solid #f0c48a; border-radius:6px; padding:0.25rem 0.6rem; }
+.dqds-est-badge { font-size:clamp(1rem,1.6vw,2.2rem); color:#8a5300; font-weight:700; }
+.dqds-est-value { font-size:clamp(1.1rem,2.2vw,3rem); font-weight:700; color:#8a5300; }
+.dqds-footer { display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem; justify-content:space-between; font-size:clamp(0.7rem,0.8vw,1.1rem); color:#999; margin-top:0.75rem; padding-top:0.4rem; border-top:1px solid #eee; }
+.dqds-footer-text { color:#1a5c7a; font-weight:600; }
 .dqds-org-code { color:#777; }
 .dqds-upd { color:#888; }
 @media (min-width:768px) {
   .dqds-doctors { flex-direction:row; flex-wrap:wrap; }
-  .dqds-doc-row { min-width:280px; flex:1 1 280px; }
+  .dqds-doc-row { min-width:min(100%,22rem); flex:1 1 22rem; }
 }
 
 /* DQDS — display state, language switch and large-screen (TV) refinements */
 .dqds-header-right { display:flex; flex-direction:column; align-items:flex-end; gap:0.35rem; text-align:right; }
-.dqds-lang { font-family:inherit; font-size:0.72rem; line-height:1.2; padding:0.3rem 0.7rem; border:1px solid #1a5c7a; border-radius:6px; background:#fff; color:#1a5c7a; cursor:pointer; }
+.dqds-lang { font-family:inherit; font-size:clamp(0.72rem,0.85vw,1.15rem); line-height:1.2; padding:0.3rem 0.7rem; border:1px solid #1a5c7a; border-radius:6px; background:#fff; color:#1a5c7a; cursor:pointer; }
 .dqds-lang:hover { background:#e4f0f7; }
-.dqds-stale { margin-bottom:0.5rem; padding:0.4rem 0.6rem; border:1px solid #f0c48a; border-radius:6px; background:#fff4e5; color:#8a5300; font-size:0.8rem; }
-.dqds-error h2, .dqds-empty h2 { margin:0 0 0.35rem; font-size:1.05rem; color:#1a5c7a; }
-.dqds-error p { margin:0; font-size:0.85rem; color:#555; }
-.dqds-retry { margin-top:0.75rem; padding:0.45rem 1rem; border:none; border-radius:6px; background:#1a5c7a; color:#fff; font-family:inherit; font-size:0.9rem; cursor:pointer; }
+.dqds-stale { margin-bottom:0.5rem; padding:0.4rem 0.6rem; border:1px solid #f0c48a; border-radius:6px; background:#fff4e5; color:#8a5300; font-size:clamp(0.8rem,0.9vw,1.3rem); }
+.dqds-error h2, .dqds-empty h2 { margin:0 0 0.35rem; font-size:clamp(1.05rem,1.4vw,2rem); color:#1a5c7a; }
+.dqds-error p { margin:0; font-size:clamp(0.85rem,1vw,1.4rem); color:#555; }
+.dqds-retry { margin-top:0.75rem; padding:0.45rem 1rem; border:none; border-radius:6px; background:#1a5c7a; color:#fff; font-family:inherit; font-size:clamp(0.9rem,1vw,1.4rem); cursor:pointer; }
 .dqds-retry:hover { background:#144a63; }
-@media (min-width:1200px) {
-  .dqds-card { max-width:1180px; padding:1.75rem 2rem; }
-  .dqds-org { font-size:1.7rem; }
-  .dqds-branch { font-size:1rem; }
-  .dqds-title { font-size:1.15rem; }
-  .dqds-doc-row { padding:0.9rem 1rem; }
-  .dqds-doc-name { font-size:1.4rem; }
-  .dqds-token { font-size:2.5rem; }
-  .dqds-wait-count { font-size:1.9rem; }
-  .dqds-label { font-size:0.85rem; }
-  .dqds-upd, .dqds-org-code { font-size:0.8rem; }
-}
 @media (max-width:480px) {
   .dqds-doc-row { flex-direction:column; align-items:flex-start; gap:0.4rem; }
   .dqds-doc-info { width:100%; justify-content:space-between; gap:0.75rem; }

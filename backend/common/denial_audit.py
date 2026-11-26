@@ -65,6 +65,16 @@ LOGGED_ONLY_STATUSES = frozenset({401})
 #: Audit action name for a denied request.
 DENIAL_ACTION = "request.denied"
 
+#: Response header a route sets — through ``HTTPException(headers=...)`` — when
+#: it has **already** written its own domain-specific denial row (MP-46 uses it
+#: for ``queue.display.denied``).  The middleware strips the header before the
+#: response reaches the client and skips the generic row, so one denial stays one
+#: row (Q-2 §10).  A route that sets it without writing a row would lose the
+#: record, which is why the display module only sets it after a successful
+#: commit and omits it when the write failed — the denial then falls back to the
+#: generic row.
+DOMAIN_DENIAL_HEADER = "x-amsdp-denial-audit"
+
 #: A path segment long enough to be a token, uuid or other opaque identifier.
 _OPAQUE_SEGMENT = re.compile(r"^[A-Za-z0-9_.~%+-]{20,}$")
 
@@ -191,16 +201,26 @@ class DenialAuditMiddleware:
             return
 
         status = {"code": 0}
+        domain_recorded = {"flag": False}
 
         async def _send(message):
             if message.get("type") == "http.response.start":
                 status["code"] = int(message.get("status") or 0)
+                headers = message.get("headers") or []
+                marker = DOMAIN_DENIAL_HEADER.encode("latin-1")
+                if any(key.lower() == marker for key, _ in headers):
+                    # The route already wrote a domain-specific denial row; drop
+                    # the marker (it is internal) and do not duplicate it below.
+                    domain_recorded["flag"] = True
+                    message = dict(message)
+                    message["headers"] = [(k, v) for k, v in headers
+                                          if k.lower() != marker]
             await send(message)
 
         await self.app(scope, receive, _send)
 
         code = status["code"]
-        if code in DENIAL_STATUSES:
+        if code in DENIAL_STATUSES and not domain_recorded["flag"]:
             try:
                 await run_in_threadpool(record_denial, self.service, scope, code)
             except Exception:                            # pragma: no cover

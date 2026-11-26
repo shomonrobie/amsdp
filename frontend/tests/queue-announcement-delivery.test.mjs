@@ -175,6 +175,7 @@ test('W2 only a fresh call event may be announced automatically', () => {
     'an unknown age is treated as stale');
   assert.equal(isFreshCallEvent({}, { now: NOW }), false);
   assert.equal(isFreshCallEvent(null, { now: NOW }), false);
+});
 
 test('W2 the recorded outcome is what the browser actually observed', () => {
   const cases = [
@@ -385,6 +386,4 @@ test('W2 an announcer without a transport or a network writes nothing', async ()
   const result = await announcer.announceCall(calledEntry(), { source: 'event' });
   assert.equal(result.status, 'skipped');
   assert.equal(result.reason, 'not_wired');
-});
-
 });

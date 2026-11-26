@@ -39,6 +39,7 @@ from common.models import (
     Organization, Branch, FacilityFloor, FacilityDepartment, FacilityRoom,
     Specialty, StaffUser, Doctor, DoctorBranch, DoctorSpecialty, Patient,
     Schedule, Appointment, QueueEntry, SymptomCatalog, StaffDoctorAssignment,
+    QueueDisplay,
 )
 from common.timeutil import operational_today
 try:
@@ -138,6 +139,47 @@ DEMO_ROOMS = [
      "room_type": "consultation", "capacity": 1,
      "description": "Gynae chamber"},
 ]
+
+# --- Public queue displays (MP-35 / MP-38 / MD-01, MD-12, MD-17) --------------
+# Two boards in the same branch, deliberately different in every dimension a
+# facility can configure: scope, language, footer and published fields.  The
+# demonstration (MP-40) needs two screens that cannot be mistaken for each other,
+# and a new facility needs a working example to copy.
+#
+# Synthetic demo data only: this list is read by the demo seed, which refuses to
+# run against a production environment.  Nothing here identifies a patient — a
+# display is configuration, not data.
+DEMO_DISPLAYS = [
+    {
+        "id": "demo-disp-br1-cardio",
+        "branch_id": "demo-br-001",
+        "name": "Cardiology Board",
+        "code": "cardio",
+        "language": "bn",
+        "scope_type": "department",
+        "department_id": "demo-dp-br1-card",
+        "room_id": None,
+        "footer_text": "কার্ডিওলজি বিভাগ — চেম্বার ২০১",
+        "show_room": True,
+        "show_estimated_wait": True,
+        "show_waiting_count": True,
+    },
+    {
+        "id": "demo-disp-br1-main",
+        "branch_id": "demo-br-001",
+        "name": "Main Waiting Hall",
+        "code": "main-hall",
+        "language": "en",
+        "scope_type": "branch",
+        "department_id": None,
+        "room_id": None,
+        "footer_text": "Please keep your token visible",
+        "show_room": True,
+        "show_estimated_wait": True,
+        "show_waiting_count": True,
+    },
+]
+
 
 # --- Speciality catalogue ----------------------------------------------------
 # A chamber lists specialities in both scripts: the English name prints on the
@@ -564,6 +606,9 @@ def seed():
         _seed_floors(session)
         _seed_departments(session)
         _seed_rooms(session)
+        # MP-35: the two demo boards a facility can copy — after the rooms and
+        # departments they scope to, before anything reads the queue.
+        _seed_displays(session)
         _seed_specialties(session)
         # AMSDP-SYMPTOM-01 — the bilingual catalogue the booking form searches.
         _seed_symptoms(session)
@@ -897,6 +942,29 @@ def _seed_rooms(session):
             continue
         session.add(FacilityRoom(organization_id=DEMO_ORG["id"], status="active", **r))
         print(f"  Created room: {r['code']} — {r['name']}")
+
+
+def _seed_displays(session):
+    """Two configured public display boards for the demo branch (MP-35).
+
+    Idempotent and never destructive: an existing board is left exactly as the
+    facility configured it, because re-running the seed must not silently undo an
+    administrator's language or field choices.  ``organization_id`` comes from
+    the demo organisation, never from the row, so a copied row cannot describe
+    another tenant's branch.
+    """
+    for d in DEMO_DISPLAYS:
+        existing = session.query(QueueDisplay).filter(
+            QueueDisplay.id == d["id"]).first()
+        if existing:
+            print(f"  Display '{d['code']}' already exists, skipping.")
+            continue
+        session.add(QueueDisplay(
+            organization_id=DEMO_ORG["id"],
+            status="active",
+            **d,
+        ))
+        print(f"  Created display: {d['code']} — {d['name']}")
 
 
 def _seed_specialties(session):

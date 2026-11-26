@@ -37,6 +37,16 @@ except ImportError:
     from display import router as display_router
 app.include_router(display_router)
 
+# MP-39 / MD-11 — display administration.  The public router above can only
+# read; this one can only be reached with ``queue.display.manage``, decides that
+# capability itself (so a refusal is audited as ``queue.display.denied``) and
+# writes one audit row per change.
+try:
+    from .displays import router as displays_router
+except ImportError:
+    from displays import router as displays_router
+app.include_router(displays_router)
+
 # Sequence 3 — missed-turn recovery (BR §27A). Kept in its own module so the
 # recovery contract stays readable and independently testable.
 try:

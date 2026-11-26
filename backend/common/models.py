@@ -1159,6 +1159,33 @@ class TrackingToken(Base):
     )
 
 
+class TrackingRateBucket(Base):
+    """MP-25 / GAP-20 — one durable request budget for the public tracking page.
+
+    The limiter that protected ``/api/track/{token}`` lived in a module-level
+    dict, so it counted per **process**: two uvicorn workers meant two budgets,
+    and a restart reset every counter to zero.  A budget that a deploy can erase
+    is not a budget.
+
+    One row per bucket (the client address, prefixed so a future consumer cannot
+    collide with it) holding the start of the current window and the number of
+    requests already counted in it.  The row is the unit of contention: the
+    allocation is a single ``INSERT … ON CONFLICT DO UPDATE`` statement, so two
+    workers racing on the same bucket are serialised by the database rather than
+    by hope (``common/rate_limit.py``).
+
+    Nothing here identifies a person: a bucket is an address, not a patient, and
+    no path, token or query string is stored.
+    """
+
+    __tablename__ = "tracking_rate_buckets"
+    __service__ = "appointment"
+
+    bucket            = Column(String(120), primary_key=True)
+    window_started_at = Column(DateTime(timezone=True), nullable=False)
+    hits              = Column(Integer, nullable=False, server_default="0")
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __service__ = "audit"

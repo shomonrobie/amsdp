@@ -15,6 +15,9 @@ const NAV = [
   { href: '/schedules', perms: ['schedule.*', 'schedule.read', 'queue.view'], key: 'schedules' },
   { href: '/appointments', perms: ['appointment.read', 'appointment.create'], key: 'appointments' },
   { href: '/queue', perms: ['queue.view'], key: 'queue' },
+  { href: '/reports', perms: ['appointment.read'], key: 'reports' },
+  { href: '/queue-displays', perms: ['queue.display.manage'], key: 'queueDisplays' },
+  { href: '/voice-packs', perms: ['org.read'], key: 'voicePacks' },
   { href: '/notifications', perms: ['org.manage'], key: 'notifications' },
   { href: '/audit', perms: ['audit.read'], key: 'audit' },
 ];

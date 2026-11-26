@@ -162,6 +162,7 @@ test('the identifiers a browser suite needs are present', () => {
     "'staff-doctor-'"]) {
     assert.ok(PAGE.includes('data-testid={' + id), 'missing testid ' + id);
   }
+});
 
 test('every translated string the page asks for exists in both locales', () => {
   const keys = translationKeys(PAGE);
@@ -205,6 +206,4 @@ test('every delegable capability has a label, and the sets agree', () => {
   assert.ok(delegable.length >= 3);
   assert.deepEqual(delegable.slice().sort(), Object.keys(CAPABILITY_LABEL_KEYS).sort(),
     'a capability added on the server must get a label key here');
-});
-
 });

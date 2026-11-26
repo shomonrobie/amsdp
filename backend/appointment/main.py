@@ -53,6 +53,11 @@ try:
     from .tracking import router as tracking_router
 except ImportError:
     from tracking import router as tracking_router
+# MP-23 (PO-11): BR §43 operational reports, read-only aggregates.
+try:
+    from .reports import router as reports_router
+except ImportError:
+    from reports import router as reports_router  # type: ignore
 try:
     from .symptoms import (router as symptoms_router, apply_onset, copy_symptoms,
                            persist_symptoms, plan_symptoms, symptom_record_payload,
@@ -69,6 +74,7 @@ install_health(app, "appointment")
 install_denial_audit(app, "appointment")
 app.include_router(dashboard_router)
 app.include_router(tracking_router)
+app.include_router(reports_router)
 # AMSDP-SYMPTOM-01 — the bilingual catalogue the booking form searches.
 app.include_router(symptoms_router)
 

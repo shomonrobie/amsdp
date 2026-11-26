@@ -14,34 +14,79 @@ export function isAuthenticated() {
   return !!getUser().id;
 }
 
-export function can(perm) {
-  const u = getUser();
-  if (!u.role) return false;
-  if (u.role === 'super_admin') return true;
-  const perms = {
-    super_admin: ['*'],
-    org_admin: ['org.manage', 'staff.read', 'staff.manage', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
-      // AMSDP-FACILITY-DOCTOR-01 — floors / departments / rooms / specialities
-      'facility.read', 'facility.manage',
-      // AMSDP-SYMPTOM-01 — the bilingual symptom catalogue
-      'symptom.read', 'symptom.manage'],
-    branch_admin: ['staff.read', 'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read', 'queue.consult',
-      'facility.read', 'facility.manage', 'symptom.read', 'symptom.manage'],
-    receptionist: ['patient.create', 'patient.read', 'appointment.create', 'appointment.modify', 'queue.view', 'queue.reorder', 'queue.checkin', 'queue.manage',
-      // Sequence 3 / BR §27A — mirrors backend/common/permissions.py
-      'queue.recover', 'queue.reposition',
-      // Read-only facility access: a receptionist sees which rooms exist when booking.
-      'facility.read',
-      // AMSDP-SYMPTOM-01: reading the catalogue is part of taking a booking.
-      'symptom.read'],
-    doctor: ['patient.read', 'schedule.read', 'appointment.read', 'queue.view', 'queue.consult',
-      // Sequence 3 / BR §27A.1 + §27A.3 — same-queue recovery only, no queue.manage
-      'queue.recover', 'queue.reposition',
-      'facility.read', 'symptom.read'],
-    assistant: ['patient.read', 'appointment.read', 'queue.view', 'facility.read', 'symptom.read'],
-  }[u.role] || [];
-  if (perms.includes('*')) return true;
-  return perms.some(p => perm === p || (p.endsWith('.*') && perm.startsWith(p.slice(0, -1))));
+/* The client-side mirror of `backend/common/permissions.py::PERMISSIONS`.
+ *
+ * It exists so the interface can hide what the server would refuse — it is never
+ * the boundary.  It is therefore kept *identical* to the server matrix, entry for
+ * entry: a screen that asks `can('org.read')` must get the same answer the route
+ * would give, or the menu lies in one direction or the other.  The MP-04
+ * voice-pack screen is exactly that case: it was gated on `org.read`, which this
+ * mirror withheld from `org_admin` while the server granted it, so the one role
+ * that may configure a facility's voice saw a permission refusal.
+ *
+ * `tests/permissions-mirror.test.mjs` parses the Python matrix and fails when the
+ * two drift, so the next divergence is caught here rather than in a browser.
+ */
+export const ROLE_PERMISSIONS = Object.freeze({
+  super_admin: Object.freeze([
+    // platform administration, this role only (Q-1)
+    'platform.admin', 'platform.cross_org',
+    'org.create', 'org.read', 'org.manage',
+    'branch.read', 'branch.manage',
+    'facility.read', 'facility.manage',
+    'symptom.read', 'symptom.manage',
+    'staff.read', 'staff.manage', 'audit.read',
+    // clinic capability namespaces, no wider than the server grants
+    'patient.*', 'doctor.*', 'schedule.*', 'appointment.*', 'queue.*',
+  ]),
+  org_admin: Object.freeze([
+    'org.create', 'org.read', 'org.manage', 'branch.manage',
+    'facility.read', 'facility.manage',
+    'symptom.read', 'symptom.manage',
+    'staff.read', 'staff.manage',
+    'patient.read', 'patient.search', 'patient.create', 'patient.update',
+    'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read',
+  ]),
+  branch_admin: Object.freeze([
+    'branch.read', 'facility.read', 'facility.manage', 'staff.read',
+    'symptom.read', 'symptom.manage',
+    'patient.read', 'patient.search', 'patient.create', 'patient.update',
+    'doctor.*', 'schedule.*', 'appointment.*', 'queue.*', 'audit.read',
+  ]),
+  receptionist: Object.freeze([
+    'patient.create', 'patient.read', 'patient.search',
+    'facility.read', 'symptom.read',
+    'appointment.create', 'appointment.read', 'appointment.modify',
+    'appointment.check_in', 'appointment.create_unscheduled',
+    'queue.view', 'queue.reorder', 'queue.checkin', 'queue.manage',
+    'queue.recover', 'queue.reposition',
+  ]),
+  doctor: Object.freeze([
+    'patient.read', 'patient.search', 'facility.read', 'symptom.read',
+    'schedule.read', 'appointment.read', 'queue.view', 'queue.consult',
+    'appointment.create', 'appointment.check_in', 'appointment.create_unscheduled',
+    'queue.recover', 'queue.reposition',
+  ]),
+  assistant: Object.freeze([
+    'patient.read', 'patient.search', 'facility.read', 'symptom.read',
+    'appointment.read', 'queue.view', 'appointment.check_in',
+  ]),
+});
+
+/**
+ * Does *user* hold *perm*?  Pure, so a test can compare it with the server matrix
+ * without a browser session.
+ */
+export function hasPermission(user, perm) {
+  const role = (user && user.role) || '';
+  const perms = ROLE_PERMISSIONS[role];
+  if (!perms) return false;
+  return perms.some((p) => perm === p
+    || (p.endsWith('.*') && perm.startsWith(p.slice(0, -1))));
+}
+
+export function can(perm, user) {
+  return hasPermission(user || getUser(), perm);
 }
 
 export async function apiFetch(path, opts = {}) {
