@@ -112,6 +112,20 @@ Verified after the push, by fetching rather than by trusting the push output:
 
 No force push, no `--force-with-lease`, no tag, no branch other than `hackathon-mvp`, no rewrite of published commits.
 
+### 3.5 The record commits — and why §7.2 does not compare against a fixed SHA
+
+This handover, the register's §14 and the index's Revision 53 are documentation and were committed **after** the code,
+so the tip of `origin/hackathon-mvp` advanced past `62b2fac` by a docs-only commit (and by one more when this text
+itself was amended for the same reason). Two facts stay stable and are the ones worth checking:
+
+- **`31fcb45` is the last commit that changes behaviour**, and `62b2fac` carries the documentation of that window.
+- Every commit after `62b2fac` in this task is **docs-only**: no source, test, schema, migration or configuration file.
+
+An instruction that says "expect `62b2fac`" would therefore fail on Ubuntu for a reason that has nothing to do with the
+code. §7.2 instead verifies **ancestry** of the code tip, which is true regardless of how many documentation commits
+follow it.
+
+
 ---
 
 ## 4. Pre-commit review — secrets, artefacts, debug residue
@@ -319,8 +333,14 @@ cd /home/shomonrobie/amsdp
 git fetch origin
 git log --oneline HEAD..origin/hackathon-mvp     # review what is about to arrive
 git merge --ff-only origin/hackathon-mvp
-git rev-parse HEAD                               # expect: 62b2facd670583d84712151210dc7de3fb94f647
+git rev-parse HEAD                               # note the tip (docs commits sit on top of the code)
+git merge-base --is-ancestor 62b2fac HEAD && echo "OK: code tip 62b2fac present"
+git log --oneline -3                             # expect the docs commits above 31fcb45 / 62b2fac
 ```
+
+The `merge-base --is-ancestor` line is the check that matters: it proves the **code** commit arrived, without assuming
+the tip is still `62b2fac` (see §3.5). If it prints nothing and exits non-zero, the pull did not bring the code — stop
+and report.
 
 `--ff-only` is deliberate: it cannot create a merge commit, and it refuses rather than guesses if the branch has diverged. If it refuses, **stop and report** — that is divergence, not a slow network.
 
@@ -446,7 +466,7 @@ Expected: 34 tests, and their real outcome recorded — pass **or** fail. If no 
 | Item | State | Basis |
 |---|---|---|
 | Code committed | **DONE** | `31fcb45` (36 files) and `62b2fac` (9 files) |
-| Pushed to `hackathon-mvp` | **DONE** | `origin/hackathon-mvp` = `62b2facd670583d84712151210dc7de3fb94f647`, 0 ahead / 0 behind after a fetch |
+| Pushed to `hackathon-mvp` | **DONE** | `fd4d365..62b2fac` (code + its documentation), then docs-only record commits; `HEAD` = `origin/hackathon-mvp`, 0 ahead / 0 behind after a fetch (§3.4, §3.5) |
 | Secret and artefact review | **DONE** | §4 — 2 documentation false positives, no credential, no generated file |
 | Frontend tests | **TESTED** | 526 tests / 524 pass / 0 fail / 2 skipped, in this tree |
 | Frontend build | **VERIFIED** (build) | `next build` succeeded; four new routes in the table |

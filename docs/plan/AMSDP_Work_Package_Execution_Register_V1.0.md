@@ -643,8 +643,8 @@ Added after §13 on the Product Owner's instruction *"AMSDP — Authorisation to
 |---|---|
 | Code commit | **`31fcb458ddd8d8c9022d6d72e7cb3ccdac70b60c`** — 36 files (MP-23, MP-25, MP-39, MP-46, MP-35, MP-38/41/45, MP-24, MP-04, MP-28, MP-02/MP-33) |
 | Documentation commit | **`62b2facd670583d84712151210dc7de3fb94f647`** — 9 files (decision record, MP-23/MP-04 reports, execution report, roadmap audit, MP-47 proposal, this register's §13, docs index Revision 52) |
-| Push | `git push origin hackathon-mvp` → **`fd4d365..62b2fac`** |
-| Verified after the push | `HEAD` = `origin/hackathon-mvp` = `62b2facd670583d84712151210dc7de3fb94f647`; `0 ahead, 0 behind`; the only remaining working-tree entry is ` M .clinerules` (the Product Owner's own edit, deliberately not staged) |
+| Push | `git push origin hackathon-mvp` → **`fd4d365..62b2fac`**, then docs-only **`62b2fac..f41a6ac`** (this section's record) and the correction commit that follows it |
+| Verified after the push | `HEAD` = `origin/hackathon-mvp`, `0 ahead, 0 behind` after a fetch; the code tip `62b2fac` is an ancestor of the tip, which is the check the handover report §7.2 uses instead of a hardcoded SHA. The only remaining working-tree entry is ` M .clinerules` (the Product Owner's own edit, deliberately not staged) |
 | Excluded on purpose | `.clinerules`; `frontend/.next` and `frontend/.audio-originals-backup` (ignored build/backup output); no unrelated, unexplained or owner-owned file was staged |
 
 Attribution, per-file, is in the handover report §2: staging was **by explicit path**, never `git add -A`.
