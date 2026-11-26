@@ -399,6 +399,7 @@ next window can start work instead of writing another request.
 | 2026-11-25 | **Decision window: the Product Owner Decision Pack was written** — `implementation/AMSDP_Product_Owner_Decision_Pack_V1.0.md` (99,460 bytes, 1,127 lines; Docs Index annex added, count 148 → 149). It consolidates **PO-01, PO-03 … PO-12** (PO-02/PO-13 explicitly not reopened) with **B-1…B-4, Q-1…Q-4, O-3, Q-3, D-3** into one card per item — evidence, one recommendation, alternatives, a copy-paste response line, and the tasks each answer releases — plus a response sheet (§5) and a dependency map (§6). **It decides nothing and closes no gate.** New evidence it records: **Q-3 is two harness defects, not product defects** (dataset: committed blob is 80,517 bytes and hashes to the recorded `ac037c24…e51e`, `git ls-files --eol` `i/lf w/crlf`, `core.autocrlf=true`, no `.gitattributes`; calendar-render: raw Windows paths to the ESM loader, and a corrected probe passes all 9 tests); **the committed tree's migration head is `c4d8e2a91f60`, matching the recorded live revision**, the working tree being one ahead only because `b2e5c7d91a04` is untracked (B-4 row corrected); the Feature Catalogue §H.1 "P0 scope defects" are stale in the product's favour (branch scope enforced at `queuing/main.py:191–203`, `:297–300`, `:422–426`); and the Limitations Report §12 still claims in-memory storage with no PostgreSQL (PO-09 evidence). §2 gained the **MP-02 satisfied** note; §7 gained the decision-window note. **Nothing staged, committed, reverted or stashed** — 98 dirty entries at the window's start, 98 again after the probe file was removed, and 99 at close, the extra entry being this report itself (O-3). Report §8.5 lists every command executed, including the two individual test files run and the one temporary probe file created inside `frontend/tests/` and removed in the same window |
 | 2026-11-25 | **MP-29 worked** (responsive/touch/a11y; no dependencies) **and the MP-02 reds closed.** Recorded in §2 as **TESTED (frontend) + TESTED (backend, PostgreSQL)**: `frontend/lib/a11y.js` (new, 7 exports), `DataTable` now passes the row index (`c.render(row, ri)`, `rowProps(row, ri)`), the queue reorder goes through the tested `moveWithin` on **Alt+Arrow** with named arrows, `disabled` ends and an `aria-live` announcement, 3 i18n keys × 2 languages, and a `global.css` block (`.sr-only`, hover↔focus twins, 44 px floor, 360 px layout). **The pass found the reorder was broken for every input device**, not merely unusable by keyboard. Evidence: `a11y.test.mjs` + `a11y-page-contract.test.mjs` → **`17 passed`**; frontend suite `441/437/2/2` → **`458/454/2/2`** (Q-3 pair only); **D-1** closed (`"session_id" in template`), **D-2** closed (two-gate 403 contract, `ORGADMIN` fixture), **D-4** found and fixed (`.order_by(AuditEvent.id.desc())` over a UUID string → `timestamp.desc()`, two files), **D-3 not reproducible** and not claimed fixed; whole backend suite **`979 passed, 0 failed in 823.50s`** after being `5 failed, 972 passed` at MP-02. No schema change, no migration, no dependency, **no negative-control mutation** (disclosed), **nothing staged or committed** (O-3). §5 gained the MP-29 row; §6 the MP-29 file set; §7 now records that **every remaining work package is gated, deferred or blocked**. Report: `implementation/AMSDP_MP-29_Responsive_Touch_and_Accessibility_Implementation_Report_V1.0.md`; Docs Index annex added (count 147 → 148) |
 | 2026-11-26 | **PO-D1 decided by the Product Owner: Option C — browser-based voice-pack upload becomes its own work package.** Recorded in §13; decision record `docs/decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md` §7 (additive, §1–§6 untouched). **MP-04's scope is unchanged** and its report's declared deviation is closed (`AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` §2.1, §9.3, §12). New package **MP-47** opened as **PROPOSED** with a twelve-area scope, reuse inventory, dependency list, nine open owner decisions and twelve acceptance criteria: `docs/plan/AMSDP_MP-47_Browser_Voice_Pack_Upload_Scope_Proposal_V1.0.md`. No code, schema, migration or configuration changed; nothing staged, committed or pushed |
+| 2026-11-26 | **Authorised commit + push to `hackathon-mvp`, and the Ubuntu migration assessment.** Recorded in **§14**. The reviewed working tree (46 entries: 17 authorised modifications + 28 new files + the owner's own `.clinerules` edit) was committed in two parts — **`31fcb45`** (36 code/test files) and **`62b2fac`** (9 documentation files) — and pushed: `fd4d365..62b2fac`, verified after a fetch as `HEAD = origin/hackathon-mvp = 62b2facd670583d84712151210dc7de3fb94f647`, 0 ahead / 0 behind. `.clinerules` **not staged**; nothing force-pushed, no history rewritten, no other branch. Review before staging: secret scan **0 real hits** (2 documentation false positives), **0** debug residue, no generated artefact. Evidence: frontend **526 / 524 pass / 0 fail / 2 skipped**, `npm run build` ✓ with `/reports`, `/queue-displays`, `/queue-history`, `/voice-packs` in the route table, backend `py_compile` exit 0 + imports OK + **34 tests collected (not executed)**. Migration position: Ubuntu `c4d8e2a91f60` → head **`e1b7c4a9d236`** through `b2e5c7d91a04` → `d3f5a7b91c24`, all three additive. **No migration executed, no reseed, no container touched.** Report: `deployment/AMSDP_Hackathon_MVP_Push_and_Ubuntu_Verification_Handover_V1.0.md` |
 
 | 2026-11-25 | **Q-1 and Q-2 answered by the Product Owner: both APPROVED as recommended, plus a push authorisation and a demo-data authorisation** (decision record §11, Addendum A-1; plan Appendix G, Amendment A-4). Worked in the same window: **Q-1** — `backend/patient/main.py` no longer reads the host clock (the future-DOB check and the age both resolve through `common.timeutil.operational_today`, once per request), 12 new DB-free tests + a source guard; **Q-2** — the Waiting tile now reads `queue_length` and `in_queue` stays visible under its own label, one new PostgreSQL test proving the two populations differ by the appointment-less walk-ins. Evidence, negative controls, commits and the pushed remote tip: **§10**. Q-1/Q-2 rows in §4 are **superseded by §10, not edited**. Report: `implementation/AMSDP_Q1_Q2_Facility_Day_And_Dashboard_Counts_Report_V1.0.md`; Docs Index annex added (Revision 50) |
 | 2026-11-25 | **Multi-display public surface worked** (WP-C.2 / WP-C.3; the largest genuinely-unimplemented authorised block). Recorded in **§11** as IMPLEMENTED + TESTED: registry models and revision `d3f5a7b91c24`, `?display=` resolution with SQL scope, department and room scope, measured estimate, `ETag`/`304`, server-side field suppression, GET-only guard and throttled disabled-display audit. Evidence: 34 new tests (`backend/tests/test_multidisplay.py`), whole backend **`1027 passed, 0 failed in 630.62s`** (`993 + 34`), frontend `467 / 465 / 0 / 2`, three negative controls (4 / 1 / 2 failures) each restored byte-identically, and one latent cross-join defect found by a SQLAlchemy warning and fixed with a regression test. The migration head is corrected to **`b2e5c7d91a04`** (plan Amendment A-5, Appendix H). MP-38/39/40 remain not started / **BLOCKED (B-4)**; `queue.display.denied` remains with MP-39. B-4 decision brief written to `deployment/AMSDP_B4_Database_Access_Decision_Brief_V1.0.md`. Report: `implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md`; Docs Index annex added (Revision 51) |
@@ -629,4 +630,48 @@ to prove the documentation amendment changed no behaviour (frontend **526 tests 
 staged, committed, pushed, migrated, reseeded or deployed, and no Product Owner question beyond PO-D1 was answered.
 
 <!-- §13 added 2026-11-26; §12 and every earlier section left as written. -->
+
+---
+
+## 14. Authorised commit, push and Ubuntu handover (2026-11-26)
+
+Added after §13 on the Product Owner's instruction *"AMSDP — Authorisation to Prepare Commit, Push and Ubuntu Verification"*. §1–§13 are left exactly as written; nothing above is re-labelled by this section.
+
+### 14.1 What was committed and pushed
+
+| | |
+|---|---|
+| Code commit | **`31fcb458ddd8d8c9022d6d72e7cb3ccdac70b60c`** — 36 files (MP-23, MP-25, MP-39, MP-46, MP-35, MP-38/41/45, MP-24, MP-04, MP-28, MP-02/MP-33) |
+| Documentation commit | **`62b2facd670583d84712151210dc7de3fb94f647`** — 9 files (decision record, MP-23/MP-04 reports, execution report, roadmap audit, MP-47 proposal, this register's §13, docs index Revision 52) |
+| Push | `git push origin hackathon-mvp` → **`fd4d365..62b2fac`** |
+| Verified after the push | `HEAD` = `origin/hackathon-mvp` = `62b2facd670583d84712151210dc7de3fb94f647`; `0 ahead, 0 behind`; the only remaining working-tree entry is ` M .clinerules` (the Product Owner's own edit, deliberately not staged) |
+| Excluded on purpose | `.clinerules`; `frontend/.next` and `frontend/.audio-originals-backup` (ignored build/backup output); no unrelated, unexplained or owner-owned file was staged |
+
+Attribution, per-file, is in the handover report §2: staging was **by explicit path**, never `git add -A`.
+
+### 14.2 Migration position — Ubuntu versus the code
+
+| | Revision |
+|---|---|
+| Ubuntu demo database (Product Owner-reported) | `c4d8e2a91f60` |
+| Head of the committed tree | **`e1b7c4a9d236`** |
+| Required path | `b2e5c7d91a04` → `d3f5a7b91c24` → `e1b7c4a9d236` — **three revisions, single head, no branch, no merge** |
+
+All three are **additive**: they create `schedule_blocks`, `queue_displays` + `queue_display_doctors`, and `tracking_rate_buckets`, with their indexes and checks; **no existing table, column, constraint, index or row is modified**, and each is idempotent and reversible. The demo data is therefore compatible, with two consequences worth stating: the new boards and blocks start **empty** (correct defaults), and the demo seed is **not** run by a migration.
+
+**Nothing was migrated, reseeded, rebuilt or restarted.** The assessment, the backup requirement (`_tools/pg_backup.sh` before any upgrade), the risk register **R-M1…R-M6** and the exact Ubuntu commands are in `deployment/AMSDP_Hackathon_MVP_Push_and_Ubuntu_Verification_Handover_V1.0.md` §6–§7.
+
+### 14.3 Status after this window
+
+- **MP-04** — IMPLEMENTED · frontend TESTED · BUILD VERIFIED · **not browser-verified** · not accepted. Scope unchanged by PO-D1.
+- **MP-23** — IMPLEMENTED · frontend TESTED · BUILD VERIFIED · backend **NOT EXECUTED** · not accepted.
+- **MP-38 / MP-39 / MP-41 / MP-45** — code committed; **not browser-verified**; the public board and the admin screen both need `d3f5a7b91c24` applied before they can be checked.
+- **MP-47** — **PROPOSED**. Nine decisions (U-D1…U-D9), no specification, no implementation authorisation.
+- **Nothing is ACCEPTED**, and the backend suite has **not** been executed anywhere in this window.
+
+### 14.4 What §14 does not claim
+
+It does not claim the migration works (it was never run), that the backend is green (34 tests collected, none executed), or that any screen works in a browser. Each of those needs the Ubuntu checklist in the handover report §8, run under a separate authorisation for the migration window.
+
+<!-- §14 added 2026-11-26; §13 and every earlier section left as written. -->
 

@@ -1383,6 +1383,7 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 
 | File | Size | Read when | Owner |
 |---|---:|---|---|
+| `AMSDP_Hackathon_MVP_Push_and_Ubuntu_Verification_Handover_V1.0.md` | 41,732 | **Before pulling `62b2fac` onto Ubuntu, before any `alembic upgrade`, and before judging any "new" screen** — the commit/push record (`31fcb45` code + `62b2fac` docs, `fd4d365..62b2fac`, verified 0 ahead / 0 behind after a fetch), the secret / artefact / debug review, the test and build evidence **with what was not run**, the migration assessment from `c4d8e2a91f60` to head `e1b7c4a9d236` (three additive revisions, schema, demo-data compatibility, backup requirement, risks R-M1…R-M6), the exact pull / backup / migrate / rebuild / health commands, and the browser checklist V-04 / V-23 / V-AUTH / V-39 / V-47 with the account each check needs | — |
 | `AMSDP_M8_Cloud_Deployment_Architecture.md` | 29,056 | Any Docker/compose/port/environment change | — |
 | `AMSDP_POST_SEQ4_DEPLOYMENT_HARDENING_REPORT.md` | 43,270 | Infra hardening, restart policy, health checks, container limits | — |
 | `AMSDP_Auto_Start_and_Demo_Data_Recovery_V1.0.md` | 16,196 | **Before restarting, reseeding, rebooting or re-diagnosing the local stack** — why two containers could not reach each other across the Docker bridge and the network-recreate fix (no `sudo`, no `ufw` change); the two auto-restart layers (`restart: unless-stopped` ×10 and the systemd user unit `amsdp-autostart.service`) and how they supersede the earlier deferral; the `/orgs` SSR fix; the new `_tools/` scripts (`amsdp_autostart.sh`, `install_autostart.sh`, `verify_demo_login.sh`); the live evidence (10/10 healthy, **6/6 demo logins**, 10/10 pages 200, `restarts=7`, data counts identical); and the open items **O-J**/**O-K**/**O-L**, plus carried **O-H**/**O-I** and new **O-M** | — |
@@ -2285,5 +2286,71 @@ including this sentence, so it is deliberately given as approximate here.
    behaviour (frontend **526 / 524 pass / 0 fail / 2 skipped**; `pytest --collect-only` **16 collected**).
 4. **No code, schema, migration, seed, container, credential or configuration changed**; nothing was staged,
    committed, pushed, reseeded or deployed, and the owner's uncommitted `.clinerules` edit is untouched.
+
+### Revision 53 — 2026-11-26 (authorised commit, push and Ubuntu handover)
+
+**One new document registered, none moved, renamed or deleted**, so no migration-manifest entry is required
+(`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `deployment/AMSDP_Hackathon_MVP_Push_and_Ubuntu_Verification_Handover_V1.0.md` | 41,732 | Before pulling `62b2fac` onto Ubuntu, before any `alembic upgrade`, and before judging any "new" screen — the commit/push record, the pre-commit review, the migration assessment (`c4d8e2a91f60` → `e1b7c4a9d236`), the Ubuntu commands and the browser checklist with the account each check needs |
+
+**What was authorised and what it produced.** The Product Owner authorised committing and pushing the reviewed
+authorised work to `hackathon-mvp`, and asked for a migration assessment, pull instructions and a verification
+checklist. Two commits carry it:
+
+| Commit | Files | Subject |
+|---|---:|---|
+| `31fcb458ddd8d8c9022d6d72e7cb3ccdac70b60c` | 36 | `feat: operational reports, durable tracking budget, display admin, denial marker` |
+| `62b2facd670583d84712151210dc7de3fb94f647` | 9 | `docs: MP-23/MP-04 evidence, owner decisions, roadmap audit, MP-47 proposal` |
+
+Pushed `fd4d365..62b2fac`; after a fresh `git fetch`, `HEAD` = `origin/hackathon-mvp` =
+`62b2facd670583d84712151210dc7de3fb94f647`, **0 ahead / 0 behind**. The only working-tree entry left is the owner's
+own ` M .clinerules`, which was deliberately **not staged** — §11 read-only means read-and-cite, and the instruction
+said to preserve it. Nothing else was excluded except ignored build/backup output (`frontend/.next`,
+`frontend/.audio-originals-backup`).
+
+**Review before staging.** Secret scan over all 46 candidate files: **no credential, token, key or database URL** —
+the two hits were documentation prose *describing* an earlier scan. No `.env`, dump, backup, `__pycache__`, `.pyc`,
+log or archive among the 45 committed paths. No `console.log`, `debugger`, `pdb`, absolute path or invented host in
+any added line. Staging was **by explicit path**, never `git add -A`, and every file was attributed to a work package
+first (handover report §2).
+
+**Evidence, in this tree.** Frontend `npm test` → **526 tests / 524 pass / 0 fail / 2 skipped**; `npm run build` →
+**✓**, with `/reports` (6.8 kB), `/queue-displays` (5.56 kB), `/queue-history` (2.7 kB) and `/voice-packs`
+(7.91 kB) in the route table; backend `py_compile` on the 10 changed modules → **exit 0**, imports OK,
+`pytest --collect-only` → **34 collected**. The backend tests were **not executed**: no reachable PostgreSQL, no
+`psycopg`, no Docker on this host. That is stated in the commit message and in the report, not glossed.
+
+**Migration position.** Ubuntu is reported at `c4d8e2a91f60`; the committed tree's head is **`e1b7c4a9d236`**
+(computed with `ScriptDirectory`, single head). Three additive revisions stand between them —
+`b2e5c7d91a04` → `d3f5a7b91c24` → `e1b7c4a9d236` — creating `schedule_blocks`, `queue_displays` +
+`queue_display_doctors`, and `tracking_rate_buckets`; **no existing table, column or row is touched**. Demo data is
+compatible; the new tables start empty, and the demo boards are **not** created by a migration.
+
+**Files updated by this revision.**
+
+| File | Change |
+|---|---|
+| `deployment/AMSDP_Hackathon_MVP_Push_and_Ubuntu_Verification_Handover_V1.0.md` | **new** — §1 tree inventory, §2 per-file attribution, §3 commits and push, §4 secret/artefact/debug review, §5 test and build evidence, §6 migration assessment, §7 Ubuntu commands, §8 browser checklist, §9 status summary, §10 what it does not claim, §11 blockers and owner decisions, §12 governance compliance |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§14** (commit/push record, migration position, status after the window) **+** a 2026-11-26 change-log row in §8. 95,549 → **100,361** bytes; §1–§13 preserved |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision; a new row under `deployment/` |
+
+**Counts.** The tree now holds **166** `.md` files under `docs/` (165 before this revision). The exact byte count of
+this index is a property of the file and changes with every edit, including this sentence, so it is given
+approximately (~250 KB).
+
+**What this revision deliberately does not claim.**
+
+1. **No migration was executed** — not `upgrade`, not `downgrade`, not `--sql` rendering (this host has no `psycopg`).
+   The chain was computed and the revision sources were read; **Ubuntu is the first live run**.
+2. **No container was built, started or stopped**; no volume touched; no seed run; no demo row created, changed or
+   deleted.
+3. **Nothing is VERIFIED in a browser and nothing is ACCEPTED.** MP-04 and MP-23 keep their existing labels; MP-38 /
+   MP-39 / MP-41 / MP-45 remain browser-unverified; MP-47 remains **PROPOSED** with U-D1…U-D9 open.
+4. **No backend test was executed**, here or anywhere else in this window.
+5. **`.clinerules` was not touched** — its owner edit is still uncommitted in the working tree, exactly as found.
+
 
 
