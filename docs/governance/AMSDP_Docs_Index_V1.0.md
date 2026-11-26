@@ -1293,6 +1293,8 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | File | Size | Read when | Owner |
 |---|---:|---|---|
 | `AMSDP_Owner_Decisions_Q1_Q6_V1.0.md` | 9,599 | You need the authority behind the platform-administration boundary, denial auditing, the notification-worker acceptance, the limitations-report correction, the CI pipeline, or the handling of owner-controlled documents | — |
+| `AMSDP_MP-23_Operational_Reports_Decision_Brief_V1.0.md` | 6,437 | Before answering MP-23, or when asking why BR §43 was not implemented without a decision. Options A/B/C with scope, dependencies, effect on **M-7** and risks. **Answered 2026-11-26 — Option A** | — |
+| `AMSDP_Owner_Decisions_26_November_2026_V1.0.md` | 11,482 | Before touching operational reporting (MP-23), the voice-pack admin UI (MP-04) or browser-based voice-pack upload (MP-47): it records **MP-23 Option A**, **MP-04 Option B**, the PO-05 supersession **for MP-04 only**, the two definitions adopted for "queue activity" and "utilisation", what each decision does **not** authorise, plus **§5** status cross-reference and **§7 = PO-D1 Option C** (browser upload is its own package, MP-47) | — |
 
 ---
 
@@ -1308,6 +1310,10 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_M6_Implementation_Plan.md` | 6,785 | Planning work that builds on M6 | — |
 | `AMSDP_M6_Implementation_Report.md` | 6,753 | M6 audit/observability behaviour | — |
 | `AMSDP_UI_UX_and_Reusable_Components_Assessment.md` | 6,305 | Frontend work; what shared components exist and what is missing | — |
+| `AMSDP_Master_Roadmap_V1.1_Full_Implementation_Audit_V1.0.md` | 61,755 | Before quoting any MP-01…MP-46 status as it stood on 26 November 2026; grades all 47 items at `fd4d365` and records findings F-1…F-11 | — |
+| `AMSDP_Controlled_Implementation_Execution_Report_V1.0.md` | 38,505 | Before building on the 26 November implementation window: baseline, item classification, CI root cause, blockers B-1…B-9 | — |
+| `AMSDP_MP-23_MP-04_Implementation_Report_V1.0.md` | 13,370 | **Historical — superseded by V1.1 below.** 12,888 at registration; the current size includes the supersession banner added by Revision 51. Read it for what the first pass believed, not for the current state | — |
+| `AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` | 43,389 | **Current evidence for MP-04 and MP-23.** Before changing `backend/appointment/reports.py`, `frontend/pages/reports.js`, `frontend/lib/operational-report.js`, `frontend/pages/voice-packs.js`, `frontend/lib/voice-pack-admin.js`, `frontend/lib/auth.js` (the permission mirror) or the `/api/v1/reports` rewrite. Carries both coverage matrices (MP-04 19 rows, BR §43 14 rows), the five defects found on verification and how each is now guarded, the exact command outcomes including the failing pytest run, the browser-verification gap and its environmental cause, and — appended 26 November 2026 — **§12 Amendment A-1 closing PO-D1** (browser upload excluded from MP-04 by owner decision, moved to **MP-47**) | — |
 | `AMSDP_Frontend_Visual_Quality_Investigation.md` | 3,442 | Frontend visual regressions or styling standards | — |
 | `AMSDP_BanglaNameSense_Implementation_Report_V1.0.md` | 26,974 | Patient-name entry, the BanglaNameSense dataset/matcher/component, or any reuse in doctor/staff forms | — |
 | `AMSDP_One_Command_Restart_Implementation_Report_V1.0.md` | 14,732 | Starting/restarting/stopping the local stack, `_tools/amsdp_stack.sh`, startup failures | — |
@@ -2110,4 +2116,174 @@ patterns before they left the machine — **0 matches**.
 4. **M-9 and M-10 are not met.** MP-38 (configured language and TV typography), MP-39 (display
    administration) and MP-35's demo seed are outstanding, and MP-40's evidence cannot be produced
    without B-4.
+
+
+---
+
+### Revision 49 — 2026-11-26 — the roadmap audit and the controlled implementation window registered
+
+**Three documents registered**, none of them moved, renamed or deleted, so no migration-manifest entry is
+required (`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_Master_Roadmap_V1.1_Full_Implementation_Audit_V1.0.md` | ~46 KB | Before quoting any status for MP-01…MP-46 or Amendments A-1…A-5 as they stood on 26 November 2026. It grades all 47 roadmap items against `hackathon-mvp` @ `fd4d365`, names the 15 checks it ran and the ones it could not, and records findings F-1…F-11. **It is evidence of an observed state, not permission to override the roadmap.** This registration closes the open item its §L.6 declared |
+| `implementation/AMSDP_Controlled_Implementation_Execution_Report_V1.0.md` | ~30 KB | Before building on anything this window produced. It carries the baseline, the classification of the 21 audit items, the **CI root cause with its reproduction on Node 22**, the MP-24/25/28/35/37/38/39/42/43/45/46 work, every command and result, the blockers (B-1…B-4, B-8, and the new B-9), the two Product Owner decisions required, and the eight things it explicitly does **not** claim |
+| `decisions/AMSDP_MP-23_Operational_Reports_Decision_Brief_V1.0.md` | ~10 KB | Before answering MP-23. Options A (complete BR §43), B (defer) and C (defined MVP subset, recommended) with their scope, dependencies, effort, effect on **M-7** and risks, and the list of work that proceeds regardless |
+
+**Register updated.** `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` gains **§12** (additive; §1–§11
+untouched) recording the window's execution state, including the environment limit that makes several rows
+BLOCKED rather than passed.
+
+**Counts.** The tree now holds **161** `.md` files under `docs/` (158 at Revision 48 plus these three).
+
+**What this revision deliberately does not claim.**
+
+1. **No task is ACCEPTED**, and **no backend change is TESTED**: this host has no PostgreSQL and no Docker, so
+   the 18 new backend tests are authored and collectible but unexecuted.
+2. **No migration is applied anywhere.** `e1b7c4a9d236` was executed only on a throwaway SQLite database.
+3. **CI is not proven green.** Run #34 failed at `fd4d365`; the fix predicts a green frontend job but no run at
+   a commit containing it exists yet.
+4. **Nothing was committed or pushed** in this window; `.clinerules` still carries the owner's own uncommitted
+   edit.
+
+---
+
+### Revision 50 — 2026-11-26 (later) — MP-23 Option A and MP-04 Option B recorded and registered
+
+**Two documents registered**, neither moved, renamed nor deleted, so no migration-manifest entry is required
+(`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md` | 6,305 | Before touching BR §43 reporting or the W3 voice-pack admin screen. It records **MP-23 Option A**, **MP-04 Option B**, the PO-05 supersession **for MP-04 only** (MP-26 stays deferred), the definitions adopted for "queue activity" and "utilisation", and what each decision does not authorise |
+| `implementation/AMSDP_MP-23_MP-04_Implementation_Report_V1.0.md` | 12,888 | Before changing `backend/appointment/reports.py`, `frontend/pages/voice-packs.js` or `frontend/lib/voice-pack-admin.js`. It carries the files changed, every command actually run with its observed result, the availability-payload defect it found and fixed, the governance/skill compliance section (`.clinerules` §6), and the limitations stated rather than worked around |
+
+**Register updated.** `plan/AMSDP_Work_Package_Execution_Register_V1.0.md`: the **PO-05** row now reads
+*SUPERSEDED for MP-04*; **MP-04** moves from DEFERRED to `IMPLEMENTED, TESTED (frontend), BUILT`; **MP-23**
+moves from DECISION REQUIRED to `IMPLEMENTED; compiled; 15 tests collected, NOT executed`; MP-21, MP-26 and
+MP-27 keep their recorded status.
+
+**Counts.** The tree now holds **163** `.md` files under `docs/` (161 at Revision 49 plus these two).
+
+**What this revision deliberately does not claim.**
+
+1. **No task is ACCEPTED**, and **no backend test was executed**: the 15 operational-report tests are collected
+   (`pytest --collect-only` → 15 collected in 1.12 s) but this host has no PostgreSQL, so none of them passed.
+2. **Nothing is VERIFIED** for either deliverable: no browser session, no live API call and no database read was
+   taken. The frontend evidence is a green suite (507 tests, 0 fail) plus `next build` exit 0 with `/voice-packs`
+   in the route table — TESTED and BUILT, not VERIFIED.
+3. **No migration is owed or applied.** Neither MP-23 nor MP-04 changes the schema.
+4. **Nothing was committed or pushed**; `.clinerules` still carries the owner's own uncommitted edit.
+
+---
+
+### Revision 51 — 2026-11-26 (verification pass) — MP-04 and MP-23 checked against their approved scope
+
+**One document issued, none moved or deleted**, so no migration-manifest entry is required (`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` | 38,044 | Before changing either work package's code. It is the current evidence: both coverage matrices, the defects found on re-reading the work, every command outcome, and the browser/database gap |
+
+**Why a V1.1 and not an in-place rewrite.** §11 forbids overwriting and requires historical versions to be
+preserved, and the status of both packages changed materially (defects found, a missing deliverable added, a suite
+that fails at fixture setup rather than merely being unrun). V1.0 is retained byte-for-byte; only a
+supersession banner was added at its top, and the index row above now says so.
+
+**What the pass found.** Five defects and one missing deliverable, all closed (V1.1 §0):
+
+1. **MP-23's report screen did not exist.** Option A's own deliverable text is *"a reporting surface … plus one
+   report screen"*; only the endpoint had been built. Added: `frontend/pages/reports.js`,
+   `frontend/lib/operational-report.js`, `frontend/tests/operational-report.test.mjs` (12 tests), the
+   `/api/v1/reports` proxy rewrite — which the existing `next-config-rewrites` scan caught immediately, exactly as
+   that test was written to — the sidebar entry and the bilingual strings.
+2. **The client permission mirror withheld `org.read` from `org_admin`** while `backend/common/permissions.py`
+   grants it, so `/voice-packs` showed "permission denied" to the one role that may configure a facility's voice
+   and the sidebar entry was hidden from it. `frontend/lib/auth.js` now mirrors the server matrix entry for entry,
+   and `frontend/tests/permissions-mirror.test.mjs` parses the Python matrix so the next divergence fails a test.
+3. **`REFUSAL_KEYS` translated eight machine tags the policy never emits**, so the refusal translator silently
+   degraded to raw English. The keys are now phrases that exist in the server source, and the test fails if one
+   disappears there.
+4. **`super_admin` was refused on a tenant's pack** by the page's mirror, so an organisation's `pending_review`
+   version could not be approved from any screen — `super_admin` is the only role allowed to approve.
+5. **Rollback had no caller.** `POST /orgs/{id}/announcement-config/rollback` existed and nothing used it, so
+   restoring an earlier published version still required `curl`. Controls added per language.
+
+**Register updated.** `plan/AMSDP_Work_Package_Execution_Register_V1.0.md`: MP-04's row now records 17 + 4 passing
+frontend tests, the five defects closed, and "not browser-verified"; MP-23's row now names the report screen and
+**16** collected backend tests (was 15) plus the verbatim `psycopg2.OperationalError`. `decisions/` gained a §5
+status cross-reference (the file is now 8,669 bytes against the 6,305 recorded at Revision 50); the decisions
+themselves were **not** re-taken or edited.
+
+**What this revision deliberately does not claim.**
+
+1. **No backend test executed.** The suite now collects **16** tests and an attempted run fails at fixture setup:
+   `psycopg2.OperationalError: connection to server at "127.0.0.1", port 5433 failed: Connection refused`. No
+   PostgreSQL service, no listener on 5432/5433, and no Docker on this host; the mandate forbids pointing tests at
+   any other database. The 16 tests are **NOT EXECUTED**, not "passing".
+2. **Nothing is VERIFIED and nothing is ACCEPTED.** No browser session, no live API call and no database read was
+   taken, because there is no database to log in against and no stack listening. The frontend evidence is a green
+   suite (526 tests, 524 pass, 0 fail, 2 skipped) and `next build` exit 0 with `/reports` (6.8 kB) and
+   `/voice-packs` (7.91 kB) in the route table — TESTED and BUILT, not VERIFIED.
+3. **No migration, seed, commit or push.** Neither work package changes the schema; the working tree is
+   uncommitted, and `.clinerules` still carries the owner's own edit.
+4. **One Product Owner question is left open**: PO-D1 in V1.1 §9.3 — whether a browser upload form belongs to
+   MP-04. The approved text does not name it, so it was neither built nor silently dropped.
+
+---
+
+### Revision 52 — 2026-11-26 (PO-D1 decided) — MP-47 opened; MP-04 closed against its own scope
+
+**One new document registered, none moved, renamed or deleted**, so no migration-manifest entry is required
+(`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `plan/AMSDP_MP-47_Browser_Voice_Pack_Upload_Scope_Proposal_V1.0.md` | 33,673 | Before planning, specifying or building browser-based voice-pack upload — **and before judging MP-04**, so its approved exclusion is not mistaken for a defect. It holds the twelve-area scope (U-01…U-12), the reuse inventory with file:line citations, three transport options with a recommendation (reuse the existing JSON contract), dependencies D1–D6, risks R1–R8, **nine open Product Owner decisions U-D1…U-D9**, the twelve negative paths N1–N12, the proposed test set and acceptance criteria AC-47-01…AC-47-12 |
+
+**The decision applied.** PO-D1 has been decided by the Product Owner: **Option C**. Browser-based voice-pack
+upload is a separate work package (**MP-47**) and is **not** part of MP-04. Recorded additively as **§7** of
+`decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md`, which preserves §1–§6 verbatim (6,305 → **11,482**
+bytes; the §5 cross-reference from Revision 51 is untouched).
+
+**MP-04 is unchanged in scope.** The exclusion of a browser upload form is now the Product Owner's confirmed scope
+rather than a declared deviation: the implementation report gained **§12 Amendment A-1** (plus pointers in §2.1,
+§9.3, §10), so a reader arriving at any of them cannot mistake PO-D1 for open. The report's findings, evidence and
+status labels are unchanged — **MP-04 remains IMPLEMENTED · frontend TESTED · BUILD VERIFIED · not
+browser-verified · not accepted**, and **MP-23 remains IMPLEMENTED · frontend TESTED · BUILD VERIFIED · backend
+NOT EXECUTED · not accepted**. Neither package was widened, reopened or re-labelled.
+
+**Files updated by this revision.**
+
+| File | Change |
+|---|---|
+| `decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md` | **+§7** (PO-D1 Option C, table + what it settles/does not settle), **+** one document-control row. §1–§6 preserved |
+| `implementation/AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` | **+§12 Amendment A-1** and pointers in the header, §2.1, §9.3, §10. 38,044 → **43,389** bytes; no finding rewritten |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§13** (decision applied, MP-47 row, identifier justification, MP-04 position, what MP-47 needs) **+** a 2026-11-26 change-log row. §1–§12 preserved |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision; the `decisions/` row and the `implementation/` V1.1 row re-sized and re-described |
+
+**Identifier choice.** **MP-47** is the next free identifier: `MP-01…MP-46` are all in issue (highest MP-46 in the
+register and the V1.1 roadmap) and no occurrence of `MP-47`/`MP-48`/`MP-49`/`MP-5x` exists in `docs/`, `backend/`
+or `ai_factory/docs/`.
+
+**Counts.** The tree now holds **165** `.md` files under `docs/` (164 before this revision). This index grew from
+**242,541** to about **247,300** bytes; the exact byte count is a property of the file and changes with every edit,
+including this sentence, so it is deliberately given as approximate here.
+
+**What this revision deliberately does not claim.**
+
+1. **MP-47 is not implemented, not specified in detail, not tested and not accepted.** It is **PROPOSED**: a scope
+   proposal awaiting nine owner decisions (U-D1…U-D9), a specification and an implementation authorisation. PO-D1
+   authorises the *package*, not a build.
+2. **No format, size limit, retention rule or storage policy was invented.** Every number in the MP-47 proposal is
+   an existing constant cited by file and line (`voice_pack_policy.py:612`–`:619`, `:623`–`:625`); the open ones are
+   listed as decisions, not answered.
+3. **No backend test executed** and **nothing VERIFIED or ACCEPTED** — unchanged from Revision 51: no PostgreSQL on
+   this host (`psycopg2.OperationalError … port 5433 … Connection refused`), no Docker, no listening stack, so no
+   login token and no browser session. The suites were re-run only to show this documentation turn changed no
+   behaviour (frontend **526 / 524 pass / 0 fail / 2 skipped**; `pytest --collect-only` **16 collected**).
+4. **No code, schema, migration, seed, container, credential or configuration changed**; nothing was staged,
+   committed, pushed, reseeded or deployed, and the owner's uncommitted `.clinerules` edit is untouched.
+
 

@@ -342,7 +342,7 @@ state that replaces it.
 | **PO-01** | **CLOSED** | `product/AMSDP_Phase_Model_V1.1.md` publishes Phases 4/5/6 (names, scope, exit criteria, Product Owner as accepting authority); **MP-30** is defined as verification of the existing handoff surfaces; **M-8** now has a definition |
 | **PO-03** | **CLOSED** | SYM-001 ratified as approved **P1** by dated annotation in MVP Scope §7 and catalogue §H; **no code changed** |
 | **PO-04** | **CLOSED** | MP-09 → MP-13 → MP-14 → MP-15 authorised **after the first clean rehearsal**, which has not yet happened; the order is fixed |
-| **PO-05** | **CLOSED** | MP-04 and MP-26 stay deferred; W3 re-opens only on the pack's stated trigger |
+| **PO-05** | **SUPERSEDED for MP-04 (26 Nov 2026)** | MP-04 was re-opened by the Product Owner's **Option B** decision (`docs/decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md`); **MP-26 remains deferred**, and no other row moves |
 | **PO-06** | **CLOSED** | MP-27 stays deferred; the 17-criterion Analytics Specification is recorded as **not approved** |
 | **PO-07** | **CLOSED** | MP-21 stays deferred; this row governs PO-04's subscription clause |
 | **PO-08** | **CLOSED** | **D-5** forward-only numbering adopted (first application **Revision 49**); **O-2** no facility scope; **POD-2** closed; **POD-7** executed (one file, list recorded); **POD-11 = Faria Bushra**; D-3, D-7, POD-6, POD-1/3/8/9/10 carried |
@@ -367,7 +367,8 @@ state that replaces it.
 | **MP-33** | GATED | **BLOCKED** | CI cannot first go green on work that is not pushed, and O-3 forbids pushing |
 | **MP-09, MP-13, MP-14, MP-15** | GATED | **AUTHORISED, NOT STARTED** | PO-04 gates them on the first clean rehearsal |
 | **MP-24, MP-25, MP-35…MP-46** | BLOCKED (B-4) | **BLOCKED (B-4)** unchanged | No credential; PO-10's window is the access path |
-| **MP-04, MP-21, MP-26, MP-27** | DEFERRED/GATED | **DEFERRED** | PO-05, PO-06, PO-07 |
+| **MP-04** | Voice-pack administration UI (W3) | **IMPLEMENTED, TESTED (frontend), BUILT — not browser-verified** | 26 Nov 2026 **Option B**. `frontend/tests/voice-pack-admin.test.mjs` **17 pass**, `frontend/tests/permissions-mirror.test.mjs` **4 pass**; `next build` exit 0 with `/voice-packs` (7.91 kB) in the route table. Five defects closed in the second pass (report §0): the page was unreachable for `org_admin` (`org.read` missing from the client mirror); `super_admin` was refused on a tenant's pack, leaving `pending_review` unapprovable from any screen; the refusal-translation table keyed on machine tags the policy never emits; the "inherited" hint read a field the organisation route never sends; and rollback had no caller. `organization/tests/test_voice_packs_api.py` **NOT EXECUTED** (no PostgreSQL) | `AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` §2, §5 |
+| **MP-21, MP-26, MP-27** | Subscription, W5 installer, Analytics | **DEFERRED** | PO-05 (MP-26 only), PO-06, PO-07 |
 | **MP-11, MP-12** | DEFERRED (Q-6 c) | **DEFERRED** unchanged | Not reopened by any decision in this window |
 
 **What is executable after this window: still nothing that is not blocked.** Every remaining row needs
@@ -397,6 +398,8 @@ next window can start work instead of writing another request.
 | 2026-11-24 | **MP-22 worked** (dashboard completion; next non-gated task after MP-18). Recorded in §2 as **TESTED (frontend)**: branch selector (own branch only, empty rather than everything when absent), real server-side date selector (`date=` on `/api/v1/dashboard/today`, 422 on garbage, facility-day default), today's queue panel, quick actions and recent activity; 13 i18n keys in both languages. Evidence: 15 rule tests + 10 source-contract tests + MP-07's 3 tile guards → **`28 passed`**; suite `409/405/2/2` → **`434/430/2/2`** (+25 all-pass, reds unchanged = Q-3 pair); negative control (`selectableBranches` widened) → **red**, file restored byte-identically (`9C20CF10…F335`); `npm run build` **✓ Compiled successfully**, `/dashboard` prerendered 6.6 kB / 99.8 kB, exit 0 (first build **failed** with `ReferenceError: user is not defined` — disclosed in report §4.4). **Not run here:** 6 PostgreSQL cases in `backend/tests/test_dashboard.py`. **Blueprint §2 not read line by line** (report O-2). §5 gained the MP-22 suite row; §7 advances to MP-25/MP-28/MP-29 pending dependency check. Report: `docs/implementation/AMSDP_MP-22_Dashboard_Completion_Implementation_Report_V1.0.md`; Docs Index annex added (count 144 → 145) |
 | 2026-11-25 | **Decision window: the Product Owner Decision Pack was written** — `implementation/AMSDP_Product_Owner_Decision_Pack_V1.0.md` (99,460 bytes, 1,127 lines; Docs Index annex added, count 148 → 149). It consolidates **PO-01, PO-03 … PO-12** (PO-02/PO-13 explicitly not reopened) with **B-1…B-4, Q-1…Q-4, O-3, Q-3, D-3** into one card per item — evidence, one recommendation, alternatives, a copy-paste response line, and the tasks each answer releases — plus a response sheet (§5) and a dependency map (§6). **It decides nothing and closes no gate.** New evidence it records: **Q-3 is two harness defects, not product defects** (dataset: committed blob is 80,517 bytes and hashes to the recorded `ac037c24…e51e`, `git ls-files --eol` `i/lf w/crlf`, `core.autocrlf=true`, no `.gitattributes`; calendar-render: raw Windows paths to the ESM loader, and a corrected probe passes all 9 tests); **the committed tree's migration head is `c4d8e2a91f60`, matching the recorded live revision**, the working tree being one ahead only because `b2e5c7d91a04` is untracked (B-4 row corrected); the Feature Catalogue §H.1 "P0 scope defects" are stale in the product's favour (branch scope enforced at `queuing/main.py:191–203`, `:297–300`, `:422–426`); and the Limitations Report §12 still claims in-memory storage with no PostgreSQL (PO-09 evidence). §2 gained the **MP-02 satisfied** note; §7 gained the decision-window note. **Nothing staged, committed, reverted or stashed** — 98 dirty entries at the window's start, 98 again after the probe file was removed, and 99 at close, the extra entry being this report itself (O-3). Report §8.5 lists every command executed, including the two individual test files run and the one temporary probe file created inside `frontend/tests/` and removed in the same window |
 | 2026-11-25 | **MP-29 worked** (responsive/touch/a11y; no dependencies) **and the MP-02 reds closed.** Recorded in §2 as **TESTED (frontend) + TESTED (backend, PostgreSQL)**: `frontend/lib/a11y.js` (new, 7 exports), `DataTable` now passes the row index (`c.render(row, ri)`, `rowProps(row, ri)`), the queue reorder goes through the tested `moveWithin` on **Alt+Arrow** with named arrows, `disabled` ends and an `aria-live` announcement, 3 i18n keys × 2 languages, and a `global.css` block (`.sr-only`, hover↔focus twins, 44 px floor, 360 px layout). **The pass found the reorder was broken for every input device**, not merely unusable by keyboard. Evidence: `a11y.test.mjs` + `a11y-page-contract.test.mjs` → **`17 passed`**; frontend suite `441/437/2/2` → **`458/454/2/2`** (Q-3 pair only); **D-1** closed (`"session_id" in template`), **D-2** closed (two-gate 403 contract, `ORGADMIN` fixture), **D-4** found and fixed (`.order_by(AuditEvent.id.desc())` over a UUID string → `timestamp.desc()`, two files), **D-3 not reproducible** and not claimed fixed; whole backend suite **`979 passed, 0 failed in 823.50s`** after being `5 failed, 972 passed` at MP-02. No schema change, no migration, no dependency, **no negative-control mutation** (disclosed), **nothing staged or committed** (O-3). §5 gained the MP-29 row; §6 the MP-29 file set; §7 now records that **every remaining work package is gated, deferred or blocked**. Report: `implementation/AMSDP_MP-29_Responsive_Touch_and_Accessibility_Implementation_Report_V1.0.md`; Docs Index annex added (count 147 → 148) |
+| 2026-11-26 | **PO-D1 decided by the Product Owner: Option C — browser-based voice-pack upload becomes its own work package.** Recorded in §13; decision record `docs/decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md` §7 (additive, §1–§6 untouched). **MP-04's scope is unchanged** and its report's declared deviation is closed (`AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` §2.1, §9.3, §12). New package **MP-47** opened as **PROPOSED** with a twelve-area scope, reuse inventory, dependency list, nine open owner decisions and twelve acceptance criteria: `docs/plan/AMSDP_MP-47_Browser_Voice_Pack_Upload_Scope_Proposal_V1.0.md`. No code, schema, migration or configuration changed; nothing staged, committed or pushed |
+
 | 2026-11-25 | **Q-1 and Q-2 answered by the Product Owner: both APPROVED as recommended, plus a push authorisation and a demo-data authorisation** (decision record §11, Addendum A-1; plan Appendix G, Amendment A-4). Worked in the same window: **Q-1** — `backend/patient/main.py` no longer reads the host clock (the future-DOB check and the age both resolve through `common.timeutil.operational_today`, once per request), 12 new DB-free tests + a source guard; **Q-2** — the Waiting tile now reads `queue_length` and `in_queue` stays visible under its own label, one new PostgreSQL test proving the two populations differ by the appointment-less walk-ins. Evidence, negative controls, commits and the pushed remote tip: **§10**. Q-1/Q-2 rows in §4 are **superseded by §10, not edited**. Report: `implementation/AMSDP_Q1_Q2_Facility_Day_And_Dashboard_Counts_Report_V1.0.md`; Docs Index annex added (Revision 50) |
 | 2026-11-25 | **Multi-display public surface worked** (WP-C.2 / WP-C.3; the largest genuinely-unimplemented authorised block). Recorded in **§11** as IMPLEMENTED + TESTED: registry models and revision `d3f5a7b91c24`, `?display=` resolution with SQL scope, department and room scope, measured estimate, `ETag`/`304`, server-side field suppression, GET-only guard and throttled disabled-display audit. Evidence: 34 new tests (`backend/tests/test_multidisplay.py`), whole backend **`1027 passed, 0 failed in 630.62s`** (`993 + 34`), frontend `467 / 465 / 0 / 2`, three negative controls (4 / 1 / 2 failures) each restored byte-identically, and one latent cross-join defect found by a SQLAlchemy warning and fixed with a regression test. The migration head is corrected to **`b2e5c7d91a04`** (plan Amendment A-5, Appendix H). MP-38/39/40 remain not started / **BLOCKED (B-4)**; `queue.display.denied` remains with MP-39. B-4 decision brief written to `deployment/AMSDP_B4_Database_Access_Decision_Brief_V1.0.md`. Report: `implementation/AMSDP_Multi_Display_DQDS_Public_Surface_Implementation_Report_V1.0.md`; Docs Index annex added (Revision 51) |
 
@@ -541,4 +544,89 @@ owner's own `docs/plan/` ratification note.
 <!-- §11 added 2026-11-25; §10 and every earlier section left as written. -->
 
 
+
+
+---
+
+## 12. Window of 26 November 2026 — controlled implementation after the roadmap audit
+
+**Baseline:** `hackathon-mvp` @ `fd4d3656738dfef0885cfc86307903305aa2f08d`, working tree carrying only the
+owner's `.clinerules` edit and the (then uncommitted) audit report. **Nothing was committed or pushed in this
+window**; every state below is working-tree state.
+
+**Environment, stated once for the whole section:** this Windows checkout has **no PostgreSQL** on `:5433` and
+**no Docker**, so no backend test could be executed and no migration could be applied — not even to a local
+database. Frontend tests run on Node 24.12.0, and additionally on **Node 22.23.5** (CI's major) fetched through
+`npx`, which is what made the CI defect reproducible.
+
+| Task | Scope actually executed | State | Evidence | Report |
+|---|---|---|---|---|
+| **MP-02 / MP-33** (CI truth) | Root cause of the red frontend job found **and fixed**: two test files had an unclosed `test()` callback, so later tests were nested inside a finished parent. Node 24 tolerates it; Node 22 cancels them (`cancelledByParent`) — CI failed in ~1 s at `Run frontend tests` while `npm ci` and `next build` had both passed | **IMPLEMENTED, TESTED locally — CI unproven** | Run `45651581256` (#34): backend job `succeeded` (8m 16s), frontend job `failed` at step 6 only; local reproduction under Node 22.23.5 → **2 fail, 13 cancelled**; after the fix **493 / 491 / 0 / 0 / 2** on Node 22 **and** Node 24 | `implementation/AMSDP_Controlled_Implementation_Execution_Report_V1.0.md` §4.1, §6 |
+| **MP-39** | Display administration: `queue.display.manage` (inside `queue.*`, no new role, delegable set untouched), `GET/POST /api/v1/queue/displays` + `PATCH /api/v1/queue/displays/{id}`, one audit row per write with before/after, an admin page with a copyable display URL, pure rules in `frontend/lib/displays.js` | **IMPLEMENTED** — backend tests authored, **UNRUN** | `frontend/tests/display-admin.test.mjs` **11 pass**; `backend/tests/test_display_admin.py` **13 collected**; `py_compile` OK; route table shows the three paths | same report §4.2 |
+| **MP-46** | `queue.display.denied` on the write routes, one row per denial: the specific row is written before the refusal, and `common/denial_audit.py` strips the internal marker and skips its generic `request.denied` row (Q-2 §10 / AC-21). Anonymous probes still write nothing | **IMPLEMENTED** — **UNRUN** | As MP-39; the duplicate-suppression assertion lives in the same module | same report §4.2, §8 |
+| **MP-38 / MP-37 / MP-42 / MP-43 / MP-45** (page halves) | Board rewritten: `?lang=` → configured `display.language` → device preference **only** when no display is configured (so clearing a browser changes nothing); display name in the header; `clamp()` TV typography with the token largest; room label with an em dash; estimate with `≈` and the words "estimated wait"; facility footer; `If-None-Match` / `304` with no state change | **IMPLEMENTED, TESTED** | `frontend/tests/display-board.test.mjs` **9 pass**; `npm run build` ✓ | same report §4.3 |
+| **MP-28** (residue) | The board's and the tracking page's page-local `{bn,en}` dictionaries removed into `lib/i18n.js`; the shared coverage test now enforces both | **IMPLEMENTED, TESTED** | 493-test suite green on both Node majors; `i18n-coverage.test.mjs` unchanged and passing | same report §4.3 |
+| **MP-35** (seed) | `DEMO_DISPLAYS` + `_seed_displays()`: two boards in one branch, different language, scope and footer; idempotent, organisation pinned to `DEMO_ORG` | **IMPLEMENTED — not executed** | Module compiles and imports; `DEMO_DISPLAYS` reads back as `['cardio','main-hall']` in `demo-br-001`. **No database was available, and no live database was touched** | same report §4.4 |
+| **MP-24** | Queue-history screen consuming the existing `/api/v1/queue/history`, with a query builder that omits empty filters, a tally that never re-classifies, and pagination | **IMPLEMENTED, TESTED (frontend)** | `frontend/tests/queue-history.test.mjs` **6 pass**; the test also asserts the route still owns scope, 404 and "every status" | same report §4.5 |
+| **MP-25** | Durable, cross-process rate budget (`tracking_rate_buckets` + `common/rate_limit.py::hit()`, one `INSERT … ON CONFLICT`), wired into the tracking route with a documented in-process fallback; `estimate` flag in the payload; printable token card with QR | **IMPLEMENTED, partially TESTED** | Migration `e1b7c4a9d236` (`down_revision='d3f5a7b91c24'`, single head verified with `ScriptDirectory`) executed on a **scratch SQLite** DB: table created, second `upgrade head` a no-op, `downgrade` clean. `backend/tests/test_tracking_rate_limit.py` **5 collected, UNRUN** (no PostgreSQL) | same report §4.6 |
+| **MP-23** | `backend/appointment/reports.py` — one endpoint, five BR §43 dimensions, a `reconciliation` block, token-derived branch scope, `percent: null` without published capacity. **Plus the report screen Option A requires**: `frontend/pages/reports.js` (day/period, branch, doctor) and `frontend/lib/operational-report.js` | **IMPLEMENTED; compiled; frontend TESTED and BUILT; 16 backend tests collected, NOT executed** | `py_compile` exit 0; `pytest --collect-only` → *16 tests collected*; an attempted run fails at fixture setup with `psycopg2.OperationalError … port 5433 … Connection refused` — **no database on this host**. `frontend/tests/operational-report.test.mjs` **12 pass**; `next build` exit 0 with `/reports` (6.8 kB) | `AMSDP_MP-23_MP-04_Implementation_Report_V1.1.md` §3, §5 |
+| **MP-09, MP-13, MP-14, MP-15, MP-30** | Deliberately not started: PO-04 + the rehearsal gate, and PO-01 respectively | **unchanged** | Report §3 | same report §3, §11 |
+
+**What this window did not do.** It did not commit, push, deploy, reseed, or reach any database; it did not
+apply `d3f5a7b91c24` or `e1b7c4a9d236` anywhere; it did not mark anything TESTED on the backend, VERIFIED or
+ACCEPTED; and it did not answer any Product Owner question.
+
+<!-- §12 added 2026-11-26; §11 and every earlier section left as written. -->
+
+---
+
+## 13. Window of 26 November 2026 (second) — PO-D1 decided; MP-47 opened
+
+**Nothing in §1–§12 is rewritten.** This section records one Product Owner decision and the work package it creates.
+The change-log row of the same date sits in §8.
+
+### 13.1 Decision applied
+
+| Field | Value |
+|---|---|
+| Decision | **PO-D1 — Option C**: browser-based voice-pack upload is managed through a **separate work package** |
+| Date | 26 November 2026 |
+| Recorded | `docs/decisions/AMSDP_Owner_Decisions_26_November_2026_V1.0.md` **§7** (new section; §1–§6 preserved verbatim) |
+| Rationale (owner) | "Preserve the approved MP-04 scope and manage the additional upload capability independently." |
+| Closes | **PO-D1** as raised in the MP-04 report §9.3 — the register never carried it as a row of its own, so no §4 row is retired |
+
+### 13.2 New work package
+
+| Task | Scope | State | Evidence / document |
+|---|---|---|---|
+| **MP-47** | **Browser-based voice-pack upload.** Twelve scoped areas (U-01…U-12): the upload surface, existing format/size ceilings, file validation and itemised error reporting, pre-submission auditioning, version creation inside the existing lifecycle, roles/capabilities, org and platform scope restrictions, audit and traceability, secure handling and storage, failure and recovery, frontend/backend tests, browser acceptance. Reuse-first: the recommended transport is the **existing** `POST /api/v1/voice-packs` contract, so no backend change is proposed | **PROPOSED** — Product Owner-authorised as its own package; awaiting nine owner decisions (U-D1…U-D9), a specification, and implementation authorisation. **Not implemented, not tested, not accepted** | `docs/plan/AMSDP_MP-47_Browser_Voice_Pack_Upload_Scope_Proposal_V1.0.md` (§2 scope, §4 options, §5 dependencies, §6 risks, §7 open decisions, §8 negative paths, §9 tests, §10 acceptance) |
+
+**Identifier justification.** MP-47 is the next free identifier: `MP-01…MP-46` are all in issue (highest **MP-46**,
+in this register and in `AMSDP_Master_Implementation_Plan_and_Roadmap_V1.1.md`), and a repository-wide search found no
+occurrence of `MP-47`, `MP-48`, `MP-49` or `MP-5x` anywhere in `docs/`, `backend/` or `ai_factory/docs/`.
+
+### 13.3 MP-04 — scope unchanged, and now confirmed
+
+| Task | Position |
+|---|---|
+| **MP-04** (voice-pack admin UI) | **Scope unchanged.** Browser upload is **excluded** from MP-04 by Product Owner decision, not by agent preference. The exclusion is no longer a declared deviation (MP-04 report §10), and MP-04 must be assessed and accepted against its existing approved requirements **without** treating the missing upload form as a defect |
+| **MP-23** (BR §43 reporting) | **Scope unchanged** by PO-D1 |
+| Status of both | Unchanged: MP-04 = IMPLEMENTED · frontend TESTED · BUILD VERIFIED · not browser-verified · not accepted. MP-23 = IMPLEMENTED · frontend TESTED · BUILD VERIFIED · backend **NOT EXECUTED** · not accepted |
+
+### 13.4 What MP-47 needs before any code is written
+
+1. Answers to **U-D1…U-D9** (proposal §7) — containers offered in the browser, transport at the documented ceilings,
+   storage location and quota, retention of superseded assets, whether `422` refusals are audited, whether an
+   `org_admin` may upload, manifest handling, checksum confirmation, and route placement.
+2. A specification that turns U-01…U-12 into requirement statements traceable to the acceptance criteria.
+3. **Explicit implementation authorisation** — PO-D1 approves the *package*, not the build.
+
+### 13.5 What this window did not do
+
+No code, test, schema, migration, seed, container or configuration was changed. The existing suites were re-run only
+to prove the documentation amendment changed no behaviour (frontend **526 tests / 524 pass / 0 fail / 2 skipped**;
+`pytest --collect-only` **16 collected**; backend execution still blocked — no PostgreSQL on this host). Nothing was
+staged, committed, pushed, migrated, reseeded or deployed, and no Product Owner question beyond PO-D1 was answered.
+
+<!-- §13 added 2026-11-26; §12 and every earlier section left as written. -->
 
