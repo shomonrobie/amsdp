@@ -102,6 +102,28 @@ test('MP-38 / AC-11 — the token is the largest element by construction', () =>
   assert.ok(/\.dqds-card[^}]*max-width:min\(96vw,1800px\)/.test(CSS));
 });
 
+test('MP-38 — the scope label is translated by the board, not by a free variable', () => {
+  // Regression: `scopeLabel` lives at module scope, so it has no access to the
+  // component's `tr`.  An earlier call site passed an undefined `T` while the
+  // helper referenced the component-scope `tr`, which threw a ReferenceError the
+  // moment a non-branch display rendered — the seeded "cardio" department board
+  // is exactly such a display, so the crash would have hit the demonstration.
+  assert.ok(/scopeLabel\(display,tr\)/.test(PAGE),
+    'the call site passes the translator the board is using');
+  const helper = PAGE.slice(PAGE.indexOf('function scopeLabel'));
+  assert.ok(/^function scopeLabel\(display,tr\)\{/.test(helper),
+    'the helper declares its translator as a parameter');
+  assert.ok(!/\bT\b/.test(helper.slice(0, helper.indexOf('\n}'))),
+    'no undefined placeholder identifier survives in the helper');
+  // Every scope type renders a label, and each one is a translated key.
+  for (const key of ['dispScopeBranch', 'dispScopeDoctors',
+    'dispScopeDepartment', 'dispScopeRoom']) {
+    assert.ok(helper.indexOf("tr('" + key + "')") >= 0, key + ' is rendered');
+  }
+  const scope = PAGE.slice(PAGE.indexOf('data-testid="dqds-scope"'));
+  assert.ok(scope.indexOf('dispScope') >= 0, 'the scope is labelled in the board language');
+});
+
 test('every string the board asks for exists in both languages', () => {
   const keys = new Set();
   for (const m of PAGE.matchAll(/\btr\('([A-Za-z0-9_$]+)'\)/g)) keys.add(m[1]);

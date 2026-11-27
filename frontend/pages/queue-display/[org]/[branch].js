@@ -254,7 +254,7 @@ export default function QueueDisplay(){
             </h1>
             <p className="dqds-branch">{tr('branch')}: {branchLabel||DASH}</p>
             {display&&display.scope_type&&display.scope_type!=='branch'
-              ? <p className="dqds-scope" data-testid="dqds-scope">{tr('dispScope')}: {scopeLabel(display,T)}</p>
+              ? <p className="dqds-scope" data-testid="dqds-scope">{tr('dispScope')}: {scopeLabel(display,tr)}</p>
               : null}
           </div>
           <div className="dqds-header-right">
@@ -284,8 +284,11 @@ export default function QueueDisplay(){
   );
 }
 
-/* The scope is facility configuration, so it is labelled in the board language. */
-function scopeLabel(display,T){
+/* The scope is facility configuration, so it is labelled in the board language.
+   The translator is passed in: this helper lives at module scope and has no
+   access to the component's `tr`, and an earlier version referenced it anyway —
+   which threw a ReferenceError the moment a non-branch display rendered. */
+function scopeLabel(display,tr){
   if(display.scope_type==='doctors') return tr('dispScopeDoctors');
   if(display.scope_type==='department') return tr('dispScopeDepartment');
   if(display.scope_type==='room') return tr('dispScopeRoom');
