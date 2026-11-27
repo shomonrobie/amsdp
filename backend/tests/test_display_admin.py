@@ -185,6 +185,12 @@ def test_a_receptionist_is_refused_and_the_refusal_is_one_row():
     assert len(rows) == 1, "one denial is one row"
     assert rows[0].actor_role == "receptionist"
     assert rows[0].organization_id == ORG
+    # MD-19 names three things a display-management denial must carry: the actor,
+    # the capability and the org/branch.  The capability is the field that was
+    # missing (audit 27 Nov 2026, F-02) even though the requirement predates it.
+    assert rows[0].actor_id, "the actor is recorded"
+    assert rows[0].after["capability"] == "queue.display.manage"
+    assert rows[0].branch_id == BR, "the branch is recorded"
     # The generic recorder must not add a second row for the same refusal.
     assert [r for r in _audit("request.denied")] == [], \
         "the domain-specific row replaces the generic one"
@@ -260,6 +266,19 @@ def test_a_cross_tenant_patch_is_a_404_and_a_recorded_denial():
             AuditEvent.action == "queue.display.denied",
             AuditEvent.organization_id == ORG_B).all()
     assert len(denied) == 1, "the refusal is attributed to the caller's own tenant"
+    # The 404 path is the second ``_denied`` call site and carries the same
+    # MD-19 triple: here the capability was granted and the row says so by its
+    # status/reason, while the governing capability is still named.
+    assert denied[0].after["capability"] == "queue.display.manage"
+    assert denied[0].after["status"] == 404
+    assert denied[0].actor_id, "the actor is recorded"
+    # OPC-3 (recorded interpretation, 27 Nov 2026): on the non-disclosing 404 the
+    # row names the *caller's* org/branch and identifies the target through
+    # target_id — the target's own branch is never written, because that is the
+    # fact the 404 exists to withhold.
+    assert denied[0].target_id == created["id"], "the target is identified by id"
+    assert denied[0].branch_id == BR_B, "the caller's branch is recorded"
+    assert denied[0].branch_id != BR, "the target's branch is not disclosed"
 
 
 def test_each_patch_writes_one_row_with_before_and_after():

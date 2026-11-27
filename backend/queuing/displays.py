@@ -113,7 +113,8 @@ class DisplayUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _denied(session, auth: AuthContext, *, status_code: int, reason: str,
-            detail: str, display=None, branch_id: str = "") -> None:
+            detail: str, display=None, branch_id: str = "",
+            target_id: str = "") -> None:
     """Record one denied display action, then answer with *status_code*.
 
     The audit row is written **before** the refusal, so a denial is never lost.
@@ -121,6 +122,20 @@ def _denied(session, auth: AuthContext, *, status_code: int, reason: str,
     strips it and skips its generic row, which is what keeps one denial to one
     row.  If the row cannot be written the header is omitted deliberately, so
     the generic recorder still leaves the denial visible somewhere.
+
+    ``capability`` is recorded on **every** row because MD-19 names it among the
+    three things a display-management denial must carry (actor, capability,
+    org/branch).  It is the capability that *governs* the refused action, not a
+    claim that it was refused: a 404 row is written only after ``_require_manage``
+    has already granted it, and the row's ``status``/``reason`` say which refusal
+    actually happened, so an investigator can tell the two classes apart.
+
+    ``target_id`` defaults to the resolved row's id.  A cross-tenant 404 has no
+    resolved row — the lookup is tenant-scoped — so the route passes the id it
+    was *asked* for instead (OPC-3, 27 Nov 2026: the row names the caller's
+    org/branch and identifies the target by id).  That id came from the caller's
+    own request, so recording it discloses nothing the caller did not already
+    know; the foreign row's attributes (its ``code``) stay empty.
     """
     recorded = False
     try:
@@ -128,9 +143,10 @@ def _denied(session, auth: AuthContext, *, status_code: int, reason: str,
                      branch_id=branch_id or auth.branch_id or None,
                      action=DENIED_ACTION,
                      target_type="queue_display",
-                     target_id=(display.id if display is not None else ""),
+                     target_id=(display.id if display is not None else target_id),
                      actor_id=auth.user_id, actor_role=auth.role,
                      after={"status": status_code,
+                            "capability": DISPLAY_MANAGE,
                             "code": (display.code if display is not None else ""),
                             "request": detail},
                      reason=reason)
@@ -412,8 +428,10 @@ def update_display(display_id: str, data: DisplayUpdate,
             QueueDisplay.organization_id == auth.organization_id).first()
         if not display or not branch_accessible(auth, display.branch_id):
             # Cross-branch and cross-tenant are indistinguishable from missing.
+            # The id the caller asked for is still recorded, so the probe can be
+            # investigated; a resolved row contributes its own id (OPC-3).
             _denied(session, auth, status_code=404, reason="display not found",
-                    detail="not found", display=display)
+                    detail="not found", display=display, target_id=display_id)
         branch = _branch_or_404(session, auth, display.branch_id)
         before = _display_to_dict(session, display)
 
