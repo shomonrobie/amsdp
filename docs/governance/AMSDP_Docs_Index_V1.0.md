@@ -1354,6 +1354,14 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 
 ---
 
+## `testing/` — executed-test evidence records
+
+| File | Size | Read when | Owner |
+|---|---:|---|---|
+| `AMSDP_Backend_Execution_Evidence_27Nov2026_V1.0.md` | 21,344 | **Before quoting any figure from the 27 November 2026 backend execution** — the 23 preserved artefacts with sizes, timestamps and SHA-256 digests, the two run summary lines bound to their databases by retained command history, the independent collection count, the migration chain, a claim-by-claim grading (CONFIRMED / REPORT-ONLY / NOT SUPPORTED), the evidence limitations (including that the engine under test is **PostgreSQL 16.4, not 17**) and the custody rules | — |
+
+---
+
 ## `audit/` — acceptance and readiness evidence
 
 | File | Size | Read when | Owner |
@@ -1376,6 +1384,7 @@ Owner on 2026-11-17**; the eight engineering questions the rulings left open (`E
 | `AMSDP_Appointment_Calendar_Filter_Diagnosis_V1.0.md` | 50,236 | **Before wiring or "fixing" the appointment calendar's search box or its Status/Branch filters** — why they do nothing in Week and Day view: the toolbar writes only the paged list's query state while the grid is rendered from a separate `GET /api/v1/appointments` request built from the window and doctor alone (measured: 0 requests after typing a name, chips unchanged at 40, while switching to List issues the correct `?q=…&status=…&branch_id=…`); the grid endpoint has no `q`/`branch_id` and the page never sends the `status` it does support; grid 47 rows (org) vs list 42 (branch) for one receptionist; the list silently clamps to the visible week; no highlighting; unknown status → `200`/0 rows; no names in the grid payload (30 lookups per week); the source-contract test that **asserts** the defective request shape and the therefore-green 146/146 suite; Bangla-name search unverified (no such data). Includes the per-filter and per-view evidence matrices, four root-cause classes, minimal correction options with blast radius, and the two decisions left to the owner — **O-AA** (calendar branch scope) and **O-AB** (may a search leave the visible week). **Part I (2026-11-16)** records the resolution: both decisions taken, every finding F-1…F-9 mapped to the correction that shipped and to its evidence, and the one sentence defect the browser run of the fix caught | — |
 | `AMSDP_Phase_0_MVP_Scope_and_Phase_1_Operational_RBAC_Implementation_Report_V1.0.md` | 41,767 | MVP scope lock (25 KEEP / 1 DEFER) and Operational RBAC authorization hardening; six P0 defects fixed and regression-tested | — |
 | `AMSDP_Appointment_and_Calendar_Reliability_Gap_Analysis_V1.0.md` | 113,662 | **Before planning appointment/calendar capacity, slot, booking or scheduling-configuration work** — the 19 `CODE-READ` findings (WP-2.1…WP-2.7) with `file:line` evidence, the four-stage roadmap and decisions Q1–Q5; its remediation is `implementation/AMSDP_Appointment_and_Calendar_Reliability_Remediation_Report_V1.0.md`, and **Appendix D** records the closure status of all 19 findings after the Q1–Q5 work order | — |
+| `AMSDP_Backend_Execution_Audit_27Nov2026_V1.0.md` | 46,968 → **49,655** | **Before quoting, relying, or accepting anything from the 27 November 2026 backend execution** — the independent audit of register §15 and Docs Index Revision 54: verdict **INDEPENDENT AUDIT PASSED WITH CONDITIONS**, the five test corrections assessed (four JUSTIFIED, one JUSTIFIED WITH CONCERNS), the execution evidence and its binding, the migration and work-package audit, the **MP-46 / MD-19 capability discrepancy**, findings **F-01…F-12** with a resolution-status column, **F-13** (the engine is PostgreSQL 16.4, not 17) reported separately, recommended actions A-1…A-7 and the safety declaration | — |
 
 ---
 
@@ -2356,4 +2365,419 @@ approximately (~250 KB).
 5. **`.clinerules` was not touched** — its owner edit is still uncommitted in the working tree, exactly as found.
 
 
+
+### Revision 54 — 2026-11-27 (backend executed on a scratch database)
+
+**No new document, none moved, renamed or deleted** — so no migration-manifest entry is required (`.clinerules`
+§11). This revision registers the *state change* recorded in the register's new §15: the backend suites were
+executed for the first time in this checkout.
+
+**What was run, and where.** PostgreSQL 17 on `127.0.0.1:55432`, against an **empty database created for the
+purpose** (`amsdp_verify_1127`), migrated **zero → head** (`alembic current` → `e1b7c4a9d236 (head)`,
+`alembic heads` → one head). The developer database on the same server and the Ubuntu deployment were **not**
+used, opened or migrated. Result: **`1061 passed, 0 failed in 541.58s (0:09:01)`** — no skips, no deselections,
+no xfails. Repeated end-to-end on a **second pristine database** (`amsdp_verify_1127b`, created empty and migrated
+zero → head): **`1061 passed, 0 failed in 542.27s`**, so the result does not depend on leftover rows.
+
+**What the execution changed.** Five **test** defects were found and fixed; **no product file was modified**.
+MP-23's backend moved from *NOT EXECUTED* to **TESTED** (16 passed), MP-39 to **TESTED** (13), MP-45 to
+**TESTED** with a field-visibility assertion that is no longer vacuous, MP-46 to **TESTED** (8 + the
+display-denial assertions), MP-25's durable budget to **TESTED** (5 + 17), and MP-35's demo seed was finally
+**executed** (3 passed). The details, including the MP-25/`_RATE.clear()` contradiction that only a whole-suite
+run exposes, are in the register §15.
+
+**Files updated by this revision.**
+
+| File | Change |
+|---|---|
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§15** (environment, result, the five defects, per-task status delta, what is not claimed) **+** a 2026-11-27 change-log row in §8. 100,563 → **113,835** bytes; §1–§14 preserved |
+| `backend/tests/test_operational_reports.py` | fixture fixes only (patient re-created in `clean`; `token` / `patient_id` supplied) |
+| `backend/tests/test_display_admin.py` | code-addressed route (`ORG_CODE` / `BR_CODE`); MP-45 test seeded with a `called` + `waiting` entry and a non-vacuous presence assertion; `_purge()` in FK order |
+| `backend/tests/test_tracking_tokens.py` | `_reset_tracking_budget()` + autouse fixture clear `_RATE` **and** the `pqt:%` rows; the limit itself unchanged |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision |
+
+**Counts.** The tree still holds **166** `.md` files under `docs/` — this revision creates none.
+
+**What this revision deliberately does not claim.**
+
+1. **Nothing is VERIFIED and nothing is ACCEPTED.** A green suite is TESTED (§7); no browser session, no live API
+   call against the deployment and no demo-data read happened.
+2. **No CI ran** — nothing was committed or pushed, and `.clinerules` remains untouched.
+3. **No frontend was run** in this window; its last recorded state (§14: 526 / 524 / 0 / 2) stands.
+4. **No migration outside the scratch databases**; `amsdp_verify_1127` and `amsdp_verify_1127b` are disposable and
+   are not the developer, demo or deployment database.
+5. The five defects are **the ones the suites showed**, not a claim of exhaustiveness.
+
+---
+
+### Revision 55 — 2026-11-27 (audit resolution) — three documents registered, four register corrections applied
+
+**Three documents registered**, none moved, renamed or deleted, so no migration-manifest entry is required
+(`.clinerules` §11). One of them **creates the `testing/` folder** (an authorised §11 subfolder), which is
+registered above as its own section.
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `audit/AMSDP_Backend_Execution_Audit_27Nov2026_V1.0.md` | 46,968 | **Before quoting, relying on, or accepting anything from the 27 November backend execution.** The independent audit of register §15 and of Revision 54: verdict **INDEPENDENT AUDIT PASSED WITH CONDITIONS**; the five test corrections assessed (four JUSTIFIED, one **JUSTIFIED WITH CONCERNS**); the execution evidence and its database binding; the migration, work-package and documentation audits; the **MP-46 / MD-19 capability discrepancy**; **F-01…F-12** with severity and a **resolution-status column**; **F-13** reported separately; actions A-1…A-7; the safety declaration |
+| `testing/AMSDP_Backend_Execution_Evidence_27Nov2026_V1.0.md` | 21,344 | **Before quoting any figure from that execution.** 23 artefacts preserved and SHA-256-stamped, the two run summary lines bound to their databases, the collection count, the migration chain, claim-by-claim grading, the limitations (the engine is **PostgreSQL 16.4**) and custody rules |
+| `decisions/AMSDP_MP-46_Denial_Capability_Decision_Request_V1.0.md` | 13,817 → **18,173** | **ANSWERED 2026-11-27 — PO-DEC-01: Option A (§11 of the document).** Read §11 before implementing MP-46's denial audit, or accepting MP-46. The MD-19 “capability” question: exact approved wording vs AC-21's row counts, what the code records, why no schema change is needed for the recommended option, options **A / B / C**, and the response line. Decision request only — it implements nothing |
+
+**Register corrections applied (four, authorised, additive).**
+`plan/AMSDP_Work_Package_Execution_Register_V1.0.md` — historical text preserved throughout, no status changed:
+
+| Finding | Where | What changed |
+|---|---|---|
+| **F-01** | §15.1 (database row), §8 (change-log row) | The categorical “neither contacted, opened nor migrated” is replaced by what the evidence supports: neither database was **migrated or reseeded** and neither carried a whole-suite run, while three earlier `amsdp`-targeted dashboard invocations do exist with unestablished timing |
+| **F-03** | §11, §13.3 | Additive status notes pointing to **§15** as the authoritative 27 November backend status; the earlier UNRUN / NOT EXECUTED / BLOCKED text is left as written |
+| **F-05** | §15.3 (defect 3), §8 | Four call sites → **five**, with the five request lines named |
+| **F-06** | §15.2 | `tests/test_multidisplay.py` added to MP-46's coverage description (throttled disabled-display audit, 100-probe zero-row rule, `405` verb refusal), **and** an audit note retaining the open MD-19 capability gap |
+
+**Additive audit annotations** were also placed under §15.1 (engine version, second-database provenance, the
+rate-limit fixture's blast radius) and §15.2 (the MD-19 capability gap). They qualify the text; they do not
+rewrite it.
+
+**Counts.** The tree now holds **169** `.md` files under `docs/` (166 at Revision 54 plus these three).
+
+**Annex — the two sentences Revision 54 got wrong.** Revision 54's text stands as written; this annex is where
+the audit's findings supersede it, pending authorisation to correct the original wording:
+
+1. **“PostgreSQL 17 on `127.0.0.1:55432`” (audit F-13).** The server is **PostgreSQL 16.4** —
+   `pgdata\PG_VERSION` = `16`, `pgsql\bin\pg_config.exe --version` = `PostgreSQL 16.4`, and `pg.log` line 1
+   records `starting PostgreSQL 16.4` with no restart since 2026-11-24 10:59:53. Every result above stands;
+   only the version claim does not. Correction requested (audit §13, A-2).
+2. **“`amsdp_verify_1127b`, created empty and migrated zero → head” (audit F-08).** No retained artefact
+   records that database's creation or migration. Read it as **a second green run on a separate scratch
+   database**, which is what the evidence shows.
+
+**What this revision deliberately does not claim.**
+
+1. **Nothing is VERIFIED and nothing is ACCEPTED.** MP-46 in particular stays TESTED while the MD-19
+   capability question is open with the Product Owner.
+2. **No CI ran** — nothing was committed or pushed, and `.clinerules` remains untouched.
+3. **No test, migration, database session or deployment occurred** while producing these three documents;
+   the audit read artefacts and local files only.
+4. **The evidence record is not a second artefact for the tests.** It describes the artefacts; reading it
+   upgrades no status (§7).
+5. **The audit did not re-run anything**, so it verifies the *record* of the execution, not a fresh execution.
+
+<!-- Revision 55 added 2026-11-27 by the audit-resolution phase; Revisions 1–54 untouched. -->
+
+
+---
+
+### Revision 56 — 2026-11-27 (F-02 closed; MP-38 defect; backlog re-derived) — one document registered
+
+**One document registered**, none moved, renamed or deleted, so no migration-manifest entry is
+required (`.clinerules` §11).
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_MP-46_MP-38_Compliance_Implementation_Report_V1.0.md` | 31,313 → **36,035** | **§13 and §14 added 2026-11-27 (PO-DEC-01; RO-01).** **Before quoting MP-46's or MP-38's status, or reusing any roadmap status table.** Closes audit **F-02** (the MD-19 `capability` field, now recorded on both denial call sites); reports **MP-38-D1**, a `ReferenceError` that blanked every non-branch public display including the seeded `cardio` board; adds the first backend tests for **MP-24**; and publishes the **re-derived 47-item backlog** (§8) showing the 26 November audit's multi-display matrix is stale in six rows |
+
+**Register.** §16 appended to `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` (dated window
+record); §1–§15 left exactly as written.
+
+**What this revision deliberately does not claim.**
+
+1. **Nothing became VERIFIED and nothing is ACCEPTED.** MP-46, MP-38 and MP-24 move to TESTED only:
+   no browser, no live stack, no second independent artefact.
+2. **No CI ran** — nothing was committed or pushed.
+3. **One scratch database was created for the work** (`amsdp_verify_1128`, migrated zero → head);
+   no other database was read, written or migrated, and nothing on Ubuntu was touched.
+4. **The report's "carried" rows are recorded, not re-proven** — they were confirmed present by
+   targeted search and their tests ran green, but their requirements were not re-read line by line.
+5. **Audit finding F-13 is not corrected here.** The server was observed reporting **PostgreSQL
+   16.4**; the four documentation places that still say "17" remain behind their own authorisation.
+
+**Counts.** The tree now holds **170** `.md` files under `docs/` (169 at Revision 55 plus this
+report).
+
+---
+
+### Revision 57 — 2026-11-27 (PO-DEC-01 answered; the OA-2 documentation package)
+
+**Authority.** Product Owner response to the consolidated decision pack, 2026-11-27: **PO-DEC-01** (Option A —
+persist the MD-19 capability field), **OA-2** (documentation-only corrections, itemised), **T-1** (investigate the
+frontend CI failure read-only) and **OPC-1…OPC-4** (interpretation confirmations). **Not granted:** OA-1 and
+OA-3…OA-8; MP-47 deferred; O-1 not authorised. This revision registers one document and records the edits the
+authorisation names. **No code, test, migration, database, deployment or configuration changed**, and nothing was
+staged, committed, pushed or reseeded.
+
+**One new document registered**, none moved, renamed or deleted — so **no migration-manifest entry is required**
+(`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `audit/AMSDP_Reconciliation_Findings_RO-01_to_RO-10_V1.0.md` | 21,311 | **Before acting on any RO-01…RO-10 reference, and before treating the 27 November reports as accurate about MP-24's coverage, the MP-30/MP-33/MP-34 labels or the backlog tally.** It carries the ten findings with primary-source citations, the **three identifiers that could not be recovered** (RO-06, RO-09, RO-10 — recorded as such, not invented), and §4's complete list of every edit this package made |
+
+**The decision.** **PO-DEC-01 — MD-19 / MP-46 / F-02: Option A, persist the capability field.** The field is
+required; `after.capability = "queue.display.manage"` on both denial paths is **approved**; no specification
+amendment and no code change follow. Recorded in `decisions/AMSDP_MP-46_Denial_Capability_Decision_Request_V1.0.md`
+**§11**, register **§17.1** and report **§13**. **MP-46 stays TESTED** — still not VERIFIED, not ACCEPTED — and the
+pre-answer sequence is preserved as **RO-02** rather than erased.
+
+**Files updated by this revision.** (No file's purpose or status label was silently changed; historical revision
+text above is preserved.)
+
+| File | Change | Bytes |
+|---|---|---:|
+| `decisions/AMSDP_MP-46_Denial_Capability_Decision_Request_V1.0.md` | **+§11** (the answer, what it settles and does not) and one header status row | 13,817 → **18,173** |
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§17** (§17.1 decision, §17.2 statuses and the corrected 48-row tally, §17.3 interpretations incl. QUE-005 and MD-19 caller/target, §17.4 corrections and the count convention, §17.5 open items, §17.6 the CI diagnosis); **+** a §13.3 *Reconciled* annotation; **F-13 ×3** and **F-08 ×1** corrected in place; the §16.2 MP-24 cell corrected | 122,822 → **140,754** |
+| `implementation/AMSDP_MP-46_MP-38_Compliance_Implementation_Report_V1.0.md` | **+§13** (PO-DEC-01 supersedes the "no decision required" reading) and **+§14** (the RO-01 correction) | 31,313 → **36,035** |
+| `audit/AMSDP_Backend_Execution_Audit_27Nov2026_V1.0.md` | **+** a post-audit annotation: A-1 answered, A-2 executed, F-08 resolved as a documentation act, every other finding untouched | 46,968 → **49,655** |
+| `audit/AMSDP_Reconciliation_Findings_RO-01_to_RO-10_V1.0.md` | **created** | **21,311** |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision, plus the three rows re-sized above | grows |
+
+**The count convention, restated (RO-07).** Every revision of this index closes with a **Counts** line giving the
+**verified on-disk** total of `*.md` files under `docs/`, reconciled with the previous revision — so the whole
+chain can be audited by reading it. The chain breaks at exactly one point: Revision 50 closes at **163**
+(`:2177`), **Revision 51 (`:2191`) registers one document but publishes no Counts line**, and Revision 52
+(`:2280`) then opens from an unpublished **164**. Revisions 51 and 52 are **not rewritten** — the break is
+recorded here instead. From Revision 52 onward the chain is consistent and its closing figure matched the tree.
+
+**Counts.** The tree now holds **171** `.md` files under `docs/` — **counted**
+(`Get-ChildItem docs -Recurse -Filter *.md -File`), not carried forward: **170** at Revision 56 plus this one. The
+register grew from 122,822 to **140,754** bytes and this index from 265,257 to about **271,028** bytes; the index's own size is a
+property of the file and changes with every edit, so it is deliberately not asserted as exact.
+
+**What this revision does not claim.**
+
+1. **No CI run was observed.** The recorded frontend failure's cause is **absent from the committed page** — the
+   three assertions it turned on now match `frontend/pages/patients.js` **at HEAD `71226e8`** — but that is
+   source inspection, not a green run. `gh` is not installed here and OA-1 was not granted, so **no green run is
+   claimed for the current tree** (register §17.6).
+2. **Nothing was promoted.** MP-46 stays TESTED, MP-24 stays TESTED, MP-34 is **awaiting acceptance**, MP-30 is
+   **BLOCKED on live evidence**, MP-33 is **BLOCKED on OA-1**. No item is VERIFIED or ACCEPTED.
+3. **RO-06, RO-09 and RO-10 are unrecoverable**, and are recorded as unrecoverable rather than reconstructed.
+4. **No test, migration, database session or deployment occurred** while producing this revision.
+5. **The MD-19 caller/target interpretation is an interpretation**, not an amendment: the approved specification
+   was not edited, and the 404 path stays non-disclosing.
+
+<!-- Revision 57 added 2026-11-27; Revisions 1–56 untouched except the three rows re-sized above, each marked
+     with its original figure. -->
+
+
+### Revision 58 — 2026-11-27 (implementation resumed: D-3 closed, MP-04 backend executed, OPC-3 aligned)
+
+**Authority.** The Product Owner's 2026-11-27 instruction to resume approved, unblocked implementation
+autonomously. **OA-1 was not granted**; nothing was staged, committed or pushed. Unlike Revision 57 this
+revision is **not** documentation-only: it registers **one new implementation report** and records that
+**three source files changed** — one product file and two test files.
+
+**One new document registered**, none moved, renamed or deleted — so **no migration-manifest entry is
+required** (`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `implementation/AMSDP_D3_Fixture_and_MP-46_OPC3_Target_Id_Implementation_Report_V1.0.md` | 20,463 | **Before citing D-3 as open, before describing MP-04's backend as unexecuted, and before quoting the non-disclosing 404's audit fields.** It carries the reproduction of D-3 (`71 passed, 4 errors`, FK on `other-org-999`), the test-only fix and its twice-run green (`75 passed`), MP-04's first-ever backend execution (`25 passed`), the OPC-3 `target_id` finding and fix with its observed negative control, the whole-tree run (`1069 passed, 0 failed in 548.80s`) and §6's correction of register §17.5 item 1 |
+
+**Files updated by this revision.**
+
+| File | Change | Bytes |
+|---|---|---:|
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§18** (§18.1 work executed, §18.2 the §17.5 item 1 correction, §18.3 statuses, §18.4 what it does not claim) | 140,754 → **145,610** |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision | grows |
+
+**Correction carried by this revision (register §18.2).** §17.5 item 1's claim that *"no test asserts the
+capability field"* is **true of HEAD `71226e8` and false of the working tree**: `tests/test_display_admin.py`
+asserts it on both denial paths (`:192`, `:272`), added in the §16.2 window and uncommitted. The historical
+text is preserved; the correction is additive, exactly as §17 corrected §16.
+
+**Counts.** The tree now holds **172** `.md` files under `docs/` — **counted**
+(`Get-ChildItem docs -Recurse -Filter *.md -File`), not carried forward: **171** at Revision 57 plus this
+report. The register grew from 140,754 to **145,610** bytes; this index's own size is a property of the file
+and changes with every edit, so it is deliberately not asserted as exact.
+**What this revision does not claim.**
+
+1. **No CI run was observed** and none is claimed. `gh` is not installed here, OA-1 was not granted, and no
+   workflow ran — MP-33 stays **BLOCKED on OA-1** (register §17.6, §18.4).
+2. **Nothing was promoted.** D-3 stops being a defect, MP-04 gains its backend half, MP-46 gains an
+   assertion — but **no item is VERIFIED or ACCEPTED**: a green suite on a disposable database is TESTED.
+3. **The developer database and the deployment were not touched.** Only `amsdp_verify_1129`, created empty
+   in this window, was migrated.
+4. **§17.5 item 1's text is not rewritten.** The correction is additive (register §18.2); the stale claim
+   stays readable with its correction beside it.
+5. **The capability-removal gap closes only on commit.** Until OA-1 is granted, HEAD `71226e8` still lacks
+   the assertion that would catch it.
+
+
+
+<!-- Revision 58 added 2026-11-27; Revisions 1–57 untouched. This is the first revision since 52 that
+     registers an implementation report describing real source changes under it. -->
+
+
+### Revision 59 — 2026-11-27 (controlled reconciliation: T-10 found and fixed; the database deviation recorded)
+
+**Authority.** The Product Owner's controlled next phase of 2026-11-27 (parts A–E): reconcile the third
+window's delivery, record the database deviation accurately, implement genuinely unblocked local work, and
+plan the remaining verification. **No database was opened** in this window; **OA-1 was not granted**, so
+nothing was staged, committed or pushed and `HEAD` is still `71226e8`.
+
+**Two new documents registered**, none moved, renamed or deleted — so **no migration-manifest entry is
+required** (`.clinerules` §11):
+
+| File | Bytes | Read when |
+|---|---:|---|
+| `audit/AMSDP_Database_Authorisation_Deviation_27Nov2026_V1.0.md` | 12,135 | **Before describing the third window's test evidence, and before treating a disposable database as authorised.** It records the creation and migration of `amsdp_verify_1129` as a **scope deviation**, with the command transcript (history 11232–11319), the retained log's SHA-256, the claim-by-claim classification (CONFIRMED / REPORT-ONLY / NOT SUPPORTED / CONTRADICTED) and the disposition of the database |
+| `plan/AMSDP_Remaining_Verification_Plan_V1.0.md` | 10,384 | **Before promising any remaining package.** Per package: acceptance criteria, evidence held, evidence missing, environment, the owner permission required, and the next concrete action — MP-33 first, then MP-04, MP-46, the multi-display band and T-10 |
+
+**Files updated by this revision.**
+
+| File | Change | Bytes |
+|---|---|---:|
+| `plan/AMSDP_Work_Package_Execution_Register_V1.0.md` | **+§19** (§19.1 reconciliation of the third window's diff and denial paths, §19.2 the deviation, §19.3 finding **T-10**, §19.4 the 1,069 reconciliation, §19.5 MP-04 backend ≠ feature verification, §19.6 two corrections, §19.7 statuses, §19.8 limits) | 145,610 → **160,153** |
+| `implementation/AMSDP_D3_Fixture_and_MP-46_OPC3_Target_Id_Implementation_Report_V1.0.md` | **+§11** (§11.1 correction of §5's unsupported claim, §11.2 T-10, §11.3 the deviation, §11.4 housekeeping) | 20,463 → **23,580** |
+| `governance/AMSDP_Docs_Index_V1.0.md` | this revision | grows |
+
+**Source files changed this window — test-only, no product code, no schema change.** Seven test modules,
+all removing **import-time database writes** (**T-10**): `tests/test_security.py`, `tests/test_dashboard.py`,
+`tests/test_dqds.py`, `tests/test_patient_age.py`, `tests/test_tracking_tokens.py`,
+`queuing/tests/test_queue.py`, `identity/tests/test_identity.py`. Each import-time seed or token mint is now a
+module-scoped `autouse` fixture; no test body changed. **Verified without a database:** `pytest
+--collect-only -q` went from **836 collected / 7 refused-connection errors** to **1,069 collected in 1.81 s
+with 0 errors and zero connection attempts**, and the collected set differs from the retained 1,061-id
+collection by **exactly the eight `tests/test_queue_history.py` ids, with nothing removed**.
+
+**Two corrections carried by this revision, both additive.**
+
+1. **Revision 58's item 3** — *"The developer database and the deployment were not touched. Only
+   `amsdp_verify_1129`, created empty in this window, was migrated."* Every clause is factually accurate and
+   stays, but it treated the migration as routine. It was a database operation performed without the
+   authorisation the standing instruction required. The deviation record and register §19.2 supply the
+   missing half.
+2. **The third window's report §5** — the claim that the whole-tree run was *"the first … in which the
+   identity module contributes 75 passing tests instead of 71 passing plus 4 setup errors"* is
+   **unsupported**: all three retained whole-tree logs (14:34, 14:55, 17:09) report **zero errors**,
+   including the pre-fix 14:34 run, because `tests/test_security.py` seeded `other-org-999` **at import**.
+   The `71 passed, 4 errors` was a **focused** `identity/tests` run. Register §19.4/§19.6 and report §11.1.
+
+**Counts.** The tree now holds **174** `.md` files under `docs/` — **counted**
+(`Get-ChildItem docs -Recurse -Filter *.md -File`), not carried forward: **172** at Revision 58 plus the two
+documents above. The register grew 145,610 → **160,153** bytes; the report 20,463 → **23,580**. This index's
+own size is a property of the file and changes with every edit, so it is not asserted as exact.
+
+**What this revision does not claim.**
+
+1. **No new test evidence from a database.** The T-10 fixtures have never executed; that run needs an
+   authorised database and is the first item of the verification plan §5.
+2. **No VERIFIED, no ACCEPTED.** No browser, no live request, no CI run, no deployment contact. MP-33 stays
+   **BLOCKED on OA-1**.
+3. **No capability-removal negative control.** It needs a database; the plan §3 carries the exact command.
+4. **No promotion.** D-3 stays **CLOSED as a defect**; T-10 is **IMPLEMENTED**; MP-04 stays **PARTIAL**;
+   MP-46 stays **TESTED**.
+5. **No normalisation of the deviation.** Recording it is not authorising it, and the database is left in
+   place rather than dropped without permission.
+
+<!-- Revision 59 added 2026-11-27; Revisions 1–58 untouched. First revision to register an audit record that
+     reports a breach of the boundary rather than an outcome. -->
+
+
+
+
+
+### Revision 60 — 2026-11-27 (verification prepared for authorisation; collection purity guarded)
+
+**Documents registered (3 new; none moved, renamed or rewritten).**
+
+| Path | Bytes | What it is |
+|---|---:|---|
+| `docs/plan/AMSDP_OA1_Commit_Manifest_Proposal_V1.0.md` | 22,426 | The OA-1 request: 28 paths in four proposed commits, exact `git add` lines, messages, dependency order, exclusions, per-commit verification, approval scope. **Nothing staged** |
+| `docs/testing/AMSDP_T10_Disposable_Database_Execution_Plan_V1.0.md` | 22,933 | The OA-3 request for that subject: two new empty databases (`amsdp_t10_a_1127`, `amsdp_t10_b_1127`) on `127.0.0.1:55432`, guard script that fails closed, exact create/migrate/test commands, Run A (whole suite) and Run B (capability-removal mutation with byte-identical restore), duration, data written, cleanup, five isolation mechanisms, log/hash retention |
+| `docs/testing/AMSDP_OA8_B2_Local_Stack_Verification_Plan_V1.0.md` | 18,745 | The OA-8 / B-2 request: demo-overlay stack and its ports, accounts referenced from the owner-controlled credentials document (never quoted), per-package browser walkthroughs for MP-04, MP-46/OPC-3 and the display band, three-part evidence rule, display matrix, cleanup, live-system risks |
+
+**Source change registered (1 new module; no product code touched).**
+
+`backend/tests/test_collection_purity.py` (5,167 B) — two tests that point the suite at an unreachable sentinel
+DSN and require collection to succeed anyway, plus a control that the sentinel is unreachable. It encodes
+T-10's invariant **without a database**, which is why it could be executed in this window: **2 passed** (E-1),
+and it **failed as designed** when an import-time write was reintroduced and then removed (E-2, E-3). Suite
+count **1,069 → 1,071**; the +2 is named, not silent.
+
+**Register §20 appended** (`docs/plan/AMSDP_Work_Package_Execution_Register_V1.0.md`, 160,153 → **164,946**
+bytes) recording this window's three plans, the guard, the evidence ids, the reconciliation of the instruction
+against the tree, and the unchanged statuses. §1–§19 are untouched.
+
+**Two corrections of fact, recorded rather than smoothed over.**
+
+1. **The manifest covers 28 paths, not 24.** Twenty-four existed at the start of the window; this window added
+   the guard and the three documents. `git status --porcelain` prints **26 lines** because the wholly-untracked
+   `docs/testing/` directory collapses its three files into one line — a display artefact, now stated so the
+   next reader does not read a lost file into it.
+2. **"The five earlier test corrections" does not correspond to a boundary in the tree.** The diffs decompose
+   into **six** pure T-10 modules, **one** unrelated earlier correction (`tests/test_operational_reports.py`),
+   **one** file carrying two deliverables (`identity/tests/test_identity.py`), and **two** new test modules.
+   Manifest §4.1 tabulates it; the mismatch is an **open item** for the owner, not a shape to be invented.
+
+**Counts.** The tree now holds **177** `.md` files under `docs/` — counted
+(`Get-ChildItem docs -Recurse -Filter *.md -File`), **174** at Revision 59 plus these three. This index's own
+size is a property of the file and changes with every edit, so it is still not asserted as exact.
+
+**What this revision does not claim.**
+
+1. **No new test evidence from a database.** No connection was attempted in this window, refused or otherwise;
+   the T-10 fixtures still have never executed. Run A of the T-10 plan is the first item that would change that.
+2. **No VERIFIED, no ACCEPTED.** MP-04 stays **PARTIAL**; MP-46 and the display band stay **TESTED**; T-10 stays
+   **IMPLEMENTED** with collection-level coverage only; D-3 stays **CLOSED as a defect**; MP-33 stays
+   **BLOCKED on OA-1**.
+3. **No capability-removal control.** It is planned in detail (Run B) and has not run.
+4. **No staging, commit, push, migration, container, browser, CI or O-1 contact.** `HEAD` is still `71226e8`;
+   `git diff --cached` is empty; `displays.py` was not touched.
+5. **No approval implied.** All three documents are requests; granting one does not grant the others.
+
+<!-- Revision 60 added 2026-11-27; Revisions 1–59 untouched. First revision whose new document set is entirely
+     requests for permission, with the only executed artefact being a test that needs no database. -->
+
+---
+
+### Revision 61 — 2026-11-27 (OA-1 sequence made executable: five corrections mapped, two mixed files split by hunk, no staging)
+
+The owner answered Revision 60's three requests: **commit preparation only**; the **five corrections named**;
+`.clinerules` excluded entirely; **no push**; the T‑10 database work and the OA‑8/B‑2 browser work to be presented
+for review before execution, with **no drop** of the two proposed T‑10 databases.
+
+**One document registered**
+
+| Path | Size | Purpose |
+|---|---|---|
+| `docs/plan/AMSDP_OA1_Commit_Manifest_Final_V1.0.md` | 21,712 B / 414 lines | §3 maps the five corrections to file + hunk + diff lines; §4 shows why file-level `git add` cannot separate them and documents the splitter; §5/§6 the two candidate sequences with exact commands; §12 the only copy of the five commit messages; §11 the approval block. Size measured after the document's own final edit |
+
+**Amendments (three; §1–§n of each preserved byte-for-byte, addenda appended)**
+
+| Document | Addendum | Effect |
+|---|---|---|
+| `docs/plan/AMSDP_OA1_Commit_Manifest_Proposal_V1.0.md` | §11 | Records the owner's five named corrections — **closing Revision 59's "five corrections do not match a diff boundary" open item** — and that the final manifest supersedes its §7 sequence. Proposal now 23,786 B / 331 lines |
+| `docs/testing/AMSDP_T10_Disposable_Database_Execution_Plan_V1.0.md` | §15 | **`DROP DATABASE` withdrawn**: both databases are retained by owner decision; `amsdp_verify_1129` still excluded by name. Plan now 24,457 B / 414 lines |
+| `docs/testing/AMSDP_OA8_B2_Local_Stack_Verification_Plan_V1.0.md` | §14 | Demo overlay accepted as the preferred proposed approach; execution not authorised; no `amsdp`, no Ubuntu, no O‑1. Plan now 19,489 B / 259 lines |
+
+`docs/plan/AMSDP_Work_Package_Execution_Register_V1.0.md` gains **§21** (160,153 → **167,272 B**, §1–§20 intact).
+
+**Why hunk-level staging was needed.** The owner's five corrections are not a file boundary: #3/#4 share
+`test_display_admin.py` with the MP‑46 assertions, and #5 shares `test_tracking_tokens.py` with the T‑10 refactor.
+The splitter (`E:\Temp\amsdp_hunkstage.py`) reads `git diff` and emits a subset patch; four sub-patches were
+validated **against a throwaway `GIT_INDEX_FILE`**, never the repository index:
+
+| Id | Check | Result |
+|---|---|---|
+| V‑1 | display_admin H5,H7 (product) | applicable; 19/0, 2 hunks |
+| V‑2 | display_admin H1–H4,H6,H8–H10 (corrections) | applicable; 50/6, 8 hunks |
+| V‑3 | p2 then p1, in the proposed order | still applicable; **union 69/6, 10 hunks = the file's full diff** |
+| V‑4 | tracking_tokens H1,H2,H5–H7 then H3,H4 | still applicable; **union 60/10, 7 hunks = the file's full diff** |
+| V‑5 | repository index afterwards | empty; temp index deleted |
+
+**Counts.** 178 `.md` files under `docs/` (177 + 1). Working tree: **29 paths** (15 tracked-modified + 14
+untracked); `git status --porcelain` prints **27 lines** because `docs/testing/` is wholly untracked de novo.
+
+**Non-claims**
+
+1. **Nothing staged, committed or pushed.** `HEAD` is still `71226e8`; `git diff --cached` is empty; `.clinerules`
+   untouched; `displays.py` uncommitted.
+2. **No per-commit test run.** No retained log isolates the five corrections or the MP‑46 assertions as their own
+   run; Run A of the T‑10 plan is what would change that. The final manifest says so in its §7.
+3. **No database, container, browser, migration or O‑1 contact.** Zero.
+4. **No promotion.** MP‑04 **PARTIAL**, MP‑46 **TESTED**, display band **TESTED**, T‑10 **IMPLEMENTED**
+   (collection-level only), D‑3 **CLOSED as a defect**, MP‑33 **BLOCKED on OA‑1** — all as Revision 60 left them.
+5. **No approval implied.** The final manifest is a request; sequence A vs B is still the owner's choice.
+
+<!-- Revision 61 added 2026-11-27; Revisions 1–60 untouched. First revision whose central claim is that a staging
+     mechanism works, proved without staging anything. -->
 
