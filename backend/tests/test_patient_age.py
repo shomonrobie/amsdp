@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "identity"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "patient"))
 
+import pytest
 import jwt
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
@@ -38,7 +39,16 @@ def _ensure():
         s.close()
 
 
-_ensure()
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_rows():
+    """Seed the M7-P organisation, branch and user once per module.
+
+    Import-time seeding made pytest's **collection** write to the database
+    (finding T-10, 27 November 2026); the fixture seeds the same rows at the
+    same point in the module's life, just without touching the database during
+    collection.
+    """
+    _ensure()
 
 client = TestClient(app)
 
@@ -76,9 +86,24 @@ def _org_admin_token():
         _SECRET, algorithm=_ALGO)
 
 
-TOKEN = _token()
-H = {"Authorization": "Bearer " + TOKEN}
-H_OA = {"Authorization": "Bearer " + _org_admin_token()}
+TOKEN = ""
+H = {}
+H_OA = {}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _auth_headers(_seeded_rows):
+    """Mint this module's tokens once, after the rows exist.
+
+    These three globals used to be built at **import** time, so pytest's
+    collection queried the database and minted JWTs before a test was selected
+    (finding T-10, 27 November 2026).  The fixture fills the same globals, so
+    every test body is unchanged.
+    """
+    global TOKEN, H, H_OA
+    TOKEN = _token()
+    H = {"Authorization": "Bearer " + TOKEN}
+    H_OA = {"Authorization": "Bearer " + _org_admin_token()}
 
 
 def _register(mobile, **extra):

@@ -31,7 +31,20 @@ def _ensure_orgs_and_branches():
     finally:
         session.close()
 
-_ensure_orgs_and_branches()
+@pytest.fixture(scope="module", autouse=True)
+def _orgs_and_branches():
+    """Seed this module's organisations and branches once per module.
+
+    This used to run at **import** time, which made *collection* write to
+    whatever database the suite was pointed at — and, because the rows landed
+    before any test executed, it silently satisfied another module's fixture:
+    ``identity/tests/test_identity.py::TestDoctorLink`` passed in a whole-tree
+    run and failed when run alone (D-3).  Seeding inside a fixture keeps
+    collection pure and removes the accidental cross-module dependency
+    (finding T-10, 27 November 2026).
+    """
+    _ensure_orgs_and_branches()
+
 
 from identity.main import app
 client = TestClient(app)

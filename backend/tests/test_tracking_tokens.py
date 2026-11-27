@@ -105,7 +105,14 @@ def _ensure():
         s.close()
 
 
-_ensure()
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_rows():
+    """Seed the M9-B organisation, branch and user once per module.
+
+    Import-time seeding made pytest's **collection** write to the database
+    (finding T-10, 27 November 2026).
+    """
+    _ensure()
 
 from appointment.main import app
 client = TestClient(app)
@@ -122,8 +129,21 @@ def _token(org=ORG_ID, role="receptionist"):
         _SECRET, algorithm=_ALGO)
 
 
-TOKEN = _token()
-H = {"Authorization": "Bearer " + TOKEN}
+TOKEN = ""
+H = {}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _auth_headers(_seeded_rows):
+    """Mint this module's token once, after the rows exist.
+
+    ``TOKEN = _token()`` at module scope queried the database during pytest's
+    collection (finding T-10, 27 November 2026); the fixture fills the same
+    globals so every test body is unchanged.
+    """
+    global TOKEN, H
+    TOKEN = _token()
+    H = {"Authorization": "Bearer " + TOKEN}
 
 
 _SEQ = [0]

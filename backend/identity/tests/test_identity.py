@@ -12,35 +12,56 @@ from common.database import SessionFactory
 from common.models import StaffUser, Organization, Doctor
 from common.auth import _load_assigned_doctor_ids
 
+import pytest
 import jwt
 from datetime import datetime, timedelta, timezone
-# Ensure test org exists
-session = SessionFactory()
-try:
-    org = session.query(Organization).filter(Organization.code == 'TEST-ORG').first()
-    if not org:
-        org = Organization(id='org-1', name='Test Org', code='TEST-ORG')
-        session.add(org); session.commit()
-    TEST_ORG_ID = org.id
-finally:
-    session.close()
+#: Filled in by ``_ensure_org_and_admin`` (see the fixture below).  Both values
+#: used to be produced at **import** time, which made pytest's collection open a
+#: session and write rows — the mechanism that let another module's fixture pass
+#: only because this file had been imported first (D-3, finding T-10,
+#: 27 November 2026).
+TEST_ORG_ID = "org-1"
+ADMIN_TOKEN = ""
 
-# Create super_admin user for auth
-session = SessionFactory()
-try:
-    au = session.query(StaffUser).filter(StaffUser.username == 'testadmin').first()
-    if not au:
-        pw_hash = bcrypt.hashpw(b'adminpass', bcrypt.gensalt()).decode()
-        au = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
-            username='testadmin', password_hash=pw_hash,
-            display_name='Test Admin', role='super_admin', status='active')
-        session.add(au); session.commit()
-    ADMIN_TOKEN = jwt.encode({"sub": au.id, "org": au.organization_id,
-        "branch": au.branch_id, "role": au.role,
-        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
-        _SECRET, algorithm=_ALGO)
-finally:
-    session.close()
+
+def _ensure_org_and_admin():
+    """Create the test organisation and its super-admin, then mint the token."""
+    global TEST_ORG_ID, ADMIN_TOKEN
+    session = SessionFactory()
+    try:
+        # Ensure test org exists
+        org = session.query(Organization).filter(Organization.code == 'TEST-ORG').first()
+        if not org:
+            org = Organization(id='org-1', name='Test Org', code='TEST-ORG')
+            session.add(org)
+            session.commit()
+        TEST_ORG_ID = org.id
+        # Create super_admin user for auth
+        au = session.query(StaffUser).filter(StaffUser.username == 'testadmin').first()
+        if not au:
+            pw_hash = bcrypt.hashpw(b'adminpass', bcrypt.gensalt()).decode()
+            au = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
+                username='testadmin', password_hash=pw_hash,
+                display_name='Test Admin', role='super_admin', status='active')
+            session.add(au)
+            session.commit()
+        ADMIN_TOKEN = jwt.encode({"sub": au.id, "org": au.organization_id,
+            "branch": au.branch_id, "role": au.role,
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
+            _SECRET, algorithm=_ALGO)
+    finally:
+        session.close()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _org_and_admin():
+    """Seed this module's organisation and admin, once per module.
+
+    Collection must not touch the database: an import-time session run put rows
+    into whatever database the suite pointed at, before any test was selected,
+    and silently satisfied another module's fixture (finding T-10).
+    """
+    _ensure_org_and_admin()
 
 client = TestClient(app)
 
@@ -50,23 +71,12 @@ def _uniq(name):
 
 
 def setup_module():
-    """Ensure admin user exists for tests that need auth."""
-    session = SessionFactory()
-    try:
-        au = session.query(StaffUser).filter(StaffUser.username == 'testadmin').first()
-        if not au:
-            pw_hash = bcrypt.hashpw(b'adminpass', bcrypt.gensalt()).decode()
-            au = StaffUser(id=str(uuid.uuid4()), organization_id=TEST_ORG_ID,
-                username='testadmin', password_hash=pw_hash,
-                display_name='Test Admin', role='super_admin', status='active')
-            session.add(au); session.commit()
-        global ADMIN_TOKEN
-        ADMIN_TOKEN = jwt.encode({"sub": au.id, "org": au.organization_id,
-            "branch": au.branch_id, "role": au.role,
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
-            _SECRET, algorithm=_ALGO)
-    finally:
-        session.close()
+    """Ensure the org and admin user exist for tests that need auth.
+
+    The work lives in ``_ensure_org_and_admin`` so this hook and the module
+    fixture seed identically; the hook no longer runs at import (T-10).
+    """
+    _ensure_org_and_admin()
 
 
 class TestStaffUserCreation:
@@ -203,6 +213,16 @@ class TestDoctorLink:
     def setup_class(cls):
         session = SessionFactory()
         from common.models import Doctor
+        # D-3: the cross-org doctor needs the organisation row it points at.
+        # Without it `doctors_organization_id_fkey` refuses the insert on a
+        # clean database and all four tests below error during setup — the
+        # fixture used to depend on a row another module happened to create.
+        foreign_org = session.query(Organization).filter(
+            Organization.id == "other-org-999").first()
+        if not foreign_org:
+            session.add(Organization(id="other-org-999", name="Other Org",
+                                     code="OTHER-ORG-999"))
+            session.flush()
         cls.doctor_a = session.query(Doctor).filter(Doctor.id == "m7-doc-a").first()
         if not cls.doctor_a:
             cls.doctor_a = Doctor(id="m7-doc-a", organization_id=TEST_ORG_ID,

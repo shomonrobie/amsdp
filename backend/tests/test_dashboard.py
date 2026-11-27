@@ -29,7 +29,15 @@ def _ensure():
     finally:
         s.close()
 
-_ensure()
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_rows():
+    """Seed the M6 organisation, branch and doctor once per module.
+
+    An import-time ``_ensure()`` made pytest's **collection** write to the
+    database, before a single test was selected, and let other modules pass on
+    rows this file happened to create first (finding T-10, 27 November 2026).
+    """
+    _ensure()
 
 
 def _user(username, role):

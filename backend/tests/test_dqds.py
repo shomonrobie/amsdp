@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "identity"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "queuing"))
 
 from datetime import date, datetime, timedelta, timezone
+import pytest
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (Organization, Branch, Doctor, Patient,
@@ -59,7 +60,15 @@ def _ensure():
         s.close()
 
 
-_ensure()
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_rows():
+    """Seed the DQDS organisations, branches, doctors and patient once per module.
+
+    Import-time seeding made pytest's **collection** write to the database and
+    coupled this module to whichever file happened to be imported first — the
+    same defect as D-3 (finding T-10, 27 November 2026).
+    """
+    _ensure()
 
 TODAY = date.today()
 

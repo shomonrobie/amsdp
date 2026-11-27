@@ -26,7 +26,14 @@ def _ensure_org():
     finally:
         session.close()
 
-_ensure_org()
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_rows():
+    """Seed the M5 organisation, branch and doctor once per module.
+
+    Import-time seeding made pytest's **collection** write to the database
+    (finding T-10, 27 November 2026).
+    """
+    _ensure_org()
 
 
 def _sync_assignment(session, staff_user_id, doctor_id, org_id="m5-org"):
