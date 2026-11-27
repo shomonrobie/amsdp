@@ -33,7 +33,8 @@ from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (AuditEvent, Branch, Doctor, DoctorBranch,
                            FacilityDepartment, FacilityRoom, Organization,
-                           QueueDisplay, QueueDisplayDoctor)
+                           Patient, QueueDisplay, QueueDisplayDoctor, QueueEntry)
+from common.timeutil import operational_today
 from queuing.main import app
 
 import amsdp_test_support as support
@@ -44,10 +45,18 @@ ORG = "dispadmin-org"
 ORG_B = "dispadmin-org-b"
 BR = "dispadmin-br"
 BR_B = "dispadmin-br-b"
+#: The public queue display is addressed by **code**, not by id, and
+#: ``amsdp_test_support.ensure_org``/``ensure_branch`` derive the code from the
+#: id by upper-casing it.  Named here so the public route is called with the same
+#: handle the deployment's URL carries.
+ORG_CODE = ORG.upper()
+BR_CODE = BR.upper()
 DEPT = "dispadmin-dept"
 ROOM = "dispadmin-room"
 DOC = "dispadmin-doc"
 DOC_OTHER = "dispadmin-doc-other"
+PAT = "dispadmin-pat"
+PAT2 = "dispadmin-pat-2"
 
 ADMIN = "dispadmin_admin"
 RECEPTION = "dispadmin_reception"
@@ -67,6 +76,13 @@ def _purge():
             s.query(QueueDisplay).filter(
                 QueueDisplay.id.in_(ids)).delete(synchronize_session=False)
         s.query(AuditEvent).filter(AuditEvent.organization_id.in_([ORG, ORG_B])).delete(
+            synchronize_session=False)
+        # Queue rows and patients are this module's business rows now (MP-45's
+        # field-visibility test needs one waiting patient), and they hold foreign
+        # keys into doctors and branches, so they are removed first.
+        s.query(QueueEntry).filter(QueueEntry.organization_id.in_([ORG, ORG_B])).delete(
+            synchronize_session=False)
+        s.query(Patient).filter(Patient.organization_id.in_([ORG, ORG_B])).delete(
             synchronize_session=False)
         s.query(DoctorBranch).filter(DoctorBranch.branch_id.in_([BR, BR_B])).delete(
             synchronize_session=False)
@@ -131,6 +147,32 @@ def _create(code="cardio", **overrides):
                        headers=support.headers(ADMIN))
 
 
+def _seed_board_rows():
+    """One called and one waiting patient for DOC, so the board has a doctor row.
+
+    The public body lists a doctor only when that doctor has a queue entry on the
+    facility's day — the historic board behaves the same way — so a
+    field-visibility assertion is meaningless against an empty board: there would
+    be no row for the switched-off field to be missing *from*.  Two entries are
+    seeded because the body publishes a token only for the patient currently
+    being served (`in_consultation`, else the lowest-position `called`), never for
+    a merely waiting one.
+    """
+    support.ensure_patient(PAT, ORG, name="Display Patient", mobile="01700000301")
+    support.ensure_patient(PAT2, ORG, name="Display Patient Two", mobile="01700000302")
+    with SessionFactory() as s:
+        day = operational_today(s, ORG)
+        s.add(QueueEntry(id="dispadmin-q1", organization_id=ORG, branch_id=BR,
+                         doctor_id=DOC, date=day, position=1, token="D-001",
+                         patient_id=PAT2, entry_source="appointment",
+                         status="called", status_history=[], position_history=[]))
+        s.add(QueueEntry(id="dispadmin-q2", organization_id=ORG, branch_id=BR,
+                         doctor_id=DOC, date=day, position=2, token="D-002",
+                         patient_id=PAT, entry_source="appointment",
+                         status="waiting", status_history=[], position_history=[]))
+        s.commit()
+
+
 def test_a_receptionist_is_refused_and_the_refusal_is_one_row():
     resp = client.post("/api/v1/queue/displays",
                        json={"branch_id": BR, "name": "X", "code": "x"},
@@ -181,12 +223,12 @@ def test_a_duplicate_code_in_the_same_branch_is_refused():
 def test_the_created_board_serves_only_its_scope_on_the_public_route():
     resp = _create(code="doctored", scope_type="doctors", doctor_ids=[DOC])
     assert resp.status_code == 201, resp.text
-    public = client.get(f"/api/v1/queue/display/{ORG}/{BR}?display=doctored")
+    public = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}?display=doctored")
     assert public.status_code == 200
     assert public.json()["display"]["code"] == "doctored"
     assert public.json()["display"]["scope_type"] == "doctors"
     # The historic board is untouched by any of this.
-    historic = client.get(f"/api/v1/queue/display/{ORG}/{BR}")
+    historic = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}")
     assert historic.status_code == 200
     assert "display" not in historic.json()
 
@@ -242,6 +284,7 @@ def test_each_patch_writes_one_row_with_before_and_after():
 
 
 def test_mp45_switching_a_field_off_removes_it_from_the_public_body():
+    _seed_board_rows()
     created = _create(code="quiet").json()
     assert created["show_room"] is True
 
@@ -250,9 +293,10 @@ def test_mp45_switching_a_field_off_removes_it_from_the_public_body():
                         headers=support.headers(ADMIN))
     assert resp.status_code == 200
 
-    public = client.get(f"/api/v1/queue/display/{ORG}/{BR}?display=quiet")
+    public = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}?display=quiet")
     assert public.status_code == 200
     raw = public.text
+    assert "D-001" in raw, "the board really carries the doctor's row (guards an empty board)"
     assert "room_name" not in raw, "a switched-off field is absent, not hidden"
     assert "patients_waiting" not in raw
     assert "estimated_wait_minutes" in raw, "the fields that stayed on are published"
@@ -262,8 +306,8 @@ def test_a_disabled_board_404s_exactly_like_an_unknown_code():
     created = _create(code="switched-off").json()
     client.patch(f"/api/v1/queue/displays/{created['id']}",
                  json={"status": "disabled"}, headers=support.headers(ADMIN))
-    disabled = client.get(f"/api/v1/queue/display/{ORG}/{BR}?display=switched-off")
-    unknown = client.get(f"/api/v1/queue/display/{ORG}/{BR}?display=no-such-board")
+    disabled = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}?display=switched-off")
+    unknown = client.get(f"/api/v1/queue/display/{ORG_CODE}/{BR_CODE}?display=no-such-board")
     assert disabled.status_code == 404
     assert unknown.status_code == 404
     assert disabled.json() == unknown.json()

@@ -5,11 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "identity"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "appointment"))
 
 import jwt
+import pytest
 from datetime import datetime, timedelta, timezone, date
 from fastapi.testclient import TestClient
 from common.database import SessionFactory
 from common.models import (Organization, Branch, StaffUser, Doctor,
-                           Patient, Appointment, Schedule, TrackingToken, QueueEntry)
+                           Patient, Appointment, Schedule, TrackingToken,
+                           TrackingRateBucket, QueueEntry)
 from identity.models import _SECRET, _ALGO
 
 from common.tracking_tokens import token_hash as _hash
@@ -17,6 +19,38 @@ from common.tracking_tokens import tracking_pepper as _pepper
 
 ORG_ID = "m9b-org"
 ORG2 = "m9b-org-2"
+
+
+def _reset_tracking_budget():
+    """Give the next request a fresh budget on every limiter the route charges.
+
+    MP-25 moved the tracking budget out of the process and into
+    ``tracking_rate_buckets`` — one durable row per ``pqt:<ip>``.  Clearing the
+    in-process ``_RATE`` dict stopped being a reset at that point: every test in
+    this module calls the same route from the same ``testclient`` address, so the
+    durable budget ran out after ten requests and later assertions met ``429``
+    instead of the status they were written to check.  This module was authored
+    before the durable budget existed and was never executed against it, which is
+    how the gap survived.
+
+    The limit is not weakened: it is charged, asserted and refilled per test, the
+    same way the in-process window used to be.
+    """
+    from appointment.tracking import _RATE
+    _RATE.clear()
+    s = SessionFactory()
+    try:
+        s.query(TrackingRateBucket).filter(
+            TrackingRateBucket.bucket.like("pqt:%")).delete(synchronize_session=False)
+        s.commit()
+    finally:
+        s.close()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_budget():
+    """Each test starts with its own full window, whatever order it runs in."""
+    _reset_tracking_budget()
 
 
 def _ensure():
@@ -245,8 +279,8 @@ def test_staff_revocation_cross_org_no_op():
 
 
 def test_rate_limit_returns_429():
-    from appointment.tracking import _RATE
-    _RATE.clear()  # deterministic per-IP sliding window
+    # The autouse fixture refilled the budget, so the 11th request in this
+    # window is the first refusal.
     codes = [client.get("/api/v1/track/" + uuid.uuid4().hex * 3).status_code for _ in range(12)]
     assert 429 in codes  # 11th request within the 60s window is rejected
 
@@ -282,8 +316,6 @@ def test_no_raw_token_in_audit():
 def test_tracking_cache_headers():
     """Private tracking responses must have Cache-Control: no-store, private,
     no-cache, must-revalidate and Pragma: no-cache."""
-    from appointment.tracking import _RATE
-    _RATE.clear()
     appt_id, raw = test_issue_tracking_token()
     r = client.get(f"/api/v1/track/{raw}")
     assert r.status_code == 200
@@ -313,8 +345,6 @@ def test_tracking_log_redaction(caplog):
     """Verify that calling the track endpoint with a raw token does NOT
     cause the raw token to appear in captured log output."""
     import logging
-    from appointment.tracking import _RATE
-    _RATE.clear()
     from common.log_redaction import TokenRedactionFilter, _TRACK_PATH_RE
 
     appt_id, raw = test_issue_tracking_token()

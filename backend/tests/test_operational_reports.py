@@ -62,6 +62,11 @@ def client():
 def clean():
     purge_org(ORG)
     purge_org(OTHER_ORG)
+    # ``purge_org`` removes patients too — they are *business* rows, unlike the
+    # organization, branch, doctor and staff-user reference rows it keeps for the
+    # audit trail.  The patient must therefore be re-created after the purge, or
+    # every appointment below would violate ``appointments_patient_id_fkey``.
+    ensure_patient(PATIENT, ORG, name="Report Patient", mobile="01700000202")
     yield
 
 
@@ -79,8 +84,12 @@ def _queue_entry(entry_id, *, position, status, history, source="appointment",
                  branch=BRANCH_A, day=DAY):
     created = datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc)
     with db_session() as s:
+        # ``queue_entries.token`` and ``.patient_id`` are NOT NULL: a queue row
+        # without either is not a row the product can ever produce, so the
+        # fixture supplies both rather than testing a shape the schema forbids.
         s.add(QueueEntry(id=entry_id, organization_id=ORG, branch_id=branch,
                          doctor_id=DOCTOR, date=day, position=position,
+                         token=f"T{position}", patient_id=PATIENT,
                          status=status, entry_source=source,
                          status_history=history, created_at=created))
         s.commit()
